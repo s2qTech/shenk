@@ -1,0 +1,2256 @@
+(() => {
+  "use strict";
+
+  const DB_NAME = "training-assistant-v2";
+  const DB_VERSION = 1;
+  const SNAPSHOT_KEY = "snapshot";
+  const FALLBACK_KEY = "training-assistant-v2:snapshot";
+  const DEVICE_KEY = "training-assistant-v2:device-id";
+  const SHARED_SCHEMA_VERSION = "2026-06-19-001";
+  const SHARED_ENTITIES = [
+    "plan_templates",
+    "routine_templates",
+    "daily_plan_items",
+    "plan_adjustments",
+    "timer_sessions",
+    "training_logs",
+    "body_metrics"
+  ];
+  const LEGACY_TO_SHARED_TYPE = {
+    strength: "strength",
+    easyWalk: "easy_walk",
+    qualityWalk: "quality_walk",
+    indoorCardio: "indoor_cardio",
+    recovery: "recovery",
+    rest: "rest"
+  };
+  const SHARED_TO_LEGACY_TYPE = {
+    strength: "strength",
+    easy_walk: "easyWalk",
+    quality_walk: "qualityWalk",
+    indoor_cardio: "indoorCardio",
+    recovery: "recovery",
+    stretch: "recovery",
+    rest: "rest"
+  };
+  const LEGACY_TO_SHARED_STATUS = {
+    completed: "completed",
+    short: "short_version",
+    stretchOnly: "stretch_only",
+    skipped: "skipped"
+  };
+  const SHARED_TO_LEGACY_STATUS = {
+    planned: "completed",
+    completed: "completed",
+    short_version: "short",
+    stretch_only: "stretchOnly",
+    skipped: "skipped",
+    rested: "skipped",
+    modified_by_user: "short"
+  };
+  const LEGACY_FATIGUE_TO_SHARED = {
+    low: 1,
+    normal: 2,
+    high: 3,
+    severe: 4
+  };
+  const SHARED_FATIGUE_TO_LEGACY = {
+    1: "low",
+    2: "normal",
+    3: "high",
+    4: "severe"
+  };
+
+  const TYPE_META = {
+    strength: { label: "力量", short: "力", icon: "◆", asset: "assets/sports/strength.png", className: "type-strength" },
+    easyWalk: { label: "普通走", short: "走", icon: "→", asset: "assets/sports/walk.png", className: "type-easyWalk" },
+    qualityWalk: { label: "提高走", short: "提", icon: "↗", asset: "assets/sports/run.png", className: "type-qualityWalk" },
+    indoorCardio: { label: "室内有氧", short: "室", icon: "⌂", asset: "assets/sports/treadmill.png", className: "type-indoorCardio" },
+    recovery: { label: "恢复", short: "恢", icon: "↺", asset: "assets/sports/stretch.png", className: "type-recovery" },
+    rest: { label: "休息", short: "休", icon: "○", asset: "assets/sports/rest.png", className: "type-rest" }
+  };
+
+  const APP_ICON_META = {
+    calendar: { label: "日历", asset: "file:///C:/Users/Qi/OneDrive/%E5%9B%BE%E7%89%87/sports/app/calendar%20%282%29.png" },
+    data: { label: "数据", asset: "file:///C:/Users/Qi/OneDrive/%E5%9B%BE%E7%89%87/sports/app/notebook.png" },
+    settings: { label: "设置", asset: "file:///C:/Users/Qi/OneDrive/%E5%9B%BE%E7%89%87/sports/app/setting%20%281%29.png" }
+  };
+
+  const BRAND_META = {
+    name: "身刻",
+    slogan: "记录身体变化，掌控生活节奏",
+    symbolDark: "brand-assets/shinke-symbol-dark.png",
+    symbolLight: "brand-assets/shinke-symbol-light.png",
+    logoDark: "brand-assets/shinke-logo-horizontal-dark.png"
+  };
+
+  const STATUS_META = {
+    completed: "完成",
+    short: "短版",
+    stretchOnly: "只拉伸",
+    skipped: "未做"
+  };
+
+  const STATUS_OPTIONS_BY_TYPE = {
+    strength: {
+      completed: "完成",
+      short: "短版",
+      skipped: "未做"
+    },
+    easyWalk: {
+      completed: "完成",
+      short: "缩短",
+      skipped: "未做"
+    },
+    qualityWalk: {
+      completed: "完成",
+      short: "缩短",
+      skipped: "未做"
+    },
+    indoorCardio: {
+      completed: "完成",
+      short: "缩短",
+      skipped: "未做"
+    },
+    recovery: {
+      completed: "完成",
+      stretchOnly: "只拉伸",
+      skipped: "未做"
+    },
+    rest: {
+      skipped: "已休息"
+    }
+  };
+
+  const FATIGUE_META = {
+    low: "轻松",
+    normal: "正常",
+    high: "累",
+    severe: "很累"
+  };
+
+  const FATIGUE_ORDER = ["low", "normal", "high", "severe"];
+  const FATIGUE_SLIDER_ORDER = ["severe", "high", "normal", "low"];
+
+  const SLEEP_META = {
+    poor: "差",
+    normal: "一般",
+    good: "好"
+  };
+
+  const SLEEP_ORDER = ["poor", "normal", "good"];
+
+  const PAIN_LEVELS = [
+    { value: 0, label: "无" },
+    { value: 1, label: "轻微" },
+    { value: 2, label: "明显" },
+    { value: 3, label: "严重" }
+  ];
+
+  const SEED_WORKOUTS = [];
+
+  const app = document.getElementById("app");
+  let db = null;
+  let messageTimer = null;
+
+  const state = {
+    ready: false,
+    storageMode: "载入中",
+    selectedDate: todayISO(),
+    visibleMonth: todayISO().slice(0, 7),
+    activeTab: "calendar",
+    detailOpen: false,
+    editMode: false,
+    message: "",
+    editorDrafts: null,
+    workouts: [],
+    bodyMetrics: [],
+    records: createEmptySharedRecords()
+  };
+
+  document.addEventListener("DOMContentLoaded", init);
+
+  async function init() {
+    render();
+    const snapshot = normalizeSnapshot(await loadSnapshot());
+    state.workouts = normalizeWorkouts(snapshot.workouts);
+    state.bodyMetrics = normalizeBodyMetrics(snapshot.bodyMetrics);
+    state.records = normalizeSharedRecords(snapshot.records);
+    if (!state.workouts.length) {
+      state.workouts = seedWorkouts();
+      await saveSnapshot("已载入历史种子记录");
+    }
+    state.ready = true;
+    render();
+  }
+
+  async function loadSnapshot() {
+    try {
+      db = await openDatabase();
+      state.storageMode = "IndexedDB";
+      const idbSnapshot = await idbGet(SNAPSHOT_KEY);
+      if (idbSnapshot) return idbSnapshot;
+    } catch (error) {
+      db = null;
+      state.storageMode = "localStorage";
+    }
+
+    try {
+      const raw = window.localStorage.getItem(FALLBACK_KEY);
+      if (raw) return JSON.parse(raw);
+    } catch (error) {
+      state.message = "本地缓存读取失败，已使用种子数据";
+    }
+
+    return { schemaVersion: SHARED_SCHEMA_VERSION, workouts: seedWorkouts(), bodyMetrics: [], records: createEmptySharedRecords() };
+  }
+
+  function openDatabase() {
+    return new Promise((resolve, reject) => {
+      if (!("indexedDB" in window)) {
+        reject(new Error("IndexedDB unavailable"));
+        return;
+      }
+      const request = window.indexedDB.open(DB_NAME, DB_VERSION);
+      request.onupgradeneeded = () => {
+        const nextDb = request.result;
+        if (!nextDb.objectStoreNames.contains("kv")) {
+          nextDb.createObjectStore("kv");
+        }
+      };
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error || new Error("IndexedDB open failed"));
+    });
+  }
+
+  function idbGet(key) {
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction("kv", "readonly");
+      const request = tx.objectStore("kv").get(key);
+      request.onsuccess = () => resolve(request.result || null);
+      request.onerror = () => reject(request.error || new Error("IndexedDB read failed"));
+    });
+  }
+
+  function idbSet(key, value) {
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction("kv", "readwrite");
+      tx.objectStore("kv").put(value, key);
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error || new Error("IndexedDB write failed"));
+    });
+  }
+
+  async function saveSnapshot(message) {
+    const snapshot = buildSnapshot();
+
+    try {
+      if (db) {
+        await idbSet(SNAPSHOT_KEY, snapshot);
+        state.storageMode = "IndexedDB";
+      } else {
+        window.localStorage.setItem(FALLBACK_KEY, JSON.stringify(snapshot));
+        state.storageMode = "localStorage";
+      }
+      if (message) state.message = message;
+    } catch (error) {
+      window.localStorage.setItem(FALLBACK_KEY, JSON.stringify(snapshot));
+      state.storageMode = "localStorage";
+      state.message = message || "已保存到 localStorage";
+    }
+  }
+
+  function buildSnapshot() {
+    syncSharedRecordsFromLegacy();
+    return {
+      schemaVersion: SHARED_SCHEMA_VERSION,
+      legacySchemaVersion: 1,
+      updatedAt: new Date().toISOString(),
+      workouts: state.workouts,
+      bodyMetrics: state.bodyMetrics,
+      records: cloneJson(state.records)
+    };
+  }
+
+  function normalizeSnapshot(payload) {
+    const source = payload && typeof payload === "object" ? payload : {};
+    const records = normalizeSharedRecords(collectSharedRecordSource(source));
+    let workouts = normalizeWorkouts(source.workouts);
+    let bodyMetrics = normalizeBodyMetrics(source.bodyMetrics);
+
+    if (!workouts.length && records.training_logs.length) {
+      workouts = normalizeWorkouts(records.training_logs.map(trainingLogEnvelopeToWorkout).filter(Boolean));
+    }
+    if (!bodyMetrics.length && records.body_metrics.length) {
+      bodyMetrics = normalizeBodyMetrics(records.body_metrics.map(bodyMetricEnvelopeToLegacy).filter(Boolean));
+    }
+    if (!records.training_logs.length && workouts.length) {
+      records.training_logs = workouts.map((item) => workoutToTrainingLogEnvelope(item)).filter(Boolean);
+    }
+    if (!records.body_metrics.length && bodyMetrics.length) {
+      records.body_metrics = bodyMetrics.map((item) => bodyMetricToSharedEnvelope(item)).filter(Boolean);
+    }
+
+    return { workouts, bodyMetrics, records };
+  }
+
+  function createEmptySharedRecords() {
+    return SHARED_ENTITIES.reduce((records, entity) => {
+      records[entity] = [];
+      return records;
+    }, {});
+  }
+
+  function collectSharedRecordSource(source) {
+    const records = createEmptySharedRecords();
+    const nested = source.records && typeof source.records === "object" ? source.records : {};
+    SHARED_ENTITIES.forEach((entity) => {
+      const value = Array.isArray(nested[entity]) ? nested[entity] : source[entity];
+      records[entity] = Array.isArray(value) ? value : [];
+    });
+    return records;
+  }
+
+  function normalizeSharedRecords(source) {
+    const records = createEmptySharedRecords();
+    const input = source && typeof source === "object" ? source : {};
+    SHARED_ENTITIES.forEach((entity) => {
+      records[entity] = normalizeSharedRecordArray(entity, input[entity]);
+    });
+    return records;
+  }
+
+  function normalizeSharedRecordArray(entity, items) {
+    if (!Array.isArray(items)) return [];
+    return items.map((item) => normalizeSharedEnvelope(entity, item)).filter(Boolean).sort(compareSharedEnvelopes);
+  }
+
+  function normalizeSharedEnvelope(entity, item) {
+    if (!item || typeof item !== "object") return null;
+    const rawData = item.data && typeof item.data === "object" ? item.data : stripEnvelopeFields(item);
+    const data = normalizeSharedEntityData(entity, rawData);
+    if (!data) return null;
+    const now = new Date().toISOString();
+    const id = item.id || data.id || makeId();
+    data.id = id;
+    return {
+      id,
+      entity: item.entity || entity,
+      data,
+      revision: Math.max(1, Math.round(toNullableNumber(item.revision) || toNullableNumber(data.revision) || 1)),
+      deviceId: item.deviceId || data.deviceId || getDeviceId(),
+      createdAt: item.createdAt || data.createdAt || now,
+      updatedAt: item.updatedAt || data.updatedAt || now,
+      deletedAt: item.deletedAt || data.deletedAt || null,
+      syncState: item.syncState || "dirty",
+      lastSyncedAt: item.lastSyncedAt || null,
+      conflict: item.conflict || null
+    };
+  }
+
+  function stripEnvelopeFields(item) {
+    const data = { ...item };
+    ["entity", "revision", "deviceId", "syncState", "lastSyncedAt", "conflict"].forEach((key) => delete data[key]);
+    return data;
+  }
+
+  function normalizeSharedEntityData(entity, data) {
+    if (entity === "daily_plan_items") return normalizeDailyPlanItemData(data);
+    if (entity === "timer_sessions") return normalizeTimerSessionData(data);
+    if (entity === "training_logs") return normalizeTrainingLogData(data);
+    if (entity === "body_metrics") return normalizeBodyMetricData(data);
+    if (entity === "plan_adjustments") return normalizePlanAdjustmentData(data);
+    if (entity === "plan_templates") return normalizeLooseSharedData(data, "plan");
+    if (entity === "routine_templates") return normalizeLooseSharedData(data, "routine");
+    return normalizeLooseSharedData(data, entity);
+  }
+
+  function normalizeLooseSharedData(data, prefix) {
+    if (!data || typeof data !== "object") return null;
+    return {
+      ...data,
+      id: data.id || `${prefix}_${makeId()}`
+    };
+  }
+
+  function normalizeDailyPlanItemData(data) {
+    if (!data || !isIsoDate(data.date)) return null;
+    const trainingType = toSharedTrainingType(data.trainingType || data.training_type || data.type);
+    return {
+      ...data,
+      id: data.id || `daily_${data.date}_${trainingType}_001`,
+      date: data.date,
+      sourcePlanId: data.sourcePlanId || data.source_plan_id || null,
+      sourcePlanVersion: data.sourcePlanVersion || data.source_plan_version || null,
+      trainingType,
+      title: data.title || TYPE_META[toLegacyTrainingType(trainingType)].label,
+      goal: data.goal || "",
+      estimatedMinutes: toNullableNumber(data.estimatedMinutes ?? data.estimated_minutes),
+      intensity: clamp(Math.round(toNullableNumber(data.intensity) || 3), 1, 5),
+      needsTimer: Boolean(data.needsTimer ?? data.needs_timer),
+      routineId: data.routineId || data.routine_id || null,
+      routineVersion: data.routineVersion || data.routine_version || null,
+      timerOptions: data.timerOptions || data.timer_options || {},
+      notes: Array.isArray(data.notes) ? data.notes : [],
+      snapshot: data.snapshot || {},
+      status: data.status || "planned",
+      sortOrder: Math.round(toNullableNumber(data.sortOrder ?? data.sort_order) || 0),
+      createdAt: data.createdAt || data.created_at || new Date().toISOString(),
+      updatedAt: data.updatedAt || data.updated_at || new Date().toISOString()
+    };
+  }
+
+  function normalizePlanAdjustmentData(data) {
+    if (!data || !isIsoDate(data.date)) return null;
+    return {
+      ...data,
+      id: data.id || `adjust_${data.date}_${makeId()}`,
+      date: data.date,
+      targetDailyPlanItemId: data.targetDailyPlanItemId || data.target_daily_plan_item_id || null,
+      adjustedAt: data.adjustedAt || data.adjusted_at || new Date().toISOString(),
+      adjustedBy: data.adjustedBy || data.adjusted_by || "coach",
+      reason: data.reason || "",
+      fromSnapshot: data.fromSnapshot || data.from_snapshot || {},
+      toSnapshot: data.toSnapshot || data.to_snapshot || {},
+      createdAt: data.createdAt || data.created_at || new Date().toISOString(),
+      updatedAt: data.updatedAt || data.updated_at || new Date().toISOString()
+    };
+  }
+
+  function normalizeTimerSessionData(data) {
+    if (!data || typeof data !== "object") return null;
+    const date = data.date || String(data.startedAt || data.started_at || "").slice(0, 10);
+    if (!isIsoDate(date)) return null;
+    return {
+      ...data,
+      id: data.id || `session_${date}_${makeId()}`,
+      date,
+      dailyPlanItemId: data.dailyPlanItemId || data.daily_plan_item_id || null,
+      routineId: data.routineId || data.routine_id || "",
+      routineVersion: data.routineVersion || data.routine_version || null,
+      startedAt: data.startedAt || data.started_at || new Date().toISOString(),
+      endedAt: data.endedAt || data.ended_at || null,
+      actualSeconds: toNullableNumber(data.actualSeconds ?? data.actual_seconds),
+      completion: data.completion || "completed",
+      stepResults: Array.isArray(data.stepResults) ? data.stepResults : [],
+      notes: data.notes || "",
+      source: data.source || "home_training_timer",
+      createdAt: data.createdAt || data.created_at || new Date().toISOString(),
+      updatedAt: data.updatedAt || data.updated_at || new Date().toISOString()
+    };
+  }
+
+  function normalizeTrainingLogData(data) {
+    if (!data || !isIsoDate(data.date)) return null;
+    const type = toSharedTrainingType(data.type || data.trainingType || data.training_type);
+    return {
+      ...data,
+      id: data.id || `log_${data.date}_001`,
+      date: data.date,
+      dailyPlanItemId: data.dailyPlanItemId || data.daily_plan_item_id || null,
+      timerSessionId: data.timerSessionId || data.timer_session_id || null,
+      type,
+      status: toSharedCompletionStatus(data.status, type),
+      source: data.source || "manual",
+      durationSec: toNullableNumber(data.durationSec ?? data.duration_sec),
+      distanceKm: toNullableNumber(data.distanceKm ?? data.distance_km),
+      avgPaceSecPerKm: toNullableNumber(data.avgPaceSecPerKm ?? data.avg_pace_sec_per_km),
+      bestPaceSecPerKm: toNullableNumber(data.bestPaceSecPerKm ?? data.best_pace_sec_per_km),
+      avgHeartRate: toNullableNumber(data.avgHeartRate ?? data.avg_heart_rate),
+      maxHeartRate: toNullableNumber(data.maxHeartRate ?? data.max_heart_rate),
+      steps: toNullableNumber(data.steps),
+      cadence: toNullableNumber(data.cadence),
+      strideCm: toNullableNumber(data.strideCm ?? data.stride_cm),
+      trainingEffect: toNullableNumber(data.trainingEffect ?? data.training_effect),
+      trainingLoad: toNullableNumber(data.trainingLoad ?? data.training_load),
+      recoveryHours: toNullableNumber(data.recoveryHours ?? data.recovery_hours),
+      laps: Array.isArray(data.laps) ? data.laps : [],
+      notes: data.notes || "",
+      rawJson: data.rawJson || data.raw_json || {},
+      createdAt: data.createdAt || data.created_at || new Date().toISOString(),
+      updatedAt: data.updatedAt || data.updated_at || new Date().toISOString()
+    };
+  }
+
+  function normalizeBodyMetricData(data) {
+    if (!data || !isIsoDate(data.date)) return null;
+    const pain = data.pain || data.pain_json || {};
+    return {
+      ...data,
+      id: data.id || `metric_${data.date}`,
+      date: data.date,
+      weightKg: toNullableNumber(data.weightKg ?? data.weight_kg),
+      waistCm: toNullableNumber(data.waistCm ?? data.waist_cm),
+      bodyFatPct: toNullableNumber(data.bodyFatPct ?? data.body_fat_pct),
+      muscleKg: toNullableNumber(data.muscleKg ?? data.muscle_kg),
+      sleepQuality: SLEEP_META[data.sleepQuality || data.sleep_quality] ? data.sleepQuality || data.sleep_quality : "normal",
+      energy: clamp(toNullableNumber(data.energy) || 3, 1, 5),
+      fatigue: normalizeSharedFatigue(data.fatigue),
+      pain: {
+        calf: clampPain(pain.calf ?? pain.calfRightOuter),
+        back: clampPain(pain.back ?? pain.backLeftLower),
+        wrist: clampPain(pain.wrist),
+        outerThigh: clampPain(pain.outerThigh ?? pain.hipRightOuter),
+        calfRightOuter: clampPain(pain.calfRightOuter ?? pain.calf),
+        backLeftLower: clampPain(pain.backLeftLower ?? pain.back),
+        hipRightOuter: clampPain(pain.hipRightOuter ?? pain.outerThigh)
+      },
+      notes: data.notes || "",
+      rawJson: data.rawJson || data.raw_json || {},
+      createdAt: data.createdAt || data.created_at || new Date().toISOString(),
+      updatedAt: data.updatedAt || data.updated_at || new Date().toISOString()
+    };
+  }
+
+  function syncSharedRecordsFromLegacy() {
+    const records = normalizeSharedRecords(state.records);
+    records.training_logs = records.training_logs.filter((item) => item.data?.rawJson?.compatSource !== "workouts");
+    records.body_metrics = records.body_metrics.filter((item) => item.data?.rawJson?.compatSource !== "bodyMetrics");
+    state.workouts.forEach((workout) => upsertSharedEnvelope(records, "training_logs", workoutToTrainingLogData(workout)));
+    state.bodyMetrics.forEach((metric) => upsertSharedEnvelope(records, "body_metrics", bodyMetricToSharedData(metric)));
+    state.records = records;
+  }
+
+  function upsertSharedEnvelope(records, entity, data) {
+    const existing = records[entity].find((item) => item.id === data.id) || null;
+    const envelope = makeSharedEnvelope(entity, data, existing);
+    if (!envelope) return;
+    records[entity] = records[entity].filter((item) => item.id !== envelope.id).concat(envelope).sort(compareSharedEnvelopes);
+  }
+
+  function removeSharedRecordsByDate(entities, date) {
+    entities.forEach((entity) => {
+      if (!Array.isArray(state.records[entity])) return;
+      state.records[entity] = state.records[entity].filter((item) => item.data?.date !== date);
+    });
+  }
+
+  function makeSharedEnvelope(entity, data, existing = null) {
+    const now = new Date().toISOString();
+    const normalized = normalizeSharedEntityData(entity, data);
+    if (!normalized) return null;
+    const id = normalized.id || data.id || existing?.id || makeId();
+    normalized.id = id;
+    return {
+      id,
+      entity,
+      data: normalized,
+      revision: existing?.revision || Math.max(1, Math.round(toNullableNumber(data.revision) || 1)),
+      deviceId: existing?.deviceId || data.deviceId || getDeviceId(),
+      createdAt: existing?.createdAt || normalized.createdAt || now,
+      updatedAt: normalized.updatedAt || now,
+      deletedAt: normalized.deletedAt || null,
+      syncState: existing?.syncState || "dirty",
+      lastSyncedAt: existing?.lastSyncedAt || null,
+      conflict: existing?.conflict || null
+    };
+  }
+
+  function workoutToTrainingLogEnvelope(workout) {
+    const data = workoutToTrainingLogData(workout);
+    return data ? makeSharedEnvelope("training_logs", data) : null;
+  }
+
+  function workoutToTrainingLogData(workout) {
+    if (!workout || !isIsoDate(workout.date)) return null;
+    const type = toSharedTrainingType(workout.type);
+    return {
+      id: workout.trainingLogId || `log_${workout.date}_001`,
+      date: workout.date,
+      dailyPlanItemId: workout.dailyPlanItemId || null,
+      timerSessionId: workout.timerSessionId || null,
+      type,
+      status: toSharedCompletionStatus(workout.status, type),
+      source: workout.source || "manual",
+      durationSec: toNullableNumber(workout.durationSec),
+      distanceKm: toNullableNumber(workout.distanceKm),
+      avgPaceSecPerKm: toNullableNumber(workout.avgPaceSecPerKm),
+      bestPaceSecPerKm: toNullableNumber(workout.bestPaceSecPerKm),
+      avgHeartRate: toNullableNumber(workout.avgHeartRate),
+      maxHeartRate: toNullableNumber(workout.maxHeartRate),
+      steps: toNullableNumber(workout.steps),
+      cadence: toNullableNumber(workout.cadence),
+      strideCm: toNullableNumber(workout.strideCm),
+      trainingEffect: toNullableNumber(workout.trainingEffect),
+      trainingLoad: toNullableNumber(workout.trainingLoad),
+      recoveryHours: toNullableNumber(workout.recoveryHours),
+      notes: workout.notes || "",
+      rawJson: { compatSource: "workouts", legacyWorkoutId: workout.id },
+      createdAt: workout.createdAt || new Date().toISOString(),
+      updatedAt: workout.updatedAt || new Date().toISOString()
+    };
+  }
+
+  function trainingLogEnvelopeToWorkout(envelope) {
+    if (!envelope || envelope.deletedAt) return null;
+    const data = envelope.data || {};
+    if (!isIsoDate(data.date)) return null;
+    const type = toLegacyTrainingType(data.type);
+    return {
+      id: data.rawJson?.legacyWorkoutId || `workout_${data.id}`,
+      trainingLogId: data.id,
+      dailyPlanItemId: data.dailyPlanItemId || null,
+      timerSessionId: data.timerSessionId || null,
+      date: data.date,
+      type,
+      status: toLegacyCompletionStatus(data.status, type),
+      source: data.source || "manual",
+      durationSec: toNullableNumber(data.durationSec),
+      distanceKm: toNullableNumber(data.distanceKm),
+      avgPaceSecPerKm: toNullableNumber(data.avgPaceSecPerKm),
+      bestPaceSecPerKm: toNullableNumber(data.bestPaceSecPerKm),
+      avgHeartRate: toNullableNumber(data.avgHeartRate),
+      maxHeartRate: toNullableNumber(data.maxHeartRate),
+      steps: toNullableNumber(data.steps),
+      cadence: toNullableNumber(data.cadence),
+      strideCm: toNullableNumber(data.strideCm),
+      trainingEffect: toNullableNumber(data.trainingEffect),
+      trainingLoad: toNullableNumber(data.trainingLoad),
+      recoveryHours: toNullableNumber(data.recoveryHours),
+      fatigue: "normal",
+      pain: { calf: 0, back: 0, wrist: 0, outerThigh: 0 },
+      notes: data.notes || "",
+      createdAt: data.createdAt || envelope.createdAt,
+      updatedAt: data.updatedAt || envelope.updatedAt
+    };
+  }
+
+  function bodyMetricToSharedEnvelope(metric) {
+    const data = bodyMetricToSharedData(metric);
+    return data ? makeSharedEnvelope("body_metrics", data) : null;
+  }
+
+  function bodyMetricToSharedData(metric) {
+    if (!metric || !isIsoDate(metric.date)) return null;
+    const pain = metric.pain || {};
+    return {
+      id: metric.bodyMetricId || `metric_${metric.date}`,
+      date: metric.date,
+      weightKg: toNullableNumber(metric.weightKg),
+      waistCm: toNullableNumber(metric.waistCm),
+      bodyFatPct: toNullableNumber(metric.bodyFatPct),
+      muscleKg: toNullableNumber(metric.muscleKg),
+      sleepQuality: metric.sleepQuality || "normal",
+      energy: clamp(toNullableNumber(metric.energy) || 3, 1, 5),
+      fatigue: legacyFatigueToShared(metric.fatigue),
+      pain: {
+        calf: clampPain(pain.calf),
+        back: clampPain(pain.back),
+        wrist: clampPain(pain.wrist),
+        outerThigh: clampPain(pain.outerThigh),
+        calfRightOuter: clampPain(pain.calf),
+        backLeftLower: clampPain(pain.back),
+        hipRightOuter: clampPain(pain.outerThigh)
+      },
+      notes: metric.notes || "",
+      rawJson: { compatSource: "bodyMetrics", legacyMetricId: metric.id },
+      createdAt: metric.createdAt || new Date().toISOString(),
+      updatedAt: metric.updatedAt || new Date().toISOString()
+    };
+  }
+
+  function bodyMetricEnvelopeToLegacy(envelope) {
+    if (!envelope || envelope.deletedAt) return null;
+    const data = envelope.data || {};
+    if (!isIsoDate(data.date)) return null;
+    const pain = data.pain || {};
+    return {
+      id: data.rawJson?.legacyMetricId || `metric_legacy_${data.date}`,
+      bodyMetricId: data.id,
+      date: data.date,
+      weightKg: toNullableNumber(data.weightKg),
+      waistCm: toNullableNumber(data.waistCm),
+      bodyFatPct: toNullableNumber(data.bodyFatPct),
+      muscleKg: toNullableNumber(data.muscleKg),
+      sleepQuality: data.sleepQuality || "normal",
+      energy: clamp(toNullableNumber(data.energy) || 3, 1, 5),
+      fatigue: sharedFatigueToLegacy(data.fatigue),
+      pain: {
+        calf: clampPain(pain.calf ?? pain.calfRightOuter),
+        back: clampPain(pain.back ?? pain.backLeftLower),
+        wrist: clampPain(pain.wrist),
+        outerThigh: clampPain(pain.outerThigh ?? pain.hipRightOuter)
+      },
+      notes: data.notes || "",
+      createdAt: data.createdAt || envelope.createdAt,
+      updatedAt: data.updatedAt || envelope.updatedAt
+    };
+  }
+
+  function compareSharedEnvelopes(a, b) {
+    const aDate = a.data?.date || a.updatedAt || "";
+    const bDate = b.data?.date || b.updatedAt || "";
+    return aDate.localeCompare(bDate) || a.id.localeCompare(b.id);
+  }
+
+  function cloneJson(value) {
+    return JSON.parse(JSON.stringify(value));
+  }
+
+  function hasSharedRecordPayload(payload) {
+    if (!payload || typeof payload !== "object") return false;
+    if (payload.records && SHARED_ENTITIES.some((entity) => Array.isArray(payload.records[entity]))) return true;
+    return SHARED_ENTITIES.some((entity) => Array.isArray(payload[entity]));
+  }
+
+  function mergeSharedRecords(current, incoming) {
+    const next = normalizeSharedRecords(current);
+    const add = normalizeSharedRecords(incoming);
+    SHARED_ENTITIES.forEach((entity) => {
+      const map = new Map(next[entity].map((item) => [item.id, item]));
+      add[entity].forEach((item) => {
+        const existing = map.get(item.id);
+        if (!existing || compareIncomingRecord(existing, item) <= 0) {
+          map.set(item.id, item);
+        }
+      });
+      next[entity] = Array.from(map.values()).sort(compareSharedEnvelopes);
+    });
+    return next;
+  }
+
+  function compareIncomingRecord(existing, incoming) {
+    if ((incoming.revision || 0) !== (existing.revision || 0)) {
+      return (existing.revision || 0) - (incoming.revision || 0);
+    }
+    return String(existing.updatedAt || "").localeCompare(String(incoming.updatedAt || ""));
+  }
+
+  function mergeWorkoutsByDate(current, incoming) {
+    const map = new Map(normalizeWorkouts(current).map((item) => [item.date, item]));
+    normalizeWorkouts(incoming).forEach((item) => map.set(item.date, item));
+    return Array.from(map.values()).sort((a, b) => a.date.localeCompare(b.date));
+  }
+
+  function mergeBodyMetricsByDate(current, incoming) {
+    const map = new Map(normalizeBodyMetrics(current).map((item) => [item.date, item]));
+    normalizeBodyMetrics(incoming).forEach((item) => map.set(item.date, item));
+    return Array.from(map.values()).sort((a, b) => a.date.localeCompare(b.date));
+  }
+
+  function seedWorkouts() {
+    return SEED_WORKOUTS.map((item) => normalizeWorkout({
+      id: makeId(),
+      source: "import",
+      fatigue: "normal",
+      pain: { calf: 0, back: 0, wrist: 0, outerThigh: 0 },
+      createdAt: `${item.date}T12:00:00.000Z`,
+      updatedAt: `${item.date}T12:00:00.000Z`,
+      ...item
+    }));
+  }
+
+  function normalizeWorkouts(workouts) {
+    if (!Array.isArray(workouts)) return [];
+    return workouts.map(normalizeWorkout).filter(Boolean).sort((a, b) => a.date.localeCompare(b.date));
+  }
+
+  function normalizeWorkout(item) {
+    if (!item || !isIsoDate(item.date)) return null;
+    const type = toLegacyTrainingType(item.type);
+    const status = toLegacyCompletionStatus(item.status, type);
+    return {
+      id: item.id || makeId(),
+      trainingLogId: item.trainingLogId || null,
+      dailyPlanItemId: item.dailyPlanItemId || null,
+      timerSessionId: item.timerSessionId || null,
+      date: item.date,
+      type,
+      status,
+      source: item.source || "manual",
+      durationSec: toNullableNumber(item.durationSec),
+      distanceKm: toNullableNumber(item.distanceKm),
+      avgPaceSecPerKm: toNullableNumber(item.avgPaceSecPerKm),
+      bestPaceSecPerKm: toNullableNumber(item.bestPaceSecPerKm),
+      avgHeartRate: toNullableNumber(item.avgHeartRate),
+      maxHeartRate: toNullableNumber(item.maxHeartRate),
+      steps: toNullableNumber(item.steps),
+      cadence: toNullableNumber(item.cadence),
+      strideCm: toNullableNumber(item.strideCm),
+      trainingEffect: toNullableNumber(item.trainingEffect),
+      trainingLoad: toNullableNumber(item.trainingLoad),
+      recoveryHours: toNullableNumber(item.recoveryHours),
+      fatigue: FATIGUE_META[item.fatigue] ? item.fatigue : "normal",
+      pain: {
+        calf: clampPain(item.pain && item.pain.calf),
+        back: clampPain(item.pain && item.pain.back),
+        wrist: clampPain(item.pain && item.pain.wrist),
+        outerThigh: clampPain(item.pain && item.pain.outerThigh)
+      },
+      notes: item.notes || "",
+      createdAt: item.createdAt || new Date().toISOString(),
+      updatedAt: item.updatedAt || new Date().toISOString()
+    };
+  }
+
+  function normalizeBodyMetrics(metrics) {
+    if (!Array.isArray(metrics)) return [];
+    return metrics.map((item) => {
+      if (!item || !isIsoDate(item.date)) return null;
+      return {
+        id: item.id || makeId(),
+        date: item.date,
+        weightKg: toNullableNumber(item.weightKg),
+        waistCm: toNullableNumber(item.waistCm),
+        bodyFatPct: toNullableNumber(item.bodyFatPct),
+        muscleKg: toNullableNumber(item.muscleKg),
+        bodyMetricId: item.bodyMetricId || null,
+        sleepQuality: SLEEP_META[item.sleepQuality] ? item.sleepQuality : "normal",
+        energy: clamp(toNullableNumber(item.energy) || 3, 1, 5),
+        fatigue: normalizeLegacyFatigue(item.fatigue),
+        pain: {
+          calf: clampPain(item.pain && item.pain.calf),
+          back: clampPain(item.pain && item.pain.back),
+          wrist: clampPain(item.pain && item.pain.wrist),
+          outerThigh: clampPain(item.pain && item.pain.outerThigh)
+        },
+        notes: item.notes || "",
+        createdAt: item.createdAt || new Date().toISOString(),
+        updatedAt: item.updatedAt || new Date().toISOString()
+      };
+    }).filter(Boolean).sort((a, b) => a.date.localeCompare(b.date));
+  }
+
+  function render() {
+    if (!state.ready) {
+      app.innerHTML = `
+        <main class="boot-screen">
+          <img class="boot-logo" src="${BRAND_META.logoDark}" alt="${BRAND_META.name}">
+          <h1>${BRAND_META.name}</h1>
+          <p>${BRAND_META.slogan}</p>
+        </main>
+      `;
+      return;
+    }
+
+    app.innerHTML = `
+      <div class="workspace">
+        ${renderSideNav()}
+        <main class="workspace-main">
+          ${renderActiveTab()}
+        </main>
+        ${state.message ? `<div class="toast-message" role="status">${escapeHtml(state.message)}</div>` : ""}
+        ${state.detailOpen ? renderDateDrawer() : ""}
+      </div>
+    `;
+    bindEvents();
+    scheduleMessageDismiss();
+  }
+
+  function scheduleMessageDismiss() {
+    if (messageTimer) {
+      window.clearTimeout(messageTimer);
+      messageTimer = null;
+    }
+    if (!state.message) return;
+    const message = state.message;
+    messageTimer = window.setTimeout(() => {
+      if (state.message !== message) return;
+      state.message = "";
+      messageTimer = null;
+      app.querySelector(".toast-message")?.remove();
+    }, 2600);
+  }
+
+  function renderSideNav() {
+    const tabs = ["calendar", "data"];
+    return `
+      <aside class="side-nav" aria-label="主导航">
+        <nav class="side-tabs">
+          ${tabs.map((id) => renderSideTab(id)).join("")}
+        </nav>
+        <div class="side-bottom">
+          ${renderSideTab("settings", "settings-tab")}
+        </div>
+      </aside>
+    `;
+  }
+
+  function renderSideTab(id, extraClass = "") {
+    const item = APP_ICON_META[id];
+    return `
+      <button type="button" class="side-tab ${extraClass} ${state.activeTab === id ? "active" : ""}" data-tab="${id}" title="${item.label}">
+        <img class="side-tab-icon-img" src="${escapeHtml(item.asset)}" alt="" aria-hidden="true">
+        <span>${escapeHtml(item.label)}</span>
+      </button>
+    `;
+  }
+
+  function renderActiveTab() {
+    if (state.activeTab === "data") {
+      return `
+        <section class="content-page data-page">
+          ${renderPageHead("数据")}
+          <div class="data-grid-layout">
+            <div class="data-column">
+              ${panel("体重趋势", "最近体重记录", renderWeightTrend())}
+              ${panel("腰围趋势", "最近腰围记录", renderWaistTrend())}
+            </div>
+            <div class="data-column">
+              ${panel("记录概览", "最近训练节奏", renderOverview())}
+              ${panel("最近记录", "按日期倒序", renderRecordList(recentWorkouts(12)))}
+            </div>
+          </div>
+        </section>
+      `;
+    }
+
+    if (state.activeTab === "settings") {
+      return `
+        <section class="content-page settings-page">
+          ${renderPageHead("设置")}
+          <div class="data-grid-layout">
+            ${panel("本地数据", "导入、导出和种子记录", renderDataPanel())}
+          </div>
+        </section>
+      `;
+    }
+
+    return `
+      <section class="calendar-page">
+        ${renderPageHead("训练日历")}
+        <div data-calendar-area="true">${renderCalendar()}</div>
+      </section>
+    `;
+  }
+
+  function renderPageHead(title) {
+    return `
+      <div class="page-head">
+        <div class="page-title-group">
+          <h1>${escapeHtml(title)}</h1>
+        </div>
+        <img class="page-brand-logo" src="${BRAND_META.logoDark}" alt="${BRAND_META.name}，${BRAND_META.slogan}">
+      </div>
+    `;
+  }
+
+  function panel(title, subtitle, body) {
+    return `
+      <section class="panel">
+        <div class="panel-header">
+          <div>
+            <h2 class="panel-title">${escapeHtml(title)}</h2>
+            <p class="panel-subtitle">${escapeHtml(subtitle)}</p>
+          </div>
+        </div>
+        <div class="panel-body">${body}</div>
+      </section>
+    `;
+  }
+
+  function renderDateDrawer() {
+    const date = state.selectedDate;
+    const isPast = date < todayISO();
+    const hasRecord = Boolean(getWorkoutByDate(date) || getMetricByDate(date));
+    const hasEditableDate = date <= todayISO();
+    const canEdit = canEditSelectedDate();
+    const editLabel = isPast ? "修正" : "编辑";
+    const cancelLabel = isPast ? "取消修正" : "取消编辑";
+    const editorTitle = isPast ? "修正记录" : hasRecord ? "编辑今天" : "记录今天";
+    return `
+      <aside class="date-drawer" aria-label="日期详情">
+        <div class="drawer-head">
+          <div>
+            <p class="drawer-kicker">${escapeHtml(getSelectedPanelTitle())}</p>
+            <h2>${escapeHtml(date)}</h2>
+          </div>
+          <div class="drawer-actions">
+            ${hasEditableDate && !state.editMode ? `<button type="button" class="subtle" data-action="enable-edit">${editLabel}</button>` : ""}
+            ${hasEditableDate && state.editMode ? `<button type="button" class="subtle" data-action="cancel-edit">${cancelLabel}</button>` : ""}
+            <button type="button" class="icon-button" data-action="close-detail" aria-label="关闭">×</button>
+          </div>
+        </div>
+        <div class="drawer-body">
+          ${renderSelectedSummary()}
+          ${canEdit ? `
+            <section class="drawer-editor">
+              <h3>${editorTitle}</h3>
+              ${renderEditor()}
+            </section>
+          ` : renderReadOnlyNote()}
+        </div>
+      </aside>
+    `;
+  }
+
+  function renderReadOnlyNote() {
+    return "";
+  }
+
+  function canEditSelectedDate() {
+    return state.editMode && state.selectedDate <= todayISO();
+  }
+
+  function getSelectedPanelTitle() {
+    const date = state.selectedDate;
+    if (getWorkoutByDate(date) || getMetricByDate(date)) return "日期详情";
+    if (date === todayISO()) return "今日建议";
+    if (date > todayISO()) return "未来预测";
+    return "日期详情";
+  }
+
+  function renderTypeIcon(type, className) {
+    const meta = TYPE_META[type] || TYPE_META.easyWalk;
+    return `<img class="${className}" src="${escapeHtml(meta.asset)}" alt="" aria-hidden="true">`;
+  }
+
+  function renderAdviceCard(date, kind) {
+    const recommendation = getDisplayRecommendation(date);
+    const meta = TYPE_META[recommendation.type];
+    const isToday = date === todayISO();
+    const label = kind === "forecast" ? "预测" : "建议";
+    return `
+      <div class="suggestion advice-${kind}">
+        <div class="suggestion-top">
+          <div>
+            <span class="suggestion-label">${label} · ${escapeHtml(recommendation.label)}</span>
+            <h2>${renderTypeIcon(recommendation.type, "title-icon-img")}${escapeHtml(recommendation.title)}</h2>
+          </div>
+          <div class="suggestion-time">${recommendation.minutes}<span class="sr-only">分钟</span></div>
+        </div>
+        <ul class="reason-list">
+          ${recommendation.reasons.map((reason) => `<li>${escapeHtml(reason)}</li>`).join("")}
+        </ul>
+      </div>
+    `;
+  }
+
+  function renderOverview() {
+    const today = todayISO();
+    const last7 = getWindowWorkouts(today, 7);
+    const last30 = getWindowWorkouts(today, 30);
+    const completed = last30.filter(isCompletedRecord).length;
+    const distance = last30.reduce((sum, item) => sum + (item.distanceKm || 0), 0);
+    const strength = last7.filter((item) => item.type === "strength" && isCompletedRecord(item)).length;
+    const aerobic = last7.filter((item) => ["easyWalk", "qualityWalk", "indoorCardio"].includes(item.type) && isCompletedRecord(item)).length;
+    return `
+      <div class="metric-row">
+        <div class="metric"><strong>${state.workouts.length}</strong><span>总记录</span></div>
+        <div class="metric"><strong>${completed}</strong><span>30 天完成</span></div>
+        <div class="metric"><strong>${formatNumber(distance, 1)}</strong><span>30 天公里</span></div>
+        <div class="metric"><strong>${strength}/${aerobic}</strong><span>7 天力/有氧</span></div>
+      </div>
+    `;
+  }
+
+  function renderWeightTrend() {
+    return renderBodyTrend({
+      key: "weightKg",
+      title: "体重趋势",
+      unit: "kg",
+      emptyText: "还没有体重记录。编辑某一天时填写体重后，这里会显示趋势。",
+      rangeFloor: 0.8,
+      deltaThreshold: 0.05,
+      className: "weight-trend-chart"
+    });
+  }
+
+  function renderWaistTrend() {
+    return renderBodyTrend({
+      key: "waistCm",
+      title: "腰围趋势",
+      unit: "cm",
+      emptyText: "还没有腰围记录。编辑状态记录时填写腰围后，这里会显示趋势。",
+      rangeFloor: 1,
+      deltaThreshold: 0.1,
+      className: "waist-trend-chart"
+    });
+  }
+
+  function renderBodyTrend({ key, title, unit, emptyText, rangeFloor, deltaThreshold, className }) {
+    const records = state.bodyMetrics
+      .filter((item) => item[key] !== null && item[key] !== undefined)
+      .sort((a, b) => a.date.localeCompare(b.date))
+      .slice(-30);
+
+    if (!records.length) {
+      return `<div class="empty-state">${escapeHtml(emptyText)}</div>`;
+    }
+
+    const latest = records[records.length - 1];
+    const first = records[0];
+    const delta = latest[key] - first[key];
+    const values = records.map((item) => item[key]);
+    const minValue = Math.min(...values);
+    const maxValue = Math.max(...values);
+    const range = Math.max(rangeFloor, maxValue - minValue);
+    const chartMin = minValue - range * 0.16;
+    const chartMax = maxValue + range * 0.16;
+    const chartRange = chartMax - chartMin;
+    const width = 620;
+    const height = 220;
+    const padLeft = 42;
+    const padRight = 18;
+    const padTop = 18;
+    const padBottom = 34;
+    const innerWidth = width - padLeft - padRight;
+    const innerHeight = height - padTop - padBottom;
+    const points = records.map((item, index) => {
+      const x = records.length === 1 ? padLeft + innerWidth / 2 : padLeft + (index / (records.length - 1)) * innerWidth;
+      const y = padTop + ((chartMax - item[key]) / chartRange) * innerHeight;
+      return { x, y, item };
+    });
+    const linePoints = points.map((point) => `${formatNumber(point.x, 1)},${formatNumber(point.y, 1)}`).join(" ");
+    const yTicks = [chartMax, (chartMax + chartMin) / 2, chartMin];
+    const deltaText = `${delta > 0 ? "+" : ""}${formatNumber(delta, 1)} ${unit}`;
+    const deltaClass = delta > deltaThreshold ? "trend-up" : delta < -deltaThreshold ? "trend-down" : "trend-flat";
+    const latestPoint = points[points.length - 1];
+
+    return `
+      <div class="weight-trend ${className}">
+        <div class="trend-summary">
+          <div class="trend-stat primary-stat">
+            <span>最新</span>
+            <strong>${formatNumber(latest[key], 1)} ${unit}</strong>
+            <small>${formatShortDate(latest.date)}</small>
+          </div>
+          <div class="trend-stat">
+            <span>区间变化</span>
+            <strong class="${deltaClass}">${deltaText}</strong>
+            <small>${formatShortDate(first.date)} - ${formatShortDate(latest.date)}</small>
+          </div>
+          <div class="trend-stat">
+            <span>记录数</span>
+            <strong>${records.length}</strong>
+            <small>最近 ${records.length} 条</small>
+          </div>
+        </div>
+        <svg class="trend-chart" viewBox="0 0 ${width} ${height}" role="img" aria-label="${escapeHtml(title)}">
+          ${yTicks.map((tick) => {
+            const y = padTop + ((chartMax - tick) / chartRange) * innerHeight;
+            return `
+              <line class="trend-grid" x1="${padLeft}" y1="${formatNumber(y, 1)}" x2="${width - padRight}" y2="${formatNumber(y, 1)}"></line>
+              <text class="trend-y-label" x="8" y="${formatNumber(y + 4, 1)}">${formatNumber(tick, 1)}</text>
+            `;
+          }).join("")}
+          <polyline class="trend-line" points="${linePoints}"></polyline>
+          ${records.length === 1 ? `<circle class="trend-dot" cx="${formatNumber(latestPoint.x, 1)}" cy="${formatNumber(latestPoint.y, 1)}" r="5"></circle>` : ""}
+          <circle class="trend-dot latest-dot" cx="${formatNumber(latestPoint.x, 1)}" cy="${formatNumber(latestPoint.y, 1)}" r="5"></circle>
+          <text class="trend-x-label" x="${padLeft}" y="${height - 8}">${formatShortDate(first.date)}</text>
+          <text class="trend-x-label end" x="${width - padRight}" y="${height - 8}">${formatShortDate(latest.date)}</text>
+        </svg>
+      </div>
+    `;
+  }
+
+  function renderEditor() {
+    const record = getWorkoutByDate(state.selectedDate);
+    const metric = getMetricByDate(state.selectedDate);
+    const draft = getEditorDraft(state.selectedDate);
+    const trainingDraft = draft?.training || {};
+    const statusDraft = draft?.status || {};
+    const recommendedType = getDisplayRecommendation(state.selectedDate).type;
+    const type = TYPE_META[draftValue(trainingDraft, "type", record ? record.type : recommendedType)] ? draftValue(trainingDraft, "type", record ? record.type : recommendedType) : recommendedType;
+    const status = getStatusForType(type, draftValue(trainingDraft, "status", record ? record.status : "completed"));
+    const trainingDate = draftValue(trainingDraft, "date", state.selectedDate);
+    const durationMin = draftValue(trainingDraft, "durationMin", record && record.durationSec ? Math.round(record.durationSec / 60) : "");
+    const distanceKm = draftValue(trainingDraft, "distanceKm", record && record.distanceKm ? record.distanceKm : "");
+    const avgHeartRate = draftValue(trainingDraft, "avgHeartRate", record && record.avgHeartRate ? record.avgHeartRate : "");
+    const trainingNotes = draftValue(trainingDraft, "trainingNotes", record ? record.notes : "");
+    const pain = metric ? metric.pain : record ? record.pain : { calf: 0, back: 0, wrist: 0, outerThigh: 0 };
+    const fatigue = metric ? metric.fatigue : record ? record.fatigue : "normal";
+    const weightKg = draftValue(statusDraft, "weightKg", metric && metric.weightKg !== null ? metric.weightKg : "");
+    const waistCm = draftValue(statusDraft, "waistCm", metric && metric.waistCm !== null ? metric.waistCm : "");
+    const bodyFatPct = draftValue(statusDraft, "bodyFatPct", metric && metric.bodyFatPct !== null ? metric.bodyFatPct : "");
+    const muscleKg = draftValue(statusDraft, "muscleKg", metric && metric.muscleKg !== null ? metric.muscleKg : "");
+    const sleepQuality = draftValue(statusDraft, "sleepLevel", metric ? metric.sleepQuality : "normal");
+    const energy = draftValue(statusDraft, "energy", metric ? metric.energy : 3);
+    const fatigueLevel = draftValue(statusDraft, "fatigueLevel", fatigue);
+    const painCalf = draftValue(statusDraft, "painCalf", pain.calf);
+    const painBack = draftValue(statusDraft, "painBack", pain.back);
+    const painWrist = draftValue(statusDraft, "painWrist", pain.wrist);
+    const painOuterThigh = draftValue(statusDraft, "painOuterThigh", pain.outerThigh);
+    const statusNotes = draftValue(statusDraft, "statusNotes", metric ? metric.notes : "");
+    const hasRecord = Boolean(record);
+
+    return `
+      <form class="editor-form" id="training-form">
+        ${formSection("训练记录", "实际做了什么，只填已经发生的训练数据。", `
+          <div class="form-grid">
+            ${field("日期", `<input name="date" type="date" value="${escapeHtml(trainingDate)}">`)}
+            ${field("训练类型", renderSelect("type", TYPE_META, type))}
+            ${field("完成状态", renderSelect("status", getStatusOptionsForType(type), status))}
+            ${field("时长（分钟）", `<input name="durationMin" type="number" min="0" step="1" value="${escapeHtml(durationMin)}">`)}
+            ${field("距离（公里）", `<input name="distanceKm" type="number" min="0" step="0.01" value="${escapeHtml(distanceKm)}">`)}
+            ${field("平均心率", `<input name="avgHeartRate" type="number" min="0" step="1" value="${escapeHtml(avgHeartRate)}">`)}
+          </div>
+        `)}
+        ${formSection("训练备注", "", `
+          ${field("备注", `<textarea name="trainingNotes">${escapeHtml(trainingNotes)}</textarea>`, true)}
+        `)}
+        <div class="button-row form-actions">
+          <button type="submit" class="primary">保存训练</button>
+          ${hasRecord ? `<button type="button" class="danger" data-action="delete-date">删除当天</button>` : ""}
+        </div>
+      </form>
+      <form class="editor-form" id="status-form">
+        <input name="date" type="hidden" value="${state.selectedDate}">
+        ${formSection("状态记录", "", `
+          <div class="status-editor">
+            <div class="status-primary-grid">
+            ${field("体重（kg）", `<input name="weightKg" type="number" min="0" step="0.1" value="${escapeHtml(weightKg)}">`)}
+            ${field("腰围（cm）", `<input name="waistCm" type="number" min="0" step="0.1" value="${escapeHtml(waistCm)}">`)}
+            ${field("体脂率（%）", `<input name="bodyFatPct" type="number" min="0" max="80" step="0.1" value="${escapeHtml(bodyFatPct)}">`)}
+            ${field("肌肉量（kg）", `<input name="muscleKg" type="number" min="0" step="0.1" value="${escapeHtml(muscleKg)}">`)}
+              ${sleepRangeField(sleepQuality)}
+              ${rangeField("今日精力", "energy", energy, 1, 5, `${energy}/5`, "低", "高")}
+              ${fatigueRangeField(fatigueLevel)}
+            </div>
+            <div class="status-pain-grid">
+              ${painField("小腿", "painCalf", painCalf)}
+              ${painField("腰背", "painBack", painBack)}
+              ${painField("手腕", "painWrist", painWrist)}
+              ${painField("大腿外侧", "painOuterThigh", painOuterThigh)}
+            </div>
+          </div>
+        `)}
+        ${formSection("状态备注", "", `
+          ${field("备注", `<textarea name="statusNotes">${escapeHtml(statusNotes)}</textarea>`, true)}
+        `)}
+        <div class="button-row form-actions">
+          <button type="submit" class="primary">保存状态</button>
+        </div>
+      </form>
+    `;
+  }
+
+  function formSection(title, description, body) {
+    return `
+      <section class="form-section">
+        <div class="form-section-head">
+          <h3>${escapeHtml(title)}</h3>
+          ${description ? `<p>${escapeHtml(description)}</p>` : ""}
+        </div>
+        ${body}
+      </section>
+    `;
+  }
+
+  function field(label, input, full) {
+    return `
+      <div class="form-field ${full ? "full" : ""}">
+        <label>${escapeHtml(label)}</label>
+        ${input}
+      </div>
+    `;
+  }
+
+  function rangeField(label, name, value, min, max, valueText, lowLabel, highLabel, kind = name, wide = false) {
+    const current = clamp(Math.round(toNullableNumber(value) || min), min, max);
+    return `
+      <div class="range-field range-${kind} tone-${rangeTone(kind, current)} ${wide ? "range-wide" : ""}" style="--range-fill: ${rangeFill(current, min, max)}%;">
+        <div class="range-head">
+          <label>${escapeHtml(label)}</label>
+          <span class="range-value" data-range-output>${escapeHtml(valueText)}</span>
+        </div>
+        <input class="range-input" name="${name}" type="range" min="${min}" max="${max}" step="1" value="${current}" data-range-input data-range-kind="${kind}">
+        <div class="range-scale"><span>${escapeHtml(lowLabel)}</span><span>${escapeHtml(highLabel)}</span></div>
+      </div>
+    `;
+  }
+
+  function sleepRangeField(level) {
+    const current = /^\d+$/.test(String(level)) ? clamp(Math.round(Number(level)), 1, SLEEP_ORDER.length) : sleepRangeValue(SLEEP_META[level] ? level : "normal");
+    const currentLevel = sleepFromRange(current);
+    return rangeField("昨晚睡眠", "sleepLevel", current, 1, SLEEP_ORDER.length, SLEEP_META[currentLevel], SLEEP_META.poor, SLEEP_META.good, "sleep");
+  }
+
+  function fatigueRangeField(level) {
+    const current = /^\d+$/.test(String(level)) ? clamp(Math.round(Number(level)), 1, FATIGUE_SLIDER_ORDER.length) : fatigueRangeValue(FATIGUE_META[level] ? level : "normal");
+    const currentLevel = fatigueFromRange(current);
+    return rangeField("当前疲劳", "fatigueLevel", current, 1, FATIGUE_SLIDER_ORDER.length, FATIGUE_META[currentLevel], FATIGUE_META.severe, FATIGUE_META.low, "fatigue", true);
+  }
+
+  function painField(label, name, value) {
+    const current = Math.min(3, clampPain(value));
+    return `
+      <div class="pain-field">
+        <label>${escapeHtml(label)}</label>
+        <input type="hidden" name="${name}" value="${current}" data-pain-input="${name}">
+        <div class="segmented-control" role="group" aria-label="${escapeHtml(label)}不适程度">
+          ${PAIN_LEVELS.map((level) => `
+            <button type="button" class="segment-button ${current === level.value ? "active" : ""}" data-pain-option="${name}" data-value="${level.value}">
+              ${escapeHtml(level.label)}
+            </button>
+          `).join("")}
+        </div>
+      </div>
+    `;
+  }
+
+  function renderSelect(name, meta, selected) {
+    return `
+      <select name="${name}">
+        ${Object.entries(meta).map(([value, option]) => {
+          const label = typeof option === "string" ? option : option.label;
+          return `<option value="${value}" ${selected === value ? "selected" : ""}>${escapeHtml(label)}</option>`;
+        }).join("")}
+      </select>
+    `;
+  }
+
+  function getStatusOptionsForType(type) {
+    return STATUS_OPTIONS_BY_TYPE[type] || STATUS_OPTIONS_BY_TYPE.easyWalk;
+  }
+
+  function getStatusForType(type, status) {
+    const options = getStatusOptionsForType(type);
+    if (Object.prototype.hasOwnProperty.call(options, status)) return status;
+    if (type === "rest") return "skipped";
+    if (type === "recovery" && status === "short") return "completed";
+    return "completed";
+  }
+
+  function getStatusLabel(status, type) {
+    return getStatusOptionsForType(type)[status] || STATUS_META[status] || String(status || "");
+  }
+
+  function fatigueRangeValue(level) {
+    return Math.max(1, FATIGUE_SLIDER_ORDER.indexOf(level) + 1);
+  }
+
+  function fatigueFromRange(value) {
+    const index = clamp(Math.round(toNullableNumber(value) || 3), 1, FATIGUE_SLIDER_ORDER.length) - 1;
+    return FATIGUE_SLIDER_ORDER[index] || "normal";
+  }
+
+  function sleepRangeValue(level) {
+    return Math.max(1, SLEEP_ORDER.indexOf(level) + 1);
+  }
+
+  function sleepFromRange(value) {
+    const index = clamp(Math.round(toNullableNumber(value) || 2), 1, SLEEP_ORDER.length) - 1;
+    return SLEEP_ORDER[index] || "normal";
+  }
+
+  function rangeFill(value, min, max) {
+    if (max <= min) return 100;
+    return Math.round(((value - min) / (max - min)) * 100);
+  }
+
+  function rangeTone(kind, value) {
+    const number = Math.round(toNullableNumber(value) || 0);
+    if (kind === "fatigue") {
+      if (number <= 1) return "risk";
+      if (number === 2) return "warning";
+      if (number === 3) return "steady";
+      return "good";
+    }
+    if (kind === "sleep") {
+      if (number <= 1) return "risk";
+      if (number === 2) return "steady";
+      return "good";
+    }
+    if (kind === "energy") {
+      if (number <= 2) return "risk";
+      if (number === 3) return "steady";
+      return "good";
+    }
+    return "steady";
+  }
+
+  function rangeDisplayText(kind, value) {
+    if (kind === "fatigue") return FATIGUE_META[fatigueFromRange(value)];
+    if (kind === "sleep") return SLEEP_META[sleepFromRange(value)];
+    return `${value}/5`;
+  }
+
+  function updateStatusOptions(select, type, currentStatus, previousType) {
+    const nextStatus = previousType === "rest" && type !== "rest" ? "completed" : currentStatus;
+    const status = getStatusForType(type, nextStatus);
+    select.innerHTML = Object.entries(getStatusOptionsForType(type)).map(([value, label]) => {
+      return `<option value="${value}" ${status === value ? "selected" : ""}>${escapeHtml(label)}</option>`;
+    }).join("");
+    select.value = status;
+    select.dataset.statusType = type;
+  }
+
+  function buildMonthCalendarEntries(year, month) {
+    const entries = new Map();
+    const daysInMonth = new Date(year, month, 0).getDate();
+    const today = todayISO();
+    const monthStart = `${year}-${pad(month)}-01`;
+    const monthEnd = `${year}-${pad(month)}-${pad(daysInMonth)}`;
+    const virtualWorkouts = state.workouts.map((item) => ({ ...item }));
+
+    for (let day = 1; day <= daysInMonth; day += 1) {
+      const date = `${year}-${pad(month)}-${pad(day)}`;
+      const record = getWorkoutByDate(date);
+      if (record) {
+        entries.set(date, calendarEntryFromRecord(record));
+      }
+    }
+
+    if (monthEnd >= today) {
+      const cursor = parseIsoDate(today);
+      const end = parseIsoDate(monthEnd);
+      while (cursor <= end) {
+        const date = dateToISO(cursor);
+        const record = getWorkoutByDate(date);
+        if (!record) {
+          const recommendation = getRecommendation(date, virtualWorkouts);
+          if (date >= monthStart) {
+            const kind = date === today ? "suggestion" : "forecast";
+            entries.set(date, calendarEntryFromRecommendation(date, recommendation, kind));
+          }
+          virtualWorkouts.push(makeVirtualWorkout(date, recommendation));
+        }
+        cursor.setDate(cursor.getDate() + 1);
+      }
+    }
+
+    return entries;
+  }
+
+  function getDisplayRecommendation(date) {
+    return date > todayISO() ? getRollingRecommendation(date) : getRecommendation(date);
+  }
+
+  function getRollingRecommendation(date) {
+    const today = todayISO();
+    const virtualWorkouts = state.workouts.map((item) => ({ ...item }));
+    const cursor = parseIsoDate(today);
+    const target = parseIsoDate(date);
+    let recommendation = getRecommendation(date, virtualWorkouts);
+
+    while (cursor <= target) {
+      const current = dateToISO(cursor);
+      const record = getWorkoutByDate(current);
+      if (!record) {
+        const nextRecommendation = getRecommendation(current, virtualWorkouts);
+        if (current === date) return nextRecommendation;
+        virtualWorkouts.push(makeVirtualWorkout(current, nextRecommendation));
+      }
+      cursor.setDate(cursor.getDate() + 1);
+    }
+
+    return recommendation;
+  }
+
+  function calendarEntryFromRecord(record) {
+    const meta = TYPE_META[record.type];
+    const done = isCompletedRecord(record);
+    const statusLabel = getStatusLabel(record.status, record.type);
+    return {
+      kind: "actual",
+      type: record.type,
+      icon: meta.icon,
+      marker: statusLabel,
+      text: formatCalendarRecord(record),
+      className: meta.className,
+      statusClass: done ? "status-done" : `status-${record.status}`
+    };
+  }
+
+  function calendarEntryFromRecommendation(date, recommendation, kind) {
+    const meta = TYPE_META[recommendation.type];
+    return {
+      kind,
+      type: recommendation.type,
+      icon: meta.icon,
+      marker: kind === "suggestion" ? "建议" : "预测",
+      text: meta.label,
+      className: meta.className
+    };
+  }
+
+  function makeVirtualWorkout(date, recommendation) {
+    return {
+      id: `forecast-${date}`,
+      date,
+      type: recommendation.type,
+      status: recommendation.type === "rest" ? "skipped" : "completed",
+      source: "forecast",
+      durationSec: recommendation.minutes * 60,
+      fatigue: "normal",
+      pain: { calf: 0, back: 0, wrist: 0, outerThigh: 0 },
+      notes: ""
+    };
+  }
+
+  function renderCalendar() {
+    const [year, month] = state.visibleMonth.split("-").map(Number);
+    const first = new Date(year, month - 1, 1);
+    const daysInMonth = new Date(year, month, 0).getDate();
+    const offset = (first.getDay() + 6) % 7;
+    const weekCount = Math.max(5, Math.ceil((offset + daysInMonth) / 7));
+    const entries = buildMonthCalendarEntries(year, month);
+    const cells = [];
+
+    for (let i = 0; i < offset; i += 1) {
+      cells.push(`<button type="button" class="day-cell empty" aria-hidden="true"></button>`);
+    }
+
+    for (let day = 1; day <= daysInMonth; day += 1) {
+      const date = `${year}-${pad(month)}-${pad(day)}`;
+      const entry = entries.get(date);
+      const classes = ["day-cell"];
+      if (entry) classes.push(entry.className, `calendar-${entry.kind}`, entry.statusClass || "");
+      if (date === todayISO()) classes.push("today");
+      if (date === state.selectedDate) classes.push("selected");
+      const showIcon = entry && entry.kind === "actual";
+      cells.push(`
+        <button type="button" class="${classes.join(" ")}" data-date="${date}">
+          <span class="day-head">
+            <span class="day-date">
+              <span class="day-number">${day}</span>
+              ${date === todayISO() ? `<span class="today-badge">今天</span>` : ""}
+            </span>
+            ${entry ? `<span class="day-marker marker-${entry.kind}">${escapeHtml(entry.marker)}</span>` : ""}
+          </span>
+          ${entry ? `
+            <span class="day-content ${showIcon ? "" : "text-only"}">
+              ${showIcon ? renderTypeIcon(entry.type, "day-type-icon") : ""}
+              <span class="day-kind">${escapeHtml(entry.text)}</span>
+            </span>
+          ` : ""}
+        </button>
+      `);
+    }
+
+    const trailingDays = weekCount * 7 - offset - daysInMonth;
+    for (let i = 0; i < trailingDays; i += 1) {
+      cells.push(`<button type="button" class="day-cell empty" aria-hidden="true"></button>`);
+    }
+
+    return `
+      <div class="calendar-board">
+        <div class="calendar-tools">
+          <div class="month-switcher">
+            <button type="button" class="subtle" data-action="month-prev" aria-label="上个月">‹</button>
+            <div class="calendar-title">${year}-${pad(month)}</div>
+            <button type="button" class="subtle" data-action="month-next" aria-label="下个月">›</button>
+          </div>
+          <div class="calendar-legend">
+            <span><i class="legend-dot legend-actual"></i>记录</span>
+            <span><i class="legend-dot legend-suggestion"></i>今日建议</span>
+            <span><i class="legend-dot legend-forecast"></i>未来预测</span>
+          </div>
+        </div>
+        <div class="calendar-grid weeks-${weekCount}">
+          ${["一", "二", "三", "四", "五", "六", "日"].map((day) => `<div class="weekday">${day}</div>`).join("")}
+          ${cells.join("")}
+        </div>
+      </div>
+    `;
+  }
+
+  function renderSelectedSummary() {
+    const record = getWorkoutByDate(state.selectedDate);
+    const metric = getMetricByDate(state.selectedDate);
+    const painSummary = metric ? formatPainSummary(metric.pain) : "";
+    const measureSummary = metric ? formatBodyMeasureSummary(metric) : "";
+    if (!record && !metric) {
+      if (state.selectedDate >= todayISO()) {
+        return renderAdviceCard(state.selectedDate, state.selectedDate === todayISO() ? "suggestion" : "forecast");
+      }
+      return `<div class="empty-state">这一天还没有记录。</div>`;
+    }
+    return `
+      <div class="record-list">
+        ${record ? renderRecordCard(record) : ""}
+        ${metric ? `
+          <div class="record-card">
+            <div class="record-top">
+              <h3>状态记录</h3>
+              <span class="tag">${escapeHtml(formatMetricTag(metric))}</span>
+            </div>
+            <p>疲劳 ${FATIGUE_META[metric.fatigue]}，昨晚睡眠 ${SLEEP_META[metric.sleepQuality]}，今日精力 ${metric.energy}/5。</p>
+            ${measureSummary ? `<p>${escapeHtml(measureSummary)}</p>` : ""}
+            ${painSummary ? `<p>不适：${escapeHtml(painSummary)}。</p>` : ""}
+            ${metric.notes ? `<p>${escapeHtml(metric.notes)}</p>` : ""}
+          </div>
+        ` : ""}
+      </div>
+    `;
+  }
+
+  function renderDataPanel() {
+    const snapshotSize = JSON.stringify({
+      workouts: state.workouts,
+      bodyMetrics: state.bodyMetrics,
+      records: state.records
+    }).length;
+    return `
+      <div class="data-grid">
+        <div class="metric"><strong>${state.workouts.length}</strong><span>训练记录</span></div>
+        <div class="metric"><strong>${state.bodyMetrics.length}</strong><span>身体记录</span></div>
+        <div class="metric"><strong>${Math.ceil(snapshotSize / 1024)}</strong><span>KB 本地数据</span></div>
+      </div>
+      <div class="button-row" style="margin-top: 14px;">
+        <button type="button" class="primary" data-action="export">导出 JSON</button>
+        <label class="file-button">
+          导入 JSON
+          <input type="file" accept="application/json,.json" data-action="import">
+        </label>
+        <button type="button" class="danger" data-action="restore-seed">恢复种子记录</button>
+      </div>
+    `;
+  }
+
+  function renderRecordList(records) {
+    if (!records.length) {
+      return `<div class="empty-state">暂无记录。</div>`;
+    }
+    return `<div class="record-list">${records.map(renderRecordCard).join("")}</div>`;
+  }
+
+  function renderRecordCard(record) {
+    const meta = TYPE_META[record.type];
+    const details = [
+      record.durationSec ? formatDuration(record.durationSec) : "",
+      record.distanceKm ? `${formatNumber(record.distanceKm, 2)} km` : "",
+      record.avgHeartRate ? `均心 ${record.avgHeartRate}` : "",
+      getPace(record) ? `配速 ${getPace(record)}` : ""
+    ].filter(Boolean).join(" · ");
+
+    return `
+      <article class="record-card">
+        <div class="record-top">
+          <h3>${renderTypeIcon(record.type, "record-type-icon")}${record.date} ${escapeHtml(meta.label)}</h3>
+          <span class="tag">${escapeHtml(getStatusLabel(record.status, record.type))}</span>
+        </div>
+        <p>${escapeHtml(details || "无运动数据")}</p>
+        ${record.notes ? `<p>${escapeHtml(record.notes)}</p>` : ""}
+      </article>
+    `;
+  }
+
+  function formatPainSummary(pain) {
+    const labels = {
+      calf: "小腿",
+      back: "腰背",
+      wrist: "手腕",
+      outerThigh: "大腿外侧"
+    };
+    return Object.entries(labels).map(([key, label]) => {
+      const level = clampPain(pain && pain[key]);
+      if (!level) return "";
+      const meta = PAIN_LEVELS.find((item) => item.value === level);
+      return `${label}${meta ? meta.label : level}`;
+    }).filter(Boolean).join("、");
+  }
+
+  function formatMetricTag(metric) {
+    if (metric.weightKg !== null && metric.weightKg !== undefined) return `${formatNumber(metric.weightKg, 1)} kg`;
+    if (metric.waistCm !== null && metric.waistCm !== undefined) return `${formatNumber(metric.waistCm, 1)} cm`;
+    if (metric.bodyFatPct !== null && metric.bodyFatPct !== undefined) return `${formatNumber(metric.bodyFatPct, 1)}%`;
+    if (metric.muscleKg !== null && metric.muscleKg !== undefined) return `${formatNumber(metric.muscleKg, 1)} kg`;
+    return FATIGUE_META[metric.fatigue];
+  }
+
+  function formatBodyMeasureSummary(metric) {
+    return [
+      metric.weightKg !== null && metric.weightKg !== undefined ? `体重 ${formatNumber(metric.weightKg, 1)} kg` : "",
+      metric.waistCm !== null && metric.waistCm !== undefined ? `腰围 ${formatNumber(metric.waistCm, 1)} cm` : "",
+      metric.bodyFatPct !== null && metric.bodyFatPct !== undefined ? `体脂率 ${formatNumber(metric.bodyFatPct, 1)}%` : "",
+      metric.muscleKg !== null && metric.muscleKg !== undefined ? `肌肉量 ${formatNumber(metric.muscleKg, 1)} kg` : ""
+    ].filter(Boolean).join("，");
+  }
+
+  function formatCalendarRecord(record) {
+    const meta = TYPE_META[record.type];
+    if (record.status === "skipped") return meta.label;
+    if (record.status === "stretchOnly") return "只拉伸";
+    if (record.distanceKm) return `${meta.label} ${formatNumber(record.distanceKm, 1)}km`;
+    if (record.durationSec) return `${meta.label} ${Math.round(record.durationSec / 60)}分`;
+    return meta.label;
+  }
+
+  function isCompletedRecord(record) {
+    return record.type === "rest" || record.status === "completed" || record.status === "short" || record.status === "stretchOnly";
+  }
+
+  function bindEvents() {
+    app.querySelectorAll("[data-tab]").forEach((button) => {
+      button.addEventListener("click", () => {
+        state.activeTab = button.dataset.tab;
+        state.detailOpen = false;
+        state.editMode = false;
+        clearEditorDrafts();
+        state.message = "";
+        render();
+      });
+    });
+
+    app.querySelectorAll("[data-action='export']").forEach((button) => {
+      button.addEventListener("click", exportJson);
+    });
+
+    app.querySelectorAll("[data-action='import']").forEach((input) => {
+      input.addEventListener("change", importJson);
+    });
+
+    app.querySelectorAll("[data-date]").forEach((button) => {
+      button.addEventListener("click", () => {
+        state.selectedDate = button.dataset.date;
+        state.visibleMonth = state.selectedDate.slice(0, 7);
+        state.detailOpen = true;
+        state.editMode = false;
+        clearEditorDrafts();
+        render();
+      });
+    });
+
+    const calendarArea = app.querySelector("[data-calendar-area]");
+    if (calendarArea) {
+      calendarArea.addEventListener("click", (event) => {
+        if (!state.detailOpen) return;
+        if (event.target.closest("[data-date]")) return;
+        state.detailOpen = false;
+        state.editMode = false;
+        clearEditorDrafts();
+        render();
+      });
+    }
+
+    app.querySelectorAll("[data-pain-option]").forEach((button) => {
+      button.addEventListener("click", () => {
+        const name = button.dataset.painOption;
+        const input = app.querySelector(`[data-pain-input="${name}"]`);
+        if (input) input.value = button.dataset.value;
+        app.querySelectorAll(`[data-pain-option="${name}"]`).forEach((option) => {
+          option.classList.toggle("active", option === button);
+        });
+      });
+    });
+
+    app.querySelectorAll("[data-range-input]").forEach((input) => {
+      input.addEventListener("input", () => updateRangeOutput(input));
+    });
+
+    const trainingForm = app.querySelector("#training-form");
+    if (trainingForm) {
+      trainingForm.addEventListener("submit", handleTrainingSubmit);
+      const typeSelect = trainingForm.querySelector('select[name="type"]');
+      const statusSelect = trainingForm.querySelector('select[name="status"]');
+      if (typeSelect && statusSelect) {
+        statusSelect.dataset.statusType = typeSelect.value;
+        typeSelect.addEventListener("change", () => {
+          updateStatusOptions(statusSelect, typeSelect.value, statusSelect.value, statusSelect.dataset.statusType);
+        });
+      }
+    }
+
+    const statusForm = app.querySelector("#status-form");
+    if (statusForm) {
+      statusForm.addEventListener("submit", handleStatusSubmit);
+    }
+
+    bindAction("month-prev", () => shiftMonth(-1));
+    bindAction("month-next", () => shiftMonth(1));
+    bindAction("close-detail", closeDetail);
+    bindAction("enable-edit", enableSelectedEdit);
+    bindAction("cancel-edit", cancelSelectedEdit);
+    bindAction("delete-date", deleteSelectedDate);
+    bindAction("restore-seed", restoreSeed);
+  }
+
+  function bindAction(action, handler) {
+    app.querySelectorAll(`[data-action="${action}"]`).forEach((element) => {
+      element.addEventListener("click", () => handler(element));
+    });
+  }
+
+  function captureEditorDrafts() {
+    const trainingForm = app.querySelector("#training-form");
+    const statusForm = app.querySelector("#status-form");
+    if (!trainingForm && !statusForm) {
+      clearEditorDrafts();
+      return;
+    }
+    state.editorDrafts = {
+      date: state.selectedDate,
+      training: trainingForm ? Object.fromEntries(new FormData(trainingForm).entries()) : {},
+      status: statusForm ? Object.fromEntries(new FormData(statusForm).entries()) : {}
+    };
+  }
+
+  function getEditorDraft(date) {
+    return state.editorDrafts && state.editorDrafts.date === date ? state.editorDrafts : null;
+  }
+
+  function clearEditorDrafts() {
+    state.editorDrafts = null;
+  }
+
+  function draftValue(draft, key, fallback) {
+    return draft && Object.prototype.hasOwnProperty.call(draft, key) ? draft[key] : fallback;
+  }
+
+  function updateRangeOutput(input) {
+    const field = input.closest(".range-field");
+    const output = field?.querySelector("[data-range-output]");
+    if (!output) return;
+    const kind = input.dataset.rangeKind;
+    output.textContent = rangeDisplayText(kind, input.value);
+    field.style.setProperty("--range-fill", `${rangeFill(Number(input.value), Number(input.min), Number(input.max))}%`);
+    field.classList.remove("tone-good", "tone-steady", "tone-warning", "tone-risk");
+    field.classList.add(`tone-${rangeTone(kind, input.value)}`);
+  }
+
+  async function handleTrainingSubmit(event) {
+    event.preventDefault();
+    captureEditorDrafts();
+    const data = new FormData(event.currentTarget);
+    const date = String(data.get("date"));
+    if (!isIsoDate(date)) return;
+    const existing = getWorkoutByDate(date);
+    const now = new Date().toISOString();
+    const durationMin = toNullableNumber(data.get("durationMin"));
+    const workoutType = TYPE_META[String(data.get("type"))] ? String(data.get("type")) : "easyWalk";
+    const workoutStatus = getStatusForType(workoutType, String(data.get("status")));
+    const isRest = workoutType === "rest";
+    const workout = normalizeWorkout({
+      id: existing ? existing.id : makeId(),
+      date,
+      type: workoutType,
+      status: workoutStatus,
+      source: existing ? existing.source : "manual",
+      durationSec: isRest || durationMin === null ? null : Math.round(durationMin * 60),
+      distanceKm: isRest ? null : toNullableNumber(data.get("distanceKm")),
+      avgHeartRate: isRest ? null : toNullableNumber(data.get("avgHeartRate")),
+      fatigue: existing ? existing.fatigue : "normal",
+      pain: existing ? existing.pain : { calf: 0, back: 0, wrist: 0, outerThigh: 0 },
+      notes: String(data.get("trainingNotes") || "").trim(),
+      createdAt: existing ? existing.createdAt : now,
+      updatedAt: now
+    });
+
+    upsertWorkout(workout);
+    state.selectedDate = date;
+    state.visibleMonth = date.slice(0, 7);
+    state.detailOpen = true;
+    state.editMode = true;
+    await saveSnapshot(`已保存训练 ${date}`);
+    render();
+  }
+
+  async function handleStatusSubmit(event) {
+    event.preventDefault();
+    captureEditorDrafts();
+    const data = new FormData(event.currentTarget);
+    const date = String(data.get("date"));
+    if (!isIsoDate(date)) return;
+    const existing = getMetricByDate(date);
+    const now = new Date().toISOString();
+    const weightKg = toNullableNumber(data.get("weightKg"));
+    const waistCm = toNullableNumber(data.get("waistCm"));
+    const bodyFatPct = toNullableNumber(data.get("bodyFatPct"));
+    const muscleKg = toNullableNumber(data.get("muscleKg"));
+    const energy = toNullableNumber(data.get("energy"));
+    const sleepQuality = sleepFromRange(data.get("sleepLevel"));
+    const metric = normalizeBodyMetrics([{
+      id: existing ? existing.id : makeId(),
+      date,
+      weightKg,
+      waistCm,
+      bodyFatPct,
+      muscleKg,
+      sleepQuality: SLEEP_META[sleepQuality] ? sleepQuality : "normal",
+      energy: clamp(energy || 3, 1, 5),
+      fatigue: fatigueFromRange(data.get("fatigueLevel")),
+      pain: {
+        calf: data.get("painCalf"),
+        back: data.get("painBack"),
+        wrist: data.get("painWrist"),
+        outerThigh: data.get("painOuterThigh")
+      },
+      notes: String(data.get("statusNotes") || "").trim(),
+      createdAt: existing ? existing.createdAt : now,
+      updatedAt: now
+    }])[0];
+    if (!metric) return;
+    upsertMetric(metric);
+    state.selectedDate = date;
+    state.visibleMonth = date.slice(0, 7);
+    state.detailOpen = true;
+    state.editMode = true;
+    await saveSnapshot(`已保存状态 ${date}`);
+    render();
+  }
+
+  function upsertMetric(metric) {
+    state.bodyMetrics = state.bodyMetrics.filter((item) => item.date !== metric.date).concat(metric).sort((a, b) => a.date.localeCompare(b.date));
+  }
+
+  async function deleteSelectedDate() {
+    if (!window.confirm(`删除 ${state.selectedDate} 的训练和身体记录？`)) return;
+    state.workouts = state.workouts.filter((item) => item.date !== state.selectedDate);
+    state.bodyMetrics = state.bodyMetrics.filter((item) => item.date !== state.selectedDate);
+    removeSharedRecordsByDate(["training_logs", "body_metrics"], state.selectedDate);
+    state.editMode = false;
+    clearEditorDrafts();
+    await saveSnapshot(`已删除 ${state.selectedDate}`);
+    render();
+  }
+
+  async function restoreSeed() {
+    if (!window.confirm("恢复种子记录会替换当前本地数据。继续？")) return;
+    state.workouts = seedWorkouts();
+    state.bodyMetrics = [];
+    state.records = createEmptySharedRecords();
+    state.selectedDate = todayISO();
+    state.visibleMonth = state.selectedDate.slice(0, 7);
+    state.detailOpen = false;
+    state.editMode = false;
+    clearEditorDrafts();
+    await saveSnapshot("已恢复历史种子记录");
+    render();
+  }
+
+  function upsertWorkout(workout) {
+    state.workouts = state.workouts.filter((item) => item.date !== workout.date).concat(workout).sort((a, b) => a.date.localeCompare(b.date));
+  }
+
+  function shiftMonth(delta) {
+    const [year, month] = state.visibleMonth.split("-").map(Number);
+    const next = new Date(year, month - 1 + delta, 1);
+    state.visibleMonth = `${next.getFullYear()}-${pad(next.getMonth() + 1)}`;
+    render();
+  }
+
+  function closeDetail() {
+    state.detailOpen = false;
+    state.editMode = false;
+    clearEditorDrafts();
+    render();
+  }
+
+  function enableSelectedEdit() {
+    clearEditorDrafts();
+    state.editMode = true;
+    render();
+  }
+
+  function cancelSelectedEdit() {
+    state.editMode = false;
+    clearEditorDrafts();
+    render();
+  }
+
+  function exportJson() {
+    const payload = {
+      ...buildSnapshot(),
+      exportedAt: new Date().toISOString()
+    };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `training-assistant-v2-${todayISO()}.json`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+  }
+
+  function importJson(event) {
+    const file = event.target.files && event.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = async () => {
+      try {
+        const payload = JSON.parse(String(reader.result));
+        const hasLegacyPayload = Array.isArray(payload.workouts) || Array.isArray(payload.bodyMetrics);
+        const hasSharedPayload = hasSharedRecordPayload(payload);
+        if ((!hasLegacyPayload && !hasSharedPayload) || !window.confirm("导入会更新当前本地数据。继续？")) {
+          event.target.value = "";
+          return;
+        }
+        const snapshot = normalizeSnapshot(payload);
+        if (Array.isArray(payload.workouts)) {
+          state.workouts = snapshot.workouts;
+        } else if (snapshot.workouts.length) {
+          state.workouts = mergeWorkoutsByDate(state.workouts, snapshot.workouts);
+        }
+        if (Array.isArray(payload.bodyMetrics)) {
+          state.bodyMetrics = snapshot.bodyMetrics;
+        } else if (snapshot.bodyMetrics.length) {
+          state.bodyMetrics = mergeBodyMetricsByDate(state.bodyMetrics, snapshot.bodyMetrics);
+        }
+        state.records = hasSharedPayload ? mergeSharedRecords(state.records, snapshot.records) : snapshot.records;
+        await saveSnapshot("JSON 已导入");
+        render();
+      } catch (error) {
+        state.message = "JSON 导入失败";
+        render();
+      } finally {
+        event.target.value = "";
+      }
+    };
+    reader.readAsText(file);
+  }
+
+  function getRecommendation(date, sourceWorkouts = state.workouts) {
+    const last7 = getWindowWorkoutsFrom(sourceWorkouts, date, 7).filter(isCompletedRecord);
+    const recent = [...sourceWorkouts].filter((item) => item.date < date).sort((a, b) => b.date.localeCompare(a.date));
+    const yesterday = recent[0] || null;
+    const strengthCount = last7.filter((item) => item.type === "strength").length;
+    const aerobicCount = last7.filter((item) => ["easyWalk", "qualityWalk", "indoorCardio"].includes(item.type)).length;
+    const qualityCount = last7.filter((item) => item.type === "qualityWalk").length;
+    const recoveryCount = last7.filter((item) => ["recovery", "rest"].includes(item.type)).length;
+    const risk = getRecentRisk(date, sourceWorkouts);
+
+    if (risk.level === "high") {
+      return {
+        type: "recovery",
+        label: "降级优先",
+        title: "恢复或轻拉伸",
+        minutes: 12,
+        reasons: [
+          risk.reason,
+          "状态文件要求疼痛、疲劳或异常体感优先降级。",
+          "今天只保留低压力活动，不补课。"
+        ]
+      };
+    }
+
+    if (yesterday && ["qualityWalk", "strength"].includes(yesterday.type)) {
+      return {
+        type: "easyWalk",
+        label: "承接昨天",
+        title: "普通走或室内有氧",
+        minutes: 35,
+        reasons: [
+          `上一条记录是${TYPE_META[yesterday.type].label}，今天避免连续偏硬。`,
+          `近 7 天力量 ${strengthCount} 次，有氧 ${aerobicCount} 次。`,
+          "保持可交谈强度，完成比拉高强度更重要。"
+        ]
+      };
+    }
+
+    if (strengthCount < 2 && !risk.backOrWrist) {
+      return {
+        type: "strength",
+        label: "补足力量",
+        title: "短版力量训练",
+        minutes: 32,
+        reasons: [
+          `近 7 天力量 ${strengthCount} 次，目标约 2 次。`,
+          "避开手腕承重动作，保护腰背。",
+          "强度不按出汗判断，以动作稳定为准。"
+        ]
+      };
+    }
+
+    if (aerobicCount < 3) {
+      return {
+        type: "easyWalk",
+        label: "补足有氧",
+        title: "普通走",
+        minutes: 40,
+        reasons: [
+          `近 7 天有氧 ${aerobicCount} 次，目标约 3 次。`,
+          "不追求配速，保持轻松和稳定。",
+          "若小腿发紧，改为室内恢复。"
+        ]
+      };
+    }
+
+    if (qualityCount < 1 && aerobicCount >= 2 && !risk.calf) {
+      return {
+        type: "qualityWalk",
+        label: "可控提高",
+        title: "提高走",
+        minutes: 45,
+        reasons: [
+          "近 7 天还没有提高走，且基础有氧已有铺垫。",
+          "只做可控提高，不做冲刺。",
+          "小腿或腰背不适时立即降级。"
+        ]
+      };
+    }
+
+    return {
+      type: recoveryCount < 1 ? "recovery" : "easyWalk",
+      label: "维持节奏",
+      title: recoveryCount < 1 ? "恢复日" : "普通走",
+      minutes: recoveryCount < 1 ? 15 : 35,
+      reasons: [
+        `近 7 天力量 ${strengthCount} 次，有氧 ${aerobicCount} 次，提高走 ${qualityCount} 次。`,
+        "当前不需要补课，按身体状态维持节奏。",
+        "疲劳上来时改为恢复。"
+      ]
+    };
+  }
+
+  function getRecentRisk(date, sourceWorkouts = state.workouts) {
+    const recentWorkout = [...sourceWorkouts]
+      .filter((item) => item.date < date && item.source !== "forecast")
+      .sort((a, b) => b.date.localeCompare(a.date))[0] || null;
+    const recentMetric = [...state.bodyMetrics]
+      .filter((item) => item.date < date)
+      .sort((a, b) => b.date.localeCompare(a.date))[0] || null;
+    const recent = recentMetric && (!recentWorkout || recentMetric.date >= recentWorkout.date) ? recentMetric : recentWorkout;
+    if (!recent) return { level: "normal", calf: false, backOrWrist: false, reason: "" };
+    const sourceName = recent === recentMetric ? "最近状态" : "最近记录";
+    const pain = recent.pain || {};
+    const calf = pain.calf > 0;
+    const backOrWrist = pain.back > 0 || pain.wrist > 0;
+    if (recent.fatigue === "severe" || recent.fatigue === "high") {
+      return { level: "high", calf, backOrWrist, reason: `${sourceName}疲劳为${FATIGUE_META[recent.fatigue]}。` };
+    }
+    if (calf) {
+      return { level: "high", calf, backOrWrist, reason: `${sourceName}有小腿不适。` };
+    }
+    if (pain.back > 1 || pain.wrist > 1) {
+      return { level: "high", calf, backOrWrist, reason: `${sourceName}有腰背或手腕不适。` };
+    }
+    return { level: "normal", calf, backOrWrist, reason: "" };
+  }
+
+  function getWindowWorkouts(date, days) {
+    return getWindowWorkoutsFrom(state.workouts, date, days);
+  }
+
+  function getWindowWorkoutsFrom(sourceWorkouts, date, days) {
+    const end = parseIsoDate(date);
+    const start = new Date(end);
+    start.setDate(end.getDate() - days + 1);
+    return sourceWorkouts.filter((item) => {
+      const itemDate = parseIsoDate(item.date);
+      return itemDate >= start && itemDate <= end;
+    });
+  }
+
+  function getWorkoutByDate(date) {
+    return state.workouts.find((item) => item.date === date) || null;
+  }
+
+  function getMetricByDate(date) {
+    return state.bodyMetrics.find((item) => item.date === date) || null;
+  }
+
+  function recentWorkouts(limit) {
+    return [...state.workouts].sort((a, b) => b.date.localeCompare(a.date)).slice(0, limit);
+  }
+
+  function formatDuration(seconds) {
+    if (!seconds) return "";
+    const minutes = Math.floor(seconds / 60);
+    const remain = seconds % 60;
+    if (minutes >= 60) {
+      return `${Math.floor(minutes / 60)}:${pad(minutes % 60)}:${pad(remain)}`;
+    }
+    return `${minutes}:${pad(remain)}`;
+  }
+
+  function getPace(record) {
+    const pace = record.avgPaceSecPerKm || (record.durationSec && record.distanceKm ? Math.round(record.durationSec / record.distanceKm) : null);
+    if (!pace) return "";
+    return `${Math.floor(pace / 60)}'${pad(pace % 60)}"`;
+  }
+
+  function toSharedTrainingType(type) {
+    if (LEGACY_TO_SHARED_TYPE[type]) return LEGACY_TO_SHARED_TYPE[type];
+    if (SHARED_TO_LEGACY_TYPE[type]) return type;
+    return "easy_walk";
+  }
+
+  function toLegacyTrainingType(type) {
+    if (TYPE_META[type]) return type;
+    return SHARED_TO_LEGACY_TYPE[type] || "easyWalk";
+  }
+
+  function toSharedCompletionStatus(status, sharedType) {
+    if (sharedType === "rest" && status === "skipped") return "rested";
+    return LEGACY_TO_SHARED_STATUS[status] || status || "completed";
+  }
+
+  function toLegacyCompletionStatus(status, legacyType) {
+    const next = SHARED_TO_LEGACY_STATUS[status] || status || "completed";
+    return getStatusForType(legacyType, next);
+  }
+
+  function normalizeLegacyFatigue(value) {
+    if (FATIGUE_META[value]) return value;
+    return sharedFatigueToLegacy(value);
+  }
+
+  function normalizeSharedFatigue(value) {
+    if (FATIGUE_META[value]) return legacyFatigueToShared(value);
+    return clamp(Math.round(toNullableNumber(value) || 2), 1, 4);
+  }
+
+  function legacyFatigueToShared(value) {
+    return LEGACY_FATIGUE_TO_SHARED[value] || 2;
+  }
+
+  function sharedFatigueToLegacy(value) {
+    return SHARED_FATIGUE_TO_LEGACY[clamp(Math.round(toNullableNumber(value) || 2), 1, 4)] || "normal";
+  }
+
+  function getDeviceId() {
+    try {
+      const existing = window.localStorage.getItem(DEVICE_KEY);
+      if (existing) return existing;
+      const next = `shenke_${makeId()}`;
+      window.localStorage.setItem(DEVICE_KEY, next);
+      return next;
+    } catch (error) {
+      return "shenke_local";
+    }
+  }
+
+  function formatNumber(value, digits) {
+    if (value === null || value === undefined || Number.isNaN(Number(value))) return "";
+    return Number(value).toFixed(digits);
+  }
+
+  function formatShortDate(date) {
+    if (!isIsoDate(date)) return "";
+    return date.slice(5).replace("-", "/");
+  }
+
+  function todayISO() {
+    const now = new Date();
+    return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+  }
+
+  function dateToISO(date) {
+    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+  }
+
+  function parseIsoDate(date) {
+    const [year, month, day] = date.split("-").map(Number);
+    return new Date(year, month - 1, day);
+  }
+
+  function isIsoDate(value) {
+    return typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value);
+  }
+
+  function pad(value) {
+    return String(value).padStart(2, "0");
+  }
+
+  function toNullableNumber(value) {
+    if (value === "" || value === null || value === undefined) return null;
+    const number = Number(value);
+    return Number.isFinite(number) ? number : null;
+  }
+
+  function clampPain(value) {
+    return clamp(Math.round(toNullableNumber(value) || 0), 0, 5);
+  }
+
+  function clamp(value, min, max) {
+    return Math.min(max, Math.max(min, value));
+  }
+
+  function makeId() {
+    if (window.crypto && window.crypto.randomUUID) return window.crypto.randomUUID();
+    return `id-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  }
+
+  function escapeHtml(value) {
+    return String(value)
+      .replaceAll("&", "&amp;")
+      .replaceAll("<", "&lt;")
+      .replaceAll(">", "&gt;")
+      .replaceAll('"', "&quot;")
+      .replaceAll("'", "&#039;");
+  }
+})();

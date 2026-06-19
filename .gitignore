@@ -1,0 +1,17 @@
+.DS_Store
+Thumbs.db
+*.log
+.env
+.env.*
+*.local
+data/
+exports/
+screenshots/
+*.zip
+node_modules/
+dist/
+.vite/
+.agents/
+.codex/
+Example txt file.txt
+Another example txt file.txt
