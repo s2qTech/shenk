@@ -71,9 +71,9 @@
   };
 
   const APP_ICON_META = {
-    calendar: { label: "日历", asset: "file:///C:/Users/Qi/OneDrive/%E5%9B%BE%E7%89%87/sports/app/calendar%20%282%29.png" },
-    data: { label: "数据", asset: "file:///C:/Users/Qi/OneDrive/%E5%9B%BE%E7%89%87/sports/app/notebook.png" },
-    settings: { label: "设置", asset: "file:///C:/Users/Qi/OneDrive/%E5%9B%BE%E7%89%87/sports/app/setting%20%281%29.png" }
+    calendar: { label: "日历", asset: "assets/app/calendar.png" },
+    data: { label: "数据", asset: "assets/app/notebook.png" },
+    settings: { label: "设置", asset: "assets/app/setting.png" }
   };
 
   const BRAND_META = {

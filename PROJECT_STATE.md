@@ -75,7 +75,7 @@ Implemented now:
 
 - Responsive app shell with calm light UI.
 - Calendar-first layout with a left navigation rail and the calendar as the main workspace.
-- Left navigation is navigation-only, with calendar, data, and settings tabs using the user-provided app icons. The app tab icons are still referenced from the local OneDrive image paths; brand assets are copied into `brand-assets/`.
+- Left navigation is navigation-only, with calendar, data, and settings tabs using the user-provided app icons copied into `assets/app/`; brand assets are copied into `brand-assets/`.
 - Date details open in a right-side sliding drawer instead of permanently taking space from the calendar.
 - Dates default to view mode; today uses "编辑", past dates use "修正", and future dates show forecasts only.
 - Completed days no longer auto-open the editor; the form appears only after explicit edit/correction.
