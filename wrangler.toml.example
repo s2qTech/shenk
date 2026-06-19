@@ -1,0 +1,11 @@
+name = "shenke-cloud-db"
+main = "cloudflare/worker.js"
+compatibility_date = "2026-06-20"
+
+[vars]
+ALLOWED_ORIGINS = "https://s2qtech.github.io,http://localhost:5173,http://127.0.0.1:5173,null"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "shenke"
+database_id = "replace-with-cloudflare-d1-database-id"

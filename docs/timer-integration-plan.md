@@ -282,7 +282,7 @@ When timer is merged into `身刻`, both modules use the same IndexedDB database
 - Open timer with `routineId`, `date`, `dailyPlanItemId`.
 - Timer stores session and shows result JSON.
 
-### Step 6: Cloud Sync
+### Step 6: Cloud Database Access
 
 - Deploy D1 schema.
 - Add Worker API.

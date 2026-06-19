@@ -11,6 +11,7 @@ screenshots/
 node_modules/
 dist/
 .vite/
+wrangler.toml
 .agents/
 .codex/
 Example txt file.txt

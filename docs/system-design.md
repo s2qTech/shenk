@@ -7,7 +7,7 @@
 ```text
 Shared Web Frontend
   -> Local IndexedDB
-  -> Optional Cloud Sync
+  -> Shared Cloud Database
   -> Backend Function
   -> OpenAI API
   -> Weather API
@@ -280,6 +280,6 @@ AI 分析必须遵守：
 7. 实现体重和天气记录。
 8. 实现 JSON 导入导出。
 9. 实现建议引擎。
-10. 接入云同步。
+10. 接入云数据库。
 11. 接入 AI 截图识别。
 12. 实现周复盘。

@@ -6,6 +6,7 @@
   const SNAPSHOT_KEY = "snapshot";
   const FALLBACK_KEY = "training-assistant-v2:snapshot";
   const DEVICE_KEY = "training-assistant-v2:device-id";
+  const SYNC_CONFIG_KEY = "training-assistant-v2:sync-config";
   const SHARED_SCHEMA_VERSION = "2026-06-19-001";
   const SHARED_ENTITIES = [
     "plan_templates",
@@ -165,7 +166,13 @@
     editorDrafts: null,
     workouts: [],
     bodyMetrics: [],
-    records: createEmptySharedRecords()
+    records: createEmptySharedRecords(),
+    syncConfig: loadSyncConfig(),
+    syncStatus: {
+      busy: false,
+      lastResult: "",
+      lastError: ""
+    }
   };
 
   document.addEventListener("DOMContentLoaded", init);
@@ -504,15 +511,23 @@
 
   function syncSharedRecordsFromLegacy() {
     const records = normalizeSharedRecords(state.records);
+    const existingTrainingLogs = new Map(records.training_logs.map((item) => [item.id, item]));
+    const existingBodyMetrics = new Map(records.body_metrics.map((item) => [item.id, item]));
     records.training_logs = records.training_logs.filter((item) => item.data?.rawJson?.compatSource !== "workouts");
     records.body_metrics = records.body_metrics.filter((item) => item.data?.rawJson?.compatSource !== "bodyMetrics");
-    state.workouts.forEach((workout) => upsertSharedEnvelope(records, "training_logs", workoutToTrainingLogData(workout)));
-    state.bodyMetrics.forEach((metric) => upsertSharedEnvelope(records, "body_metrics", bodyMetricToSharedData(metric)));
+    state.workouts.forEach((workout) => {
+      const data = workoutToTrainingLogData(workout);
+      if (data) upsertSharedEnvelope(records, "training_logs", data, existingTrainingLogs.get(data.id));
+    });
+    state.bodyMetrics.forEach((metric) => {
+      const data = bodyMetricToSharedData(metric);
+      if (data) upsertSharedEnvelope(records, "body_metrics", data, existingBodyMetrics.get(data.id));
+    });
     state.records = records;
   }
 
-  function upsertSharedEnvelope(records, entity, data) {
-    const existing = records[entity].find((item) => item.id === data.id) || null;
+  function upsertSharedEnvelope(records, entity, data, existingOverride = null) {
+    const existing = existingOverride || records[entity].find((item) => item.id === data.id) || null;
     const envelope = makeSharedEnvelope(entity, data, existing);
     if (!envelope) return;
     records[entity] = records[entity].filter((item) => item.id !== envelope.id).concat(envelope).sort(compareSharedEnvelopes);
@@ -531,6 +546,7 @@
     if (!normalized) return null;
     const id = normalized.id || data.id || existing?.id || makeId();
     normalized.id = id;
+    const dataChanged = !existing || JSON.stringify(existing.data || {}) !== JSON.stringify(normalized);
     return {
       id,
       entity,
@@ -540,9 +556,9 @@
       createdAt: existing?.createdAt || normalized.createdAt || now,
       updatedAt: normalized.updatedAt || now,
       deletedAt: normalized.deletedAt || null,
-      syncState: existing?.syncState || "dirty",
+      syncState: dataChanged ? "dirty" : existing?.syncState || "dirty",
       lastSyncedAt: existing?.lastSyncedAt || null,
-      conflict: existing?.conflict || null
+      conflict: dataChanged ? null : existing?.conflict || null
     };
   }
 
@@ -900,6 +916,7 @@
         <section class="content-page settings-page">
           ${renderPageHead("设置")}
           <div class="data-grid-layout">
+            ${panel("云数据库", "Cloudflare Worker + D1，同一份云端数据，按角色读写", renderSyncPanel())}
             ${panel("本地数据", "导入、导出和种子记录", renderDataPanel())}
           </div>
         </section>
@@ -1662,6 +1679,42 @@
     return record.type === "rest" || record.status === "completed" || record.status === "short" || record.status === "stretchOnly";
   }
 
+  function renderSyncPanel() {
+    const config = state.syncConfig || {};
+    const dirtyCount = getDirtySharedRecords().length;
+    const totalCount = getAllSharedRecords().length;
+    const lastSyncAt = config.lastSyncAt ? formatLocalDateTime(config.lastSyncAt) : "未连接";
+    const apiBase = config.apiBase || "";
+    const token = config.token || "";
+    const status = state.syncStatus.busy ? "云端读写中..." : state.syncStatus.lastResult || "未连接";
+    const error = state.syncStatus.lastError;
+    return `
+      <form class="sync-form" id="sync-config-form">
+        <label>
+          <span>API 地址</span>
+          <input type="url" name="apiBase" placeholder="https://your-worker.workers.dev/api" value="${escapeHtml(apiBase)}">
+        </label>
+        <label>
+          <span>身刻访问密钥</span>
+          <input type="password" name="token" autocomplete="off" placeholder="Worker SHENK_TOKEN 或 ADMIN_TOKEN" value="${escapeHtml(token)}">
+        </label>
+        <div class="data-grid sync-metrics">
+          <div class="metric"><strong>${dirtyCount}</strong><span>待写入云端</span></div>
+          <div class="metric"><strong>${totalCount}</strong><span>共享记录</span></div>
+          <div class="metric"><strong>${escapeHtml(lastSyncAt)}</strong><span>最近云端读写</span></div>
+        </div>
+        <div class="button-row">
+          <button type="submit" class="primary">保存配置</button>
+          <button type="button" data-action="sync-health">测试连接</button>
+          <button type="button" data-action="sync-pull">读取云端</button>
+          <button type="button" data-action="sync-push">写入云端</button>
+          <button type="button" class="primary" data-action="sync-now">云端读写</button>
+        </div>
+        <p class="sync-status ${error ? "sync-error" : ""}">${escapeHtml(error || status)}</p>
+      </form>
+    `;
+  }
+
   function bindEvents() {
     app.querySelectorAll("[data-tab]").forEach((button) => {
       button.addEventListener("click", () => {
@@ -1680,6 +1733,27 @@
 
     app.querySelectorAll("[data-action='import']").forEach((input) => {
       input.addEventListener("change", importJson);
+    });
+
+    const syncForm = app.querySelector("#sync-config-form");
+    if (syncForm) {
+      syncForm.addEventListener("submit", handleSyncConfigSubmit);
+    }
+
+    app.querySelectorAll("[data-action='sync-health']").forEach((button) => {
+      button.addEventListener("click", testSyncConnection);
+    });
+
+    app.querySelectorAll("[data-action='sync-pull']").forEach((button) => {
+      button.addEventListener("click", pullCloudRecords);
+    });
+
+    app.querySelectorAll("[data-action='sync-push']").forEach((button) => {
+      button.addEventListener("click", pushDirtyRecords);
+    });
+
+    app.querySelectorAll("[data-action='sync-now']").forEach((button) => {
+      button.addEventListener("click", syncNow);
     });
 
     app.querySelectorAll("[data-date]").forEach((button) => {
@@ -1981,6 +2055,249 @@
       }
     };
     reader.readAsText(file);
+  }
+
+  function loadSyncConfig() {
+    try {
+      const raw = window.localStorage.getItem(SYNC_CONFIG_KEY);
+      const config = raw ? JSON.parse(raw) : {};
+      return {
+        apiBase: normalizeSyncApiBase(config.apiBase || ""),
+        token: config.token || "",
+        lastPullAt: config.lastPullAt || null,
+        lastPushAt: config.lastPushAt || null,
+        lastSyncAt: config.lastSyncAt || null
+      };
+    } catch (error) {
+      return { apiBase: "", token: "", lastPullAt: null, lastPushAt: null, lastSyncAt: null };
+    }
+  }
+
+  function saveSyncConfig(config) {
+    const next = {
+      ...state.syncConfig,
+      ...config,
+      apiBase: normalizeSyncApiBase(config.apiBase ?? state.syncConfig.apiBase)
+    };
+    state.syncConfig = next;
+    window.localStorage.setItem(SYNC_CONFIG_KEY, JSON.stringify(next));
+  }
+
+  function normalizeSyncApiBase(value) {
+    const next = String(value || "").trim().replace(/\/+$/, "");
+    if (!next) return "";
+    return next.endsWith("/api") ? next : `${next}/api`;
+  }
+
+  function getAllSharedRecords() {
+    return SHARED_ENTITIES.flatMap((entity) => Array.isArray(state.records[entity]) ? state.records[entity] : []);
+  }
+
+  function getDirtySharedRecords() {
+    return getAllSharedRecords().filter((item) => item && item.syncState !== "clean" && !item.conflict);
+  }
+
+  async function handleSyncConfigSubmit(event) {
+    event.preventDefault();
+    const data = new FormData(event.currentTarget);
+    saveSyncConfig({
+      apiBase: String(data.get("apiBase") || ""),
+      token: String(data.get("token") || "")
+    });
+    state.syncStatus.lastResult = "云数据库配置已保存";
+    state.syncStatus.lastError = "";
+    render();
+  }
+
+  async function testSyncConnection() {
+    await runSyncTask(async () => {
+      const result = await syncRequest("/health", { method: "GET", auth: false });
+      state.syncStatus.lastResult = result.ok ? `连接正常：${result.service || "shenke-cloud-db"}` : "连接返回异常";
+      state.syncStatus.lastError = "";
+    });
+  }
+
+  async function syncNow() {
+    await runSyncTask(async () => {
+      await doPullCloudRecords();
+      await doPushDirtyRecords();
+      await doPullCloudRecords();
+      const now = new Date().toISOString();
+      saveSyncConfig({ lastSyncAt: now });
+      state.syncStatus.lastResult = "云端读写完成";
+      state.syncStatus.lastError = "";
+      await saveSnapshot();
+    });
+  }
+
+  async function pullCloudRecords(options = {}) {
+    const shouldRender = !options.silent;
+    await runSyncTask(async () => {
+      await doPullCloudRecords();
+    }, shouldRender);
+  }
+
+  async function pushDirtyRecords(options = {}) {
+    const shouldRender = !options.silent;
+    await runSyncTask(async () => {
+      await doPushDirtyRecords();
+    }, shouldRender);
+  }
+
+  async function doPullCloudRecords() {
+      const result = await syncRequest("/records/query", {
+      body: {
+        deviceId: getDeviceId(),
+        since: state.syncConfig.lastPullAt || null,
+        entities: SHARED_ENTITIES
+      }
+    });
+    const records = Array.isArray(result.records) ? result.records : [];
+    if (records.length) {
+      state.records = mergeSharedRecords(state.records, recordsArrayToBucket(records));
+      syncLegacyFromSharedRecords();
+    }
+    const now = result.serverTime || new Date().toISOString();
+    saveSyncConfig({ lastPullAt: now, lastSyncAt: now });
+    state.syncStatus.lastResult = `已读取 ${records.length} 条云端记录`;
+    state.syncStatus.lastError = "";
+    await saveSnapshot();
+  }
+
+  async function doPushDirtyRecords() {
+    syncSharedRecordsFromLegacy();
+    const records = getDirtySharedRecords();
+    if (!records.length) {
+      const now = new Date().toISOString();
+      saveSyncConfig({ lastPushAt: now, lastSyncAt: now });
+      state.syncStatus.lastResult = "没有待写入云端的记录";
+      state.syncStatus.lastError = "";
+      await saveSnapshot();
+      return;
+    }
+    const result = await syncRequest("/records/upsert", {
+      body: {
+        deviceId: getDeviceId(),
+        records: records.map((item) => ({
+          entity: item.entity,
+          id: item.id,
+          baseRevision: item.revision || 0,
+          data: item.data,
+          revision: item.revision || 1,
+          deviceId: item.deviceId || getDeviceId(),
+          createdAt: item.createdAt,
+          updatedAt: item.updatedAt,
+          deletedAt: item.deletedAt || null
+        }))
+      }
+    });
+    markAcceptedRecords(result.accepted || []);
+    markConflictRecords(result.conflicts || []);
+    const now = result.serverTime || new Date().toISOString();
+    saveSyncConfig({ lastPushAt: now, lastSyncAt: now });
+    state.syncStatus.lastResult = `已写入 ${result.accepted?.length || 0} 条，冲突 ${result.conflicts?.length || 0} 条`;
+    state.syncStatus.lastError = "";
+    await saveSnapshot();
+  }
+
+  async function runSyncTask(task, shouldRender = true) {
+    if (state.syncStatus.busy) return;
+    state.syncStatus.busy = true;
+    state.syncStatus.lastError = "";
+    if (shouldRender) render();
+    try {
+      await task();
+    } catch (error) {
+      state.syncStatus.lastError = error.message || "云端读写失败";
+      state.syncStatus.lastResult = "";
+    } finally {
+      state.syncStatus.busy = false;
+      if (shouldRender) render();
+    }
+  }
+
+  async function syncRequest(path, options = {}) {
+    const apiBase = normalizeSyncApiBase(state.syncConfig.apiBase);
+    if (!apiBase) throw new Error("请先填写云数据库 API 地址");
+    const headers = { "Content-Type": "application/json" };
+    const needsAuth = options.auth !== false;
+    if (needsAuth) {
+      if (!state.syncConfig.token) throw new Error("请先填写身刻访问密钥");
+      headers.Authorization = `Bearer ${state.syncConfig.token}`;
+    }
+    headers["X-Shenke-Device-Id"] = getDeviceId();
+    const response = await fetch(`${apiBase}${path}`, {
+      method: options.method || "POST",
+      headers,
+      body: options.body ? JSON.stringify(options.body) : undefined
+    });
+    const text = await response.text();
+    let payload = null;
+    try {
+      payload = text ? JSON.parse(text) : {};
+    } catch (error) {
+      throw new Error(`云端返回非 JSON：${response.status}`);
+    }
+    if (!response.ok || payload.ok === false) {
+      throw new Error(payload.error || `请求失败：${response.status}`);
+    }
+    return payload;
+  }
+
+  function recordsArrayToBucket(records) {
+    const bucket = createEmptySharedRecords();
+    records.forEach((item) => {
+      if (!item || !SHARED_ENTITIES.includes(item.entity)) return;
+      bucket[item.entity].push({
+        ...item,
+        syncState: "clean",
+        lastSyncedAt: item.updatedAt || new Date().toISOString()
+      });
+    });
+    return bucket;
+  }
+
+  function markAcceptedRecords(accepted) {
+    const now = new Date().toISOString();
+    accepted.forEach((item) => {
+      if (!item || !SHARED_ENTITIES.includes(item.entity)) return;
+      const list = state.records[item.entity] || [];
+      const record = list.find((entry) => entry.id === item.id);
+      if (!record) return;
+      record.revision = item.revision || record.revision;
+      record.updatedAt = item.updatedAt || record.updatedAt;
+      record.lastSyncedAt = item.updatedAt || now;
+      record.syncState = "clean";
+      record.conflict = null;
+    });
+  }
+
+  function markConflictRecords(conflicts) {
+    conflicts.forEach((item) => {
+      if (!item || !item.serverRecord || !SHARED_ENTITIES.includes(item.entity)) return;
+      const list = state.records[item.entity] || [];
+      const record = list.find((entry) => entry.id === item.id);
+      if (!record) return;
+      record.syncState = "conflict";
+      record.conflict = {
+        reason: item.reason || "server_revision_newer",
+        serverRecord: item.serverRecord,
+        happenedAt: new Date().toISOString()
+      };
+    });
+  }
+
+  function syncLegacyFromSharedRecords() {
+    const cloudWorkouts = normalizeWorkouts(state.records.training_logs.map(trainingLogEnvelopeToWorkout).filter(Boolean));
+    const cloudMetrics = normalizeBodyMetrics(state.records.body_metrics.map(bodyMetricEnvelopeToLegacy).filter(Boolean));
+    if (cloudWorkouts.length) state.workouts = mergeWorkoutsByDate(state.workouts, cloudWorkouts);
+    if (cloudMetrics.length) state.bodyMetrics = mergeBodyMetricsByDate(state.bodyMetrics, cloudMetrics);
+  }
+
+  function formatLocalDateTime(value) {
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return String(value || "");
+    return `${date.getMonth() + 1}/${date.getDate()} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
   }
 
   function getRecommendation(date, sourceWorkouts = state.workouts) {
