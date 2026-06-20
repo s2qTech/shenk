@@ -1078,8 +1078,8 @@
             ${panel("记录概览", "最近训练节奏", renderOverview())}
             ${panel(
               "最近记录",
-              "只显示最近几条",
-              renderRecordList(recentWorkouts(4), "recent-record-list"),
+              "只显示最近 6 条",
+              renderRecordList(recentWorkouts(6), "recent-record-list"),
               `<button type="button" class="subtle panel-action" data-action="open-all-records">全部记录</button>`
             )}
           </div>

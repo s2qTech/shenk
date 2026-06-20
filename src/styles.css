@@ -317,6 +317,31 @@ textarea {
   min-height: 0;
 }
 
+.data-page .data-column:first-child {
+  grid-template-rows: repeat(2, minmax(0, 1fr));
+}
+
+.data-page .data-column:last-child {
+  grid-template-rows: auto minmax(0, 1fr);
+}
+
+.data-page .data-column:first-child .panel,
+.data-page .data-column:last-child .panel:last-child {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  min-height: 0;
+}
+
+.data-page .data-column:first-child .panel-body,
+.data-page .data-column:last-child .panel:last-child .panel-body {
+  min-height: 0;
+}
+
+.data-page .weight-trend {
+  grid-template-rows: auto minmax(0, 1fr);
+  min-height: 0;
+}
+
 .data-page .panel-header {
   padding: 12px 14px 10px;
 }
@@ -332,11 +357,14 @@ textarea {
 }
 
 .data-page .trend-chart {
-  height: clamp(126px, 16vh, 168px);
-  min-height: 0;
+  height: clamp(180px, 20vh, 220px);
+  min-height: 180px;
 }
 
 .panel-action {
+  width: auto;
+  min-width: 112px;
+  flex: 0 0 auto;
   white-space: nowrap;
 }
 
@@ -1729,6 +1757,9 @@ textarea {
 
 .recent-record-list {
   gap: 6px;
+  align-content: start;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .recent-record-list .record-card {
@@ -1737,6 +1768,15 @@ textarea {
 
 .recent-record-list .record-card p {
   margin-top: 4px;
+}
+
+.recent-record-list .record-card h3 {
+  font-size: 15px;
+}
+
+.recent-record-list .record-type-icon {
+  width: 24px;
+  height: 24px;
 }
 
 .recent-record-list .record-card p + p {
