@@ -52,6 +52,9 @@ input[type="password"],
 input[type="text"],
 input[type="url"],
 textarea {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
   background: var(--surface);
@@ -389,6 +392,7 @@ textarea {
   display: grid;
   align-content: start;
   gap: 12px;
+  min-width: 0;
   overflow: auto;
   padding: 14px;
 }
@@ -396,6 +400,7 @@ textarea {
 .drawer-editor {
   display: grid;
   gap: 12px;
+  min-width: 0;
   border-top: 1px solid var(--line);
   padding-top: 14px;
 }
@@ -817,11 +822,13 @@ textarea {
 .editor-form {
   display: grid;
   gap: 16px;
+  min-width: 0;
 }
 
 .form-section {
   display: grid;
   gap: 12px;
+  min-width: 0;
   border: 1px solid var(--line);
   border-radius: var(--radius);
   background: #fbfcfa;
@@ -845,6 +852,7 @@ textarea {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
+  min-width: 0;
 }
 
 .status-editor {
@@ -857,6 +865,7 @@ textarea {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
+  min-width: 0;
 }
 
 .range-field {
@@ -865,6 +874,7 @@ textarea {
   --range-fill: 50%;
   display: grid;
   gap: 8px;
+  min-width: 0;
   min-height: 78px;
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
@@ -956,6 +966,7 @@ textarea {
 .pain-field {
   display: grid;
   gap: 6px;
+  min-width: 0;
 }
 
 .form-field.full,
