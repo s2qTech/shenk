@@ -114,6 +114,28 @@
     rest: { label: "休息", legacyType: "rest", defaultRole: "note", canConvert: false }
   };
 
+  const ROUTINE_DISPLAY_META = {
+    routine_home_strength_standard_v3_1: { label: "力量训练" },
+    routine_home_strength_short_v3_1: { label: "力量短版" },
+    routine_indoor_cardio_v2_9: { label: "室内有氧" },
+    routine_walk_warmup_v1: { label: "走前热身" },
+    routine_walk_stretch_quick_v1: { label: "走后拉伸", variant: "简版" },
+    routine_walk_stretch_full_v1: { label: "走后拉伸", variant: "完整版" },
+    routine_recovery_stretch_v1: { label: "恢复拉伸" },
+    routine_travel_hotel_v2_7: { label: "外出训练" },
+    routine_seat_recovery_v1: { label: "座位活动" }
+  };
+
+  const TIMER_TYPE_DISPLAY_LABELS = {
+    strength: "力量",
+    indoor_cardio: "有氧",
+    warmup: "热身",
+    stretch: "拉伸",
+    recovery: "恢复",
+    travel_strength: "力量",
+    seat_recovery: "活动"
+  };
+
   const TIMER_LINK_ACTION_META = {
     pending: "未处理",
     linked: "已关联",
@@ -1753,20 +1775,21 @@
     const data = envelope.data || {};
     const legacyType = toLegacyTrainingType(data.trainingType || data.type);
     const meta = TYPE_META[legacyType] || TYPE_META.easyWalk;
+    const variant = getRoutineVariantLabel(data);
     const details = [
       data.estimatedMinutes ? `${data.estimatedMinutes} 分` : "",
-      data.routineId ? `routine ${data.routineId}` : "",
-      data.sourcePlanVersion ? `计划版本 ${data.sourcePlanVersion}` : ""
+      variant
     ].filter(Boolean).join(" · ");
+    const notes = formatPublicNotes(data.notes);
     return `
       <article class="record-card plan-card">
         <div class="record-top">
-          <h3>${renderTypeIcon(legacyType, "record-type-icon")}${escapeHtml(data.title || meta.label)}</h3>
+          <h3>${renderTypeIcon(legacyType, "record-type-icon")}${escapeHtml(getPlanItemDisplayTitle(data) || meta.label)}</h3>
           <span class="tag">计划</span>
         </div>
         ${details ? `<p>${escapeHtml(details)}</p>` : ""}
         ${data.goal ? `<p>${escapeHtml(data.goal)}</p>` : ""}
-        ${Array.isArray(data.notes) && data.notes.length ? `<p>${escapeHtml(data.notes.join("；"))}</p>` : ""}
+        ${notes ? `<p>${escapeHtml(notes)}</p>` : ""}
         ${data.routineId ? `
           <div class="button-row compact-actions">
             <button type="button" data-action="open-timer-plan" data-plan-id="${escapeHtml(data.id)}">打开计时器</button>
@@ -1778,7 +1801,7 @@
 
   function renderPlanAdjustmentCard(envelope) {
     const data = envelope.data || {};
-    const toTitle = data.toSnapshot?.title || data.toSnapshot?.trainingType || "";
+    const toTitle = getPlanItemDisplayTitle(data.toSnapshot || {}) || "计划调整";
     return `
       <article class="record-card">
         <div class="record-top">
@@ -1796,11 +1819,12 @@
     const timerMeta = getTimerTypeMeta(data.trainingType);
     const legacyType = timerMeta.legacyType;
     const handling = getTimerSessionHandling(envelope);
+    const variant = getRoutineVariantLabel(data);
+    const notes = formatPublicNotes(data.notes);
     const details = [
       data.startedAt ? `开始 ${formatLocalDateTime(data.startedAt)}` : "",
       data.actualSeconds ? formatDuration(data.actualSeconds) : "",
-      data.routineId ? `routine ${data.routineId}` : "",
-      data.routineVersion ? `v${data.routineVersion}` : "",
+      variant,
       data.completion ? getTimerCompletionLabel(data.completion) : ""
     ].filter(Boolean).join(" · ");
     return `
@@ -1810,7 +1834,7 @@
           <span class="tag">${escapeHtml(handling.label)}</span>
         </div>
         ${details ? `<p>${escapeHtml(details)}</p>` : ""}
-        ${data.notes ? `<p>${escapeHtml(String(data.notes))}</p>` : ""}
+        ${notes ? `<p>${escapeHtml(notes)}</p>` : ""}
         ${renderTimerSessionActions(envelope)}
       </article>
     `;
@@ -1967,17 +1991,20 @@
     const data = envelope.data || {};
     const typeMeta = getTimerTypeMeta(data.trainingType);
     const handling = getTimerSessionHandling(envelope);
+    const variant = getRoutineVariantLabel(data);
+    const notes = formatPublicNotes(data.notes);
     const details = [
       ["日期", data.date],
       ["开始时间", formatLocalDateTime(data.startedAt)],
       ["结束时间", data.endedAt ? formatLocalDateTime(data.endedAt) : "-"],
       ["类型", typeMeta.label],
       ["流程", getTimerSessionTitle(data)],
+      variant ? ["版本", variant] : null,
       ["实际时长", formatDuration(data.actualSeconds) || "-"],
       ["完成状态", getTimerCompletionLabel(data.completion)],
       ["处理状态", handling.label],
-      ["关联日志", handling.targetTrainingLogId || "-"]
-    ];
+      ["关联", handling.targetTrainingLogId ? "已关联" : "-"]
+    ].filter(Boolean);
     return `
       <div class="timer-detail">
         <div class="timer-detail-title">
@@ -1987,7 +2014,7 @@
         <dl class="timer-detail-grid">
           ${details.map(([label, value]) => `<div><dt>${escapeHtml(label)}</dt><dd>${escapeHtml(value)}</dd></div>`).join("")}
         </dl>
-        ${data.notes ? `<p class="timer-note">${escapeHtml(String(data.notes))}</p>` : ""}
+        ${notes ? `<p class="timer-note">${escapeHtml(notes)}</p>` : ""}
         ${renderTimerSessionActions(envelope)}
       </div>
     `;
@@ -2093,6 +2120,7 @@
 
   function renderRecordCard(record) {
     const meta = TYPE_META[record.type];
+    const notes = formatPublicNotes(record.notes);
     const details = [
       record.durationSec ? formatDuration(record.durationSec) : "",
       record.distanceKm ? `${formatNumber(record.distanceKm, 2)} km` : "",
@@ -2107,7 +2135,7 @@
           <span class="tag">${escapeHtml(getStatusLabel(record.status, record.type))}</span>
         </div>
         <p>${escapeHtml(details || "无运动数据")}</p>
-        ${record.notes ? `<p>${escapeHtml(record.notes)}</p>` : ""}
+        ${notes ? `<p>${escapeHtml(notes)}</p>` : ""}
       </article>
     `;
   }
@@ -2665,11 +2693,12 @@
   }
 
   function timerSessionNote(session) {
+    const variant = getRoutineVariantLabel(session);
     return [
-      session.routineId ? `routineId: ${session.routineId}` : "",
-      session.routineVersion ? `routineVersion: ${session.routineVersion}` : "",
-      session.completion ? `completion: ${session.completion}` : "",
-      session.notes || ""
+      `计时器：${getTimerSessionTitle(session)}`,
+      variant,
+      session.completion ? `完成状态：${getTimerCompletionLabel(session.completion)}` : "",
+      formatPublicNotes(session.notes)
     ].filter(Boolean).join("；");
   }
 
@@ -3360,10 +3389,15 @@
 
   function getTimerTypeMeta(type) {
     const value = normalizeTimerTrainingType(type);
-    if (TIMER_TYPE_META[value]) return TIMER_TYPE_META[value];
+    if (TIMER_TYPE_META[value]) {
+      return {
+        ...TIMER_TYPE_META[value],
+        label: TIMER_TYPE_DISPLAY_LABELS[value] || TIMER_TYPE_META[value].label
+      };
+    }
     const legacyType = toLegacyTrainingType(value);
     return {
-      label: TYPE_META[legacyType]?.label || value || "计时器",
+      label: TYPE_META[legacyType]?.label || "其他",
       legacyType,
       defaultRole: "note",
       canConvert: false
@@ -3371,7 +3405,64 @@
   }
 
   function getTimerSessionTitle(session) {
-    return session.title || session.routineTitle || session.routineName || session.routineId || "未命名流程";
+    const routine = getRoutineDisplayMeta(session);
+    if (routine?.label) return routine.label;
+    const title = cleanUserRoutineName(session.title || session.routineTitle || session.routineName);
+    return title || getTimerTypeMeta(session.trainingType || session.type).label || "计时器记录";
+  }
+
+  function getRoutineDisplayMeta(source) {
+    const routineId = typeof source === "string" ? source : source?.routineId || source?.routine_id || "";
+    if (ROUTINE_DISPLAY_META[routineId]) return ROUTINE_DISPLAY_META[routineId];
+    const title = typeof source === "string" ? "" : source?.routineTitle || source?.routine_title || source?.routineName || source?.title || "";
+    if (ROUTINE_DISPLAY_META[title]) return ROUTINE_DISPLAY_META[title];
+    return null;
+  }
+
+  function getRoutineVariantLabel(source) {
+    const routine = getRoutineDisplayMeta(source);
+    if (routine?.variant) return routine.variant;
+    const routineId = typeof source === "string" ? source : source?.routineId || source?.routine_id || "";
+    if (routineId.includes("_quick_")) return "简版";
+    if (routineId.includes("_full_")) return "完整版";
+    return "";
+  }
+
+  function getPlanItemDisplayTitle(data) {
+    const routine = getRoutineDisplayMeta(data);
+    if (routine?.label) return routine.label;
+    const title = cleanUserRoutineName(data.title || data.name);
+    if (title) return title;
+    if (data.trainingType || data.type) return getTimerTypeMeta(data.trainingType || data.type).label;
+    return "";
+  }
+
+  function cleanUserRoutineName(value) {
+    const text = String(value || "").trim();
+    if (!text) return "";
+    if (ROUTINE_DISPLAY_META[text]) return ROUTINE_DISPLAY_META[text].label;
+    const cleaned = text
+      .replace(/\s*[（(]?\s*(?:v|版本)\s*\d+(?:[._]\d+)*\s*[)）]?/gi, "")
+      .replace(/\s+/g, " ")
+      .trim();
+    return isInternalIdentifierText(cleaned) ? "" : cleaned;
+  }
+
+  function isInternalIdentifierText(value) {
+    const text = String(value || "").trim();
+    if (!text) return false;
+    return /^routine_/i.test(text) || /^[a-z]+(?:_[a-z0-9]+)+$/i.test(text) || /\bv\d+(?:[._]\d+)*\b/i.test(text);
+  }
+
+  function formatPublicNotes(value) {
+    const raw = Array.isArray(value) ? value.join("；") : String(value || "");
+    return raw
+      .split(/[；;\n]/)
+      .map((item) => item.trim())
+      .filter((item) => item && !/routine(?:Id|Version)?\s*[:：]/i.test(item))
+      .filter((item) => item && !/completion\s*[:：]/i.test(item))
+      .filter((item) => item && !isInternalIdentifierText(item))
+      .join("；");
   }
 
   function getTimerSessionLink(sessionId) {
