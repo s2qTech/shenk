@@ -20,7 +20,7 @@ X-Shenke-Device-Id: <stable-device-id>
 Roles:
 
 - `ADMIN_TOKEN`: read/write all records.
-- `SHENK_TOKEN`: write 身刻-owned records.
+- `SHENK_TOKEN`: write 身刻-owned records, including `timer_session_links`.
 - `TIMER_TOKEN`: write timer-owned records.
 
 ## Entity Envelope
@@ -47,6 +47,7 @@ The application-specific payload lives in `data`.
 - `daily_plan_items`
 - `plan_adjustments`
 - `timer_sessions`
+- `timer_session_links`
 - `training_logs`
 - `body_metrics`
 - `weather_logs`

@@ -50,7 +50,8 @@ daily_plan_items
 timer_sessions
   -> written by timer
   -> read by 身刻
-  -> user confirms or edits into training_logs
+  -> user confirms, links, ignores, or converts through timer_session_links
+  -> only user-confirmed main/recovery sessions become training_logs
 ```
 
 ## Routine Extraction

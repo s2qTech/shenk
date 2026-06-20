@@ -15,6 +15,7 @@ Both sides may read all data. Write ownership is narrower:
 
 - `身刻` writes plan templates, daily plan snapshots, adjustments, training logs, body metrics, media metadata, feedback summaries.
 - `home-training-timer` writes timer sessions and routine execution details.
+- `身刻` writes timer session handling records in `timer_session_links`; it does not modify `timer_sessions`.
 - Routine templates are modified only through explicit plan updates, not by timer execution.
 - Plans are modified only through explicit coach/user-confirmed updates, not automatically by the app.
 
@@ -286,6 +287,39 @@ Timer sessions are written by `home-training-timer`.
   "notes": "第二轮鸟狗式不稳。"
 }
 ```
+
+## Timer Session Link
+
+Timer session links are written by `身刻`. They record how a timer fact was handled without mutating the original `timer_sessions` row.
+
+```json
+{
+  "id": "timer_link_session_2026-06-19_2130_001",
+  "timerSessionId": "session_2026-06-19_2130_001",
+  "date": "2026-06-19",
+  "action": "converted",
+  "targetTrainingLogId": "log_2026-06-19_session_2026-06-19_2130_001",
+  "role": "main",
+  "note": "由计时器记录转为正式训练日志",
+  "createdAt": "2026-06-19T22:20:00+08:00",
+  "updatedAt": "2026-06-19T22:20:00+08:00"
+}
+```
+
+Allowed `action` values:
+
+- `linked`: associated with an existing training log or kept as an auxiliary flow.
+- `converted`: converted into a formal `training_logs` record.
+- `ignored`: intentionally hidden from pending timer workflows.
+
+Allowed `role` values:
+
+- `warmup`
+- `stretch`
+- `cooldown`
+- `main`
+- `recovery`
+- `note`
 
 ## Training Log
 

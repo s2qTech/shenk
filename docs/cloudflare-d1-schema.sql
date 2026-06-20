@@ -150,11 +150,36 @@ CREATE INDEX IF NOT EXISTS idx_timer_sessions_date
 CREATE INDEX IF NOT EXISTS idx_timer_sessions_plan
   ON timer_sessions(daily_plan_item_id, started_at);
 
+CREATE TABLE IF NOT EXISTS timer_session_links (
+  id TEXT PRIMARY KEY,
+  timer_session_id TEXT NOT NULL,
+  date TEXT NOT NULL,
+  action TEXT NOT NULL, -- linked | converted | ignored
+  target_training_log_id TEXT,
+  role TEXT NOT NULL DEFAULT 'note', -- warmup | stretch | cooldown | main | recovery | note
+  note TEXT,
+  data_json TEXT NOT NULL DEFAULT '{}',
+  revision INTEGER NOT NULL DEFAULT 1,
+  device_id TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  deleted_at TEXT,
+  FOREIGN KEY (timer_session_id) REFERENCES timer_sessions(id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_timer_session_links_session
+  ON timer_session_links(timer_session_id, updated_at);
+
+CREATE INDEX IF NOT EXISTS idx_timer_session_links_date
+  ON timer_session_links(date, action);
+
 CREATE TABLE IF NOT EXISTS training_logs (
   id TEXT PRIMARY KEY,
   date TEXT NOT NULL,
   daily_plan_item_id TEXT,
   timer_session_id TEXT,
+  timer_session_ids_json TEXT NOT NULL DEFAULT '[]',
+  support_sessions_json TEXT NOT NULL DEFAULT '[]',
   type TEXT NOT NULL,
   status TEXT NOT NULL,
   source TEXT NOT NULL DEFAULT 'manual', -- manual | timer | screenshot | import | coach_adjusted

@@ -16,6 +16,7 @@
     "daily_plan_items",
     "plan_adjustments",
     "timer_sessions",
+    "timer_session_links",
     "training_logs",
     "body_metrics",
     "weather_logs",
@@ -27,6 +28,7 @@
     "routine_templates",
     "daily_plan_items",
     "plan_adjustments",
+    "timer_session_links",
     "training_logs",
     "body_metrics",
     "weather_logs",
@@ -46,6 +48,10 @@
     easy_walk: "easyWalk",
     quality_walk: "qualityWalk",
     indoor_cardio: "indoorCardio",
+    warmup: "recovery",
+    cooldown: "recovery",
+    travel_strength: "strength",
+    seat_recovery: "recovery",
     recovery: "recovery",
     stretch: "recovery",
     rest: "rest"
@@ -89,8 +95,39 @@
 
   const APP_ICON_META = {
     calendar: { label: "日历", asset: "assets/app/calendar.png" },
+    timer: { label: "计时器记录", asset: "assets/app/timer.png" },
     data: { label: "数据", asset: "assets/app/notebook.png" },
     settings: { label: "设置", asset: "assets/app/setting.png" }
+  };
+
+  const TIMER_TYPE_META = {
+    warmup: { label: "热身", legacyType: "recovery", defaultRole: "warmup", canConvert: false },
+    stretch: { label: "拉伸", legacyType: "recovery", defaultRole: "stretch", canConvert: false },
+    cooldown: { label: "冷身", legacyType: "recovery", defaultRole: "cooldown", canConvert: false },
+    recovery: { label: "恢复", legacyType: "recovery", defaultRole: "recovery", canConvert: true },
+    seat_recovery: { label: "坐姿恢复", legacyType: "recovery", defaultRole: "recovery", canConvert: false },
+    strength: { label: "力量", legacyType: "strength", defaultRole: "main", canConvert: true },
+    travel_strength: { label: "出差力量", legacyType: "strength", defaultRole: "main", canConvert: true },
+    indoor_cardio: { label: "室内有氧", legacyType: "indoorCardio", defaultRole: "main", canConvert: true },
+    easy_walk: { label: "普通走", legacyType: "easyWalk", defaultRole: "main", canConvert: true },
+    quality_walk: { label: "提高走", legacyType: "qualityWalk", defaultRole: "main", canConvert: true },
+    rest: { label: "休息", legacyType: "rest", defaultRole: "note", canConvert: false }
+  };
+
+  const TIMER_LINK_ACTION_META = {
+    pending: "未处理",
+    linked: "已关联",
+    converted: "已转日志",
+    ignored: "已忽略"
+  };
+
+  const TIMER_LINK_ROLE_META = {
+    warmup: "热身",
+    stretch: "拉伸",
+    cooldown: "冷身",
+    main: "主训练",
+    recovery: "恢复",
+    note: "备注"
   };
 
   const BRAND_META = {
@@ -179,6 +216,12 @@
     detailOpen: false,
     editMode: false,
     message: "",
+    timerFilters: {
+      date: "",
+      type: "all",
+      status: "all",
+      selectedSessionId: ""
+    },
     editorDrafts: null,
     workouts: [],
     bodyMetrics: [],
@@ -380,6 +423,7 @@
   function normalizeSharedEntityData(entity, data) {
     if (entity === "daily_plan_items") return normalizeDailyPlanItemData(data);
     if (entity === "timer_sessions") return normalizeTimerSessionData(data);
+    if (entity === "timer_session_links") return normalizeTimerSessionLinkData(data);
     if (entity === "training_logs") return normalizeTrainingLogData(data);
     if (entity === "body_metrics") return normalizeBodyMetricData(data);
     if (entity === "plan_adjustments") return normalizePlanAdjustmentData(data);
@@ -452,16 +496,39 @@
       planTemplateId: data.planTemplateId || data.plan_template_id || null,
       routineId: data.routineId || data.routine_id || "",
       routineVersion: data.routineVersion || data.routine_version || null,
-      trainingType: toSharedTrainingType(data.trainingType || data.training_type || data.type),
+      routineTitle: data.routineTitle || data.routine_title || data.title || "",
+      trainingType: normalizeTimerTrainingType(data.trainingType || data.training_type || data.type),
       startedAt: data.startedAt || data.started_at || new Date().toISOString(),
       endedAt: data.endedAt || data.ended_at || null,
       actualSeconds: toNullableNumber(data.actualSeconds ?? data.actual_seconds),
       completion: data.completion || "completed",
-      stepResults: Array.isArray(data.stepResults) ? data.stepResults : [],
+      stepResults: Array.isArray(data.stepResults) ? data.stepResults : Array.isArray(data.step_results) ? data.step_results : [],
       notes: data.notes || "",
       source: data.source || "home_training_timer",
       createdAt: data.createdAt || data.created_at || new Date().toISOString(),
       updatedAt: data.updatedAt || data.updated_at || new Date().toISOString()
+    };
+  }
+
+  function normalizeTimerSessionLinkData(data) {
+    if (!data || typeof data !== "object") return null;
+    const timerSessionId = data.timerSessionId || data.timer_session_id || null;
+    const date = data.date || "";
+    if (!timerSessionId || !isIsoDate(date)) return null;
+    const action = ["linked", "converted", "ignored"].includes(data.action) ? data.action : "linked";
+    const role = data.role ? defaultTimerLinkRole(data.role) : "note";
+    const now = new Date().toISOString();
+    return {
+      ...data,
+      id: data.id || `timer_link_${safeIdPart(timerSessionId)}`,
+      timerSessionId,
+      date,
+      action,
+      targetTrainingLogId: data.targetTrainingLogId || data.target_training_log_id || null,
+      role,
+      note: data.note || data.notes || "",
+      createdAt: data.createdAt || data.created_at || now,
+      updatedAt: data.updatedAt || data.updated_at || now
     };
   }
 
@@ -474,6 +541,8 @@
       date: data.date,
       dailyPlanItemId: data.dailyPlanItemId || data.daily_plan_item_id || null,
       timerSessionId: data.timerSessionId || data.timer_session_id || null,
+      timerSessionIds: Array.isArray(data.timerSessionIds) ? data.timerSessionIds : Array.isArray(data.timer_session_ids) ? data.timer_session_ids : data.timerSessionId || data.timer_session_id ? [data.timerSessionId || data.timer_session_id] : [],
+      supportSessions: Array.isArray(data.supportSessions) ? data.supportSessions : Array.isArray(data.support_sessions) ? data.support_sessions : [],
       type,
       status: toSharedCompletionStatus(data.status, type),
       source: data.source || "manual",
@@ -593,6 +662,8 @@
       date: workout.date,
       dailyPlanItemId: workout.dailyPlanItemId || null,
       timerSessionId: workout.timerSessionId || null,
+      timerSessionIds: Array.isArray(workout.timerSessionIds) ? workout.timerSessionIds : workout.timerSessionId ? [workout.timerSessionId] : [],
+      supportSessions: Array.isArray(workout.supportSessions) ? workout.supportSessions : [],
       type,
       status: toSharedCompletionStatus(workout.status, type),
       source: workout.source || "manual",
@@ -609,7 +680,7 @@
       trainingLoad: toNullableNumber(workout.trainingLoad),
       recoveryHours: toNullableNumber(workout.recoveryHours),
       notes: workout.notes || "",
-      rawJson: { compatSource: "workouts", legacyWorkoutId: workout.id },
+      rawJson: { ...(workout.rawJson || {}), compatSource: "workouts", legacyWorkoutId: workout.id },
       createdAt: workout.createdAt || new Date().toISOString(),
       updatedAt: workout.updatedAt || new Date().toISOString()
     };
@@ -625,6 +696,8 @@
       trainingLogId: data.id,
       dailyPlanItemId: data.dailyPlanItemId || null,
       timerSessionId: data.timerSessionId || null,
+      timerSessionIds: Array.isArray(data.timerSessionIds) ? data.timerSessionIds : data.timerSessionId ? [data.timerSessionId] : [],
+      supportSessions: Array.isArray(data.supportSessions) ? data.supportSessions : [],
       date: data.date,
       type,
       status: toLegacyCompletionStatus(data.status, type),
@@ -644,6 +717,7 @@
       fatigue: "normal",
       pain: { calf: 0, back: 0, wrist: 0, outerThigh: 0 },
       notes: data.notes || "",
+      rawJson: data.rawJson || {},
       createdAt: data.createdAt || envelope.createdAt,
       updatedAt: data.updatedAt || envelope.updatedAt
     };
@@ -751,9 +825,9 @@
   }
 
   function mergeWorkoutsByDate(current, incoming) {
-    const map = new Map(normalizeWorkouts(current).map((item) => [item.date, item]));
-    normalizeWorkouts(incoming).forEach((item) => map.set(item.date, item));
-    return Array.from(map.values()).sort((a, b) => a.date.localeCompare(b.date));
+    const map = new Map(normalizeWorkouts(current).map((item) => [workoutKey(item), item]));
+    normalizeWorkouts(incoming).forEach((item) => map.set(workoutKey(item), item));
+    return Array.from(map.values()).sort((a, b) => a.date.localeCompare(b.date) || workoutKey(a).localeCompare(workoutKey(b)));
   }
 
   function mergeBodyMetricsByDate(current, incoming) {
@@ -788,6 +862,8 @@
       trainingLogId: item.trainingLogId || null,
       dailyPlanItemId: item.dailyPlanItemId || null,
       timerSessionId: item.timerSessionId || null,
+      timerSessionIds: Array.isArray(item.timerSessionIds) ? item.timerSessionIds : item.timerSessionId ? [item.timerSessionId] : [],
+      supportSessions: Array.isArray(item.supportSessions) ? item.supportSessions : [],
       date: item.date,
       type,
       status,
@@ -812,6 +888,7 @@
         outerThigh: clampPain(item.pain && item.pain.outerThigh)
       },
       notes: item.notes || "",
+      rawJson: item.rawJson || {},
       createdAt: item.createdAt || new Date().toISOString(),
       updatedAt: item.updatedAt || new Date().toISOString()
     };
@@ -887,7 +964,7 @@
   }
 
   function renderSideNav() {
-    const tabs = ["calendar", "data"];
+    const tabs = ["calendar", "timer", "data"];
     return `
       <aside class="side-nav" aria-label="主导航">
         <nav class="side-tabs">
@@ -911,6 +988,10 @@
   }
 
   function renderActiveTab() {
+    if (state.activeTab === "timer") {
+      return renderTimerSessionsPage();
+    }
+
     if (state.activeTab === "data") {
       return `
         <section class="content-page data-page">
@@ -1594,7 +1675,8 @@
 
   function renderSelectedSummary() {
     const date = state.selectedDate;
-    const record = getWorkoutByDate(date);
+    const records = getWorkoutsByDate(date);
+    const record = records[0] || null;
     const metric = getMetricByDate(date);
     const planItems = getPlanItemsByDate(date);
     const adjustments = getPlanAdjustmentsByDate(date);
@@ -1611,14 +1693,14 @@
       sections.push(renderLayerSection("调整", adjustments.map(renderPlanAdjustmentCard).join("")));
     }
 
-    if (timerSessions.length) {
-      sections.push(renderLayerSection("计时器记录", timerSessions.map(renderTimerSessionCard).join("")));
+    if (records.length) {
+      sections.push(renderLayerSection("正式训练记录", records.map(renderRecordCard).join("")));
+    } else if (timerSessions.some((session) => getTimerSessionHandling(session).action === "pending")) {
+      sections.push(renderLayerSection("正式训练记录", `<div class="empty-state compact">有计时器记录待处理，确认后才会进入正式训练记录。</div>`));
     }
 
-    if (record) {
-      sections.push(renderLayerSection("实际记录", renderRecordCard(record)));
-    } else if (timerSessions.some((session) => isConfirmableTimerSession(session.data))) {
-      sections.push(renderLayerSection("实际记录", `<div class="empty-state compact">有计时器记录待确认。</div>`));
+    if (timerSessions.length) {
+      sections.push(renderLayerSection("计时器记录", timerSessions.map(renderTimerSessionCard).join("")));
     }
 
     if (metric) {
@@ -1685,31 +1767,25 @@
 
   function renderTimerSessionCard(envelope) {
     const data = envelope.data || {};
-    const legacyType = toLegacyTrainingType(data.trainingType || data.type);
-    const meta = TYPE_META[legacyType] || TYPE_META.easyWalk;
-    const linkedLog = getTrainingLogForTimerSession(data.id);
-    const existingWorkout = getWorkoutByDate(data.date);
-    const canConfirm = isConfirmableTimerSession(data) && !linkedLog;
+    const timerMeta = getTimerTypeMeta(data.trainingType);
+    const legacyType = timerMeta.legacyType;
+    const handling = getTimerSessionHandling(envelope);
     const details = [
+      data.startedAt ? `开始 ${formatLocalDateTime(data.startedAt)}` : "",
       data.actualSeconds ? formatDuration(data.actualSeconds) : "",
       data.routineId ? `routine ${data.routineId}` : "",
       data.routineVersion ? `v${data.routineVersion}` : "",
-      data.completion ? `completion ${data.completion}` : ""
+      data.completion ? getTimerCompletionLabel(data.completion) : ""
     ].filter(Boolean).join(" · ");
-    const actionText = existingWorkout && !existingWorkout.timerSessionId ? "关联训练记录" : "生成训练记录";
     return `
-      <article class="record-card timer-card ${linkedLog ? "timer-linked" : canConfirm ? "timer-pending" : ""}">
+      <article class="record-card timer-card timer-${handling.action}">
         <div class="record-top">
-          <h3>${renderTypeIcon(legacyType, "record-type-icon")}${escapeHtml(meta.label)}计时</h3>
-          <span class="tag">${linkedLog ? "已生成记录" : getTimerCompletionLabel(data.completion)}</span>
+          <h3>${renderTypeIcon(legacyType, "record-type-icon")}${escapeHtml(timerMeta.label)} · ${escapeHtml(getTimerSessionTitle(data))}</h3>
+          <span class="tag">${escapeHtml(handling.label)}</span>
         </div>
         ${details ? `<p>${escapeHtml(details)}</p>` : ""}
         ${data.notes ? `<p>${escapeHtml(String(data.notes))}</p>` : ""}
-        ${canConfirm ? `
-          <div class="button-row compact-actions">
-            <button type="button" class="primary" data-action="confirm-timer-session" data-session-id="${escapeHtml(data.id)}">${actionText}</button>
-          </div>
-        ` : ""}
+        ${renderTimerSessionActions(envelope)}
       </article>
     `;
   }
@@ -1728,6 +1804,185 @@
         ${painSummary ? `<p>不适：${escapeHtml(painSummary)}。</p>` : ""}
         ${metric.notes ? `<p>${escapeHtml(metric.notes)}</p>` : ""}
       </div>
+    `;
+  }
+
+  function renderTimerSessionsPage() {
+    const sessions = getFilteredTimerSessions();
+    const selected = getSelectedTimerSession(sessions);
+    return `
+      <section class="content-page timer-page">
+        ${renderPageHead("计时器记录")}
+        ${renderTimerStats()}
+        <div class="timer-workspace">
+          <section class="panel timer-list-panel">
+            <div class="panel-header timer-panel-header">
+              <div>
+                <h2 class="panel-title">最近计时器记录</h2>
+                <p class="panel-subtitle">来自 home-training-timer 的事实记录</p>
+              </div>
+              ${renderTimerFilters()}
+            </div>
+            <div class="panel-body">${renderTimerSessionList(sessions)}</div>
+          </section>
+          <section class="panel timer-detail-panel">
+            <div class="panel-header">
+              <div>
+                <h2 class="panel-title">记录详情</h2>
+                <p class="panel-subtitle">只处理关联关系，不改写 timer_sessions</p>
+              </div>
+            </div>
+            <div class="panel-body">${renderTimerSessionDetail(selected)}</div>
+          </section>
+        </div>
+      </section>
+    `;
+  }
+
+  function renderTimerStats() {
+    const sessions = getAllTimerSessions();
+    const today = todayISO();
+    const todayPending = sessions.filter((item) => item.data?.date === today && getTimerSessionHandling(item).action === "pending").length;
+    const recent7 = sessions.filter((item) => dateWithinDays(item.data?.date, today, 7)).length;
+    const linked = sessions.filter((item) => ["linked", "converted"].includes(getTimerSessionHandling(item).action)).length;
+    const short = sessions.filter((item) => isShortTimerSession(item.data)).length;
+    return `
+      <div class="timer-stat-grid">
+        <div class="metric"><strong>${todayPending}</strong><span>今日未处理</span></div>
+        <div class="metric"><strong>${recent7}</strong><span>最近 7 天</span></div>
+        <div class="metric"><strong>${linked}</strong><span>已关联/转日志</span></div>
+        <div class="metric"><strong>${short}</strong><span>过短/测试</span></div>
+      </div>
+    `;
+  }
+
+  function renderTimerFilters() {
+    const filters = state.timerFilters;
+    const typeOptions = getTimerTypeOptions();
+    const statusOptions = [
+      ["all", "全部状态"],
+      ["pending", "未处理"],
+      ["linked", "已关联"],
+      ["converted", "已转训练日志"],
+      ["ignored", "已忽略"]
+    ];
+    return `
+      <div class="timer-filters">
+        <label>
+          <span>日期</span>
+          <input type="date" data-timer-filter="date" value="${escapeHtml(filters.date || "")}">
+        </label>
+        <label>
+          <span>类型</span>
+          <select data-timer-filter="type">
+            ${typeOptions.map(([value, label]) => `<option value="${escapeHtml(value)}" ${filters.type === value ? "selected" : ""}>${escapeHtml(label)}</option>`).join("")}
+          </select>
+        </label>
+        <label>
+          <span>状态</span>
+          <select data-timer-filter="status">
+            ${statusOptions.map(([value, label]) => `<option value="${escapeHtml(value)}" ${filters.status === value ? "selected" : ""}>${escapeHtml(label)}</option>`).join("")}
+          </select>
+        </label>
+      </div>
+    `;
+  }
+
+  function renderTimerSessionList(sessions) {
+    if (!sessions.length) {
+      return `<div class="empty-state">没有符合条件的计时器记录。</div>`;
+    }
+    return `
+      <div class="timer-table">
+        <div class="timer-table-head">
+          <span>日期</span>
+          <span>开始</span>
+          <span>类型</span>
+          <span>流程</span>
+          <span>时长</span>
+          <span>完成</span>
+          <span>处理</span>
+          <span>操作</span>
+        </div>
+        ${sessions.map(renderTimerSessionRow).join("")}
+      </div>
+    `;
+  }
+
+  function renderTimerSessionRow(envelope) {
+    const data = envelope.data || {};
+    const typeMeta = getTimerTypeMeta(data.trainingType);
+    const handling = getTimerSessionHandling(envelope);
+    const selected = state.timerFilters.selectedSessionId === data.id;
+    const canConvert = canConvertTimerSession(data) && handling.action === "pending";
+    return `
+      <article class="timer-table-row ${selected ? "selected" : ""}" data-session-id="${escapeHtml(data.id)}">
+        <button type="button" class="timer-row-main" data-action="select-timer-session" data-session-id="${escapeHtml(data.id)}">
+          <span>${escapeHtml(data.date)}</span>
+          <span>${escapeHtml(formatTimeOnly(data.startedAt))}</span>
+          <span>${escapeHtml(typeMeta.label)}</span>
+          <span>${escapeHtml(getTimerSessionTitle(data))}</span>
+          <span>${escapeHtml(formatDuration(data.actualSeconds) || "-")}</span>
+          <span>${escapeHtml(getTimerCompletionLabel(data.completion))}</span>
+          <span><i class="timer-status-dot status-${handling.action}"></i>${escapeHtml(handling.label)}</span>
+        </button>
+        <div class="timer-row-actions">
+          ${canConvert ? `<button type="button" data-action="convert-timer-session" data-session-id="${escapeHtml(data.id)}">转日志</button>` : ""}
+          ${handling.action === "pending" ? `<button type="button" data-action="ignore-timer-session" data-session-id="${escapeHtml(data.id)}">忽略</button>` : ""}
+        </div>
+      </article>
+    `;
+  }
+
+  function renderTimerSessionDetail(envelope) {
+    if (!envelope) {
+      return `<div class="empty-state">选择一条计时器记录查看详情。</div>`;
+    }
+    const data = envelope.data || {};
+    const typeMeta = getTimerTypeMeta(data.trainingType);
+    const handling = getTimerSessionHandling(envelope);
+    const details = [
+      ["日期", data.date],
+      ["开始时间", formatLocalDateTime(data.startedAt)],
+      ["结束时间", data.endedAt ? formatLocalDateTime(data.endedAt) : "-"],
+      ["类型", typeMeta.label],
+      ["流程", getTimerSessionTitle(data)],
+      ["实际时长", formatDuration(data.actualSeconds) || "-"],
+      ["完成状态", getTimerCompletionLabel(data.completion)],
+      ["处理状态", handling.label],
+      ["关联日志", handling.targetTrainingLogId || "-"]
+    ];
+    return `
+      <div class="timer-detail">
+        <div class="timer-detail-title">
+          <h3>${escapeHtml(typeMeta.label)} · ${escapeHtml(getTimerSessionTitle(data))}</h3>
+          <span class="tag">${escapeHtml(handling.label)}</span>
+        </div>
+        <dl class="timer-detail-grid">
+          ${details.map(([label, value]) => `<div><dt>${escapeHtml(label)}</dt><dd>${escapeHtml(value)}</dd></div>`).join("")}
+        </dl>
+        ${data.notes ? `<p class="timer-note">${escapeHtml(String(data.notes))}</p>` : ""}
+        ${renderTimerSessionActions(envelope)}
+      </div>
+    `;
+  }
+
+  function renderTimerSessionActions(envelope) {
+    const data = envelope.data || {};
+    const handling = getTimerSessionHandling(envelope);
+    if (handling.action !== "pending") {
+      return `<p class="timer-note">这条记录已经处理。如需修改，后续可在关联记录里增加编辑入口。</p>`;
+    }
+    const canConvert = canConvertTimerSession(data);
+    return `
+      <div class="button-row timer-action-row">
+        ${canConvert ? `<button type="button" class="primary" data-action="convert-timer-session" data-session-id="${escapeHtml(data.id)}">转为训练日志</button>` : ""}
+        <button type="button" data-action="link-timer-session" data-session-id="${escapeHtml(data.id)}">关联到已有训练日志</button>
+        <button type="button" data-action="mark-timer-session-role" data-role="warmup" data-session-id="${escapeHtml(data.id)}">标记为热身</button>
+        <button type="button" data-action="mark-timer-session-role" data-role="stretch" data-session-id="${escapeHtml(data.id)}">标记为拉伸/冷身</button>
+        <button type="button" data-action="ignore-timer-session" data-session-id="${escapeHtml(data.id)}">忽略</button>
+      </div>
+      ${!canConvert ? `<p class="timer-note">这条记录更像辅助流程或测试记录，默认不建议转成正式训练日志。</p>` : ""}
     `;
   }
 
@@ -1836,6 +2091,7 @@
     const apiBase = config.apiBase || "";
     const timerUrl = config.timerUrl || DEFAULT_TIMER_URL;
     const token = config.token || "";
+    const timerToken = config.timerToken || "";
     const status = state.syncStatus.busy ? "云端读写中..." : state.syncStatus.lastResult || "未连接";
     const error = state.syncStatus.lastError;
     return `
@@ -1851,6 +2107,10 @@
         <label>
           <span>身刻访问密钥</span>
           <input type="password" name="token" autocomplete="off" placeholder="Worker SHENK_TOKEN 或 ADMIN_TOKEN" value="${escapeHtml(token)}">
+        </label>
+        <label>
+          <span>计时器访问密钥</span>
+          <input type="password" name="timerToken" autocomplete="off" placeholder="Worker TIMER_TOKEN，仅本地保存，不进 URL" value="${escapeHtml(timerToken)}">
         </label>
         <div class="data-grid sync-metrics">
           <div class="metric"><strong>${dirtyCount}</strong><span>待写入云端</span></div>
@@ -1917,6 +2177,14 @@
       button.addEventListener("click", syncNow);
     });
 
+    app.querySelectorAll("[data-timer-filter]").forEach((input) => {
+      input.addEventListener("change", () => {
+        state.timerFilters[input.dataset.timerFilter] = input.value || (input.dataset.timerFilter === "date" ? "" : "all");
+        state.timerFilters.selectedSessionId = "";
+        render();
+      });
+    });
+
     app.querySelectorAll("[data-date]").forEach((button) => {
       button.addEventListener("click", () => {
         state.selectedDate = button.dataset.date;
@@ -1981,6 +2249,11 @@
     bindAction("delete-date", deleteSelectedDate);
     bindAction("restore-seed", restoreSeed);
     bindAction("confirm-timer-session", confirmTimerSession);
+    bindAction("select-timer-session", selectTimerSession);
+    bindAction("convert-timer-session", convertTimerSession);
+    bindAction("link-timer-session", linkTimerSessionToExistingLog);
+    bindAction("mark-timer-session-role", markTimerSessionRole);
+    bindAction("ignore-timer-session", ignoreTimerSession);
     bindAction("open-timer-plan", openTimerFromPlan);
     bindAction("resolve-conflicts-cloud", resolveConflictsWithCloud);
     bindAction("resolve-conflicts-local", resolveConflictsWithLocal);
@@ -2111,40 +2384,155 @@
   }
 
   async function confirmTimerSession(element) {
+    await convertTimerSession(element);
+  }
+
+  function selectTimerSession(element) {
+    state.timerFilters.selectedSessionId = element.dataset.sessionId || "";
+    render();
+  }
+
+  async function convertTimerSession(element) {
     const envelope = findTimerSessionById(element.dataset.sessionId);
     if (!envelope) return;
     const session = envelope.data;
+    const existingLink = getTimerSessionLink(session.id);
+    if (existingLink) {
+      state.message = "这条计时器记录已经处理过";
+      render();
+      return;
+    }
     if (getTrainingLogForTimerSession(session.id)) {
-      state.message = "这条计时器记录已经生成过训练记录";
+      upsertTimerSessionLink(createTimerSessionLinkData(session, "converted", "main", getExistingTrainingLogIdForSession(session.id), "已存在正式训练记录"));
+      await refreshAfterTimerSessionAction(session, "已补充计时器处理状态");
+      return;
+    }
+    if (!canConvertTimerSession(session)) {
+      const seconds = toNullableNumber(session.actualSeconds) || 0;
+      const reason = seconds < 60 ? "这条记录少于 60 秒，更像测试记录。" : seconds < 300 ? "这条记录不足 5 分钟，更适合作为辅助流程。" : "这个类型默认不转正式训练日志。";
+      if (!window.confirm(`${reason} 仍要创建正式训练日志吗？`)) return;
+    }
+
+    const sameDayWorkouts = getWorkoutsByDate(session.date);
+    if (sameDayWorkouts.length) {
+      const choice = window.prompt("这一天已有正式训练记录：输入 1 关联到已有记录，输入 2 创建新训练日志，输入 3 忽略本次计时器记录。", "2");
+      if (choice === "1") {
+        await linkTimerSessionToExistingLog(element);
+        return;
+      }
+      if (choice === "3") {
+        await ignoreTimerSession(element);
+        return;
+      }
+      if (choice !== "2") return;
+    }
+
+    const workout = timerSessionToWorkout(session);
+    if (!workout) return;
+    upsertWorkout(workout);
+    upsertTimerSessionLink(createTimerSessionLinkData(session, "converted", defaultTimerLinkRole(session.trainingType), workout.trainingLogId, "由计时器记录转为正式训练日志"));
+    await refreshAfterTimerSessionAction(session, `已转为训练日志 ${session.date}`);
+  }
+
+  async function linkTimerSessionToExistingLog(element) {
+    const envelope = findTimerSessionById(element.dataset.sessionId);
+    if (!envelope) return;
+    const session = envelope.data;
+    if (getTimerSessionLink(session.id)) {
+      state.message = "这条计时器记录已经处理过";
       render();
       return;
     }
-    const existing = getWorkoutByDate(session.date);
-    if (existing && !existing.timerSessionId) {
-      if (!window.confirm("这一天已有手动训练记录，是否关联本次计时器记录？")) return;
-      const linked = normalizeWorkout({
-        ...existing,
-        timerSessionId: session.id,
-        dailyPlanItemId: existing.dailyPlanItemId || session.dailyPlanItemId || null,
-        notes: mergeNotes(existing.notes, timerSessionNote(session)),
-        updatedAt: new Date().toISOString()
-      });
-      upsertWorkout(linked);
-    } else if (!existing) {
-      const workout = timerSessionToWorkout(session);
-      if (!workout) return;
-      upsertWorkout(workout);
-    } else {
-      state.message = "这一天已有其他计时器关联记录";
+    const target = chooseExistingWorkoutForTimerSession(session);
+    if (!target) {
+      state.message = "这一天还没有可关联的正式训练记录";
       render();
       return;
     }
+    upsertTimerSessionLink(createTimerSessionLinkData(session, "linked", defaultTimerLinkRole(session.trainingType), getTrainingLogIdForWorkout(target), "关联到已有正式训练记录"));
+    await refreshAfterTimerSessionAction(session, "已关联到已有训练日志");
+  }
+
+  async function markTimerSessionRole(element) {
+    const envelope = findTimerSessionById(element.dataset.sessionId);
+    if (!envelope) return;
+    const session = envelope.data;
+    if (getTimerSessionLink(session.id)) {
+      state.message = "这条计时器记录已经处理过";
+      render();
+      return;
+    }
+    const role = TIMER_LINK_ROLE_META[element.dataset.role] ? element.dataset.role : defaultTimerLinkRole(session.trainingType);
+    const target = findDefaultWorkoutForTimerSession(session);
+    upsertTimerSessionLink(createTimerSessionLinkData(session, "linked", role, target ? getTrainingLogIdForWorkout(target) : null, `${TIMER_LINK_ROLE_META[role] || "辅助流程"}记录`));
+    await refreshAfterTimerSessionAction(session, `已标记为${TIMER_LINK_ROLE_META[role] || "辅助流程"}`);
+  }
+
+  async function ignoreTimerSession(element) {
+    const envelope = findTimerSessionById(element.dataset.sessionId);
+    if (!envelope) return;
+    const session = envelope.data;
+    if (getTimerSessionLink(session.id)) {
+      state.message = "这条计时器记录已经处理过";
+      render();
+      return;
+    }
+    upsertTimerSessionLink(createTimerSessionLinkData(session, "ignored", "note", null, "用户忽略"));
+    await refreshAfterTimerSessionAction(session, "已忽略计时器记录");
+  }
+
+  function chooseExistingWorkoutForTimerSession(session) {
+    const workouts = getWorkoutsByDate(session.date);
+    if (!workouts.length) return null;
+    if (workouts.length === 1) return workouts[0];
+    const options = workouts.map((item, index) => `${index + 1}. ${TYPE_META[item.type]?.label || item.type} ${formatDuration(item.durationSec) || ""} ${getStatusLabel(item.status, item.type)}`).join("\n");
+    const answer = window.prompt(`选择要关联的正式训练记录：\n${options}`, "1");
+    const index = Number(answer) - 1;
+    return workouts[index] || null;
+  }
+
+  function findDefaultWorkoutForTimerSession(session) {
+    const workouts = getWorkoutsByDate(session.date).filter((item) => item.type !== "rest");
+    return workouts[0] || null;
+  }
+
+  function getTrainingLogIdForWorkout(workout) {
+    return workout?.trainingLogId || workoutToTrainingLogData(workout)?.id || null;
+  }
+
+  function getExistingTrainingLogIdForSession(sessionId) {
+    const existing = getTrainingLogForTimerSession(sessionId);
+    if (!existing) return null;
+    return existing.data?.id || getTrainingLogIdForWorkout(existing);
+  }
+
+  function createTimerSessionLinkData(session, action, role, targetTrainingLogId = null, note = "") {
+    const now = new Date().toISOString();
+    return {
+      id: `timer_link_${safeIdPart(session.id)}`,
+      timerSessionId: session.id,
+      date: session.date,
+      action,
+      targetTrainingLogId,
+      role: defaultTimerLinkRole(role),
+      note,
+      createdAt: now,
+      updatedAt: now
+    };
+  }
+
+  function upsertTimerSessionLink(data) {
+    upsertSharedEnvelope(state.records, "timer_session_links", data, getTimerSessionLink(data.timerSessionId));
+  }
+
+  async function refreshAfterTimerSessionAction(session, message) {
+    state.timerFilters.selectedSessionId = session.id;
     state.selectedDate = session.date;
     state.visibleMonth = session.date.slice(0, 7);
-    state.detailOpen = true;
+    if (state.activeTab === "calendar") state.detailOpen = true;
     state.editMode = false;
     clearEditorDrafts();
-    await saveSnapshot(`已确认计时器记录 ${session.date}`);
+    await saveSnapshot(message);
     render();
   }
 
@@ -2155,6 +2543,7 @@
       id: makeId(),
       trainingLogId: `log_${session.date}_${safeIdPart(session.id)}`,
       timerSessionId: session.id,
+      timerSessionIds: [session.id],
       dailyPlanItemId: session.dailyPlanItemId || null,
       date: session.date,
       type,
@@ -2166,6 +2555,7 @@
       fatigue: "normal",
       pain: { calf: 0, back: 0, wrist: 0, outerThigh: 0 },
       notes: timerSessionNote(session),
+      rawJson: { timerSession: session },
       createdAt: now,
       updatedAt: now
     });
@@ -2220,7 +2610,23 @@
       if (value === null || value === undefined || typeof value === "object") return;
       params.set(key, String(value));
     });
-    window.open(url.toString(), "_blank", "noopener");
+    const timerWindow = window.open(url.toString(), "_blank");
+    if (timerWindow && state.syncConfig.timerToken) {
+      const targetOrigin = url.origin;
+      const payload = {
+        type: "shenk:cloud-config",
+        cloudApiBase: normalizeSyncApiBase(state.syncConfig.apiBase || DEFAULT_CLOUD_API_BASE),
+        timerToken: state.syncConfig.timerToken
+      };
+      window.setTimeout(() => {
+        try {
+          timerWindow.postMessage(payload, targetOrigin);
+        } catch (error) {
+          state.message = "计时器配置消息发送失败，请在计时器内保留本地配置";
+          render();
+        }
+      }, 800);
+    }
   }
 
   function upsertMetric(metric) {
@@ -2253,7 +2659,16 @@
   }
 
   function upsertWorkout(workout) {
-    state.workouts = state.workouts.filter((item) => item.date !== workout.date).concat(workout).sort((a, b) => a.date.localeCompare(b.date));
+    const key = workoutKey(workout);
+    state.workouts = state.workouts
+      .filter((item) => workoutKey(item) !== key)
+      .concat(workout)
+      .sort((a, b) => a.date.localeCompare(b.date) || workoutKey(a).localeCompare(workoutKey(b)));
+  }
+
+  function workoutKey(workout) {
+    if (!workout) return "";
+    return workout.trainingLogId || workout.timerSessionId || workout.id || workout.date;
   }
 
   function shiftMonth(delta) {
@@ -2343,12 +2758,13 @@
         apiBase: normalizeSyncApiBase(config.apiBase || DEFAULT_CLOUD_API_BASE),
         timerUrl: normalizeTimerUrl(config.timerUrl || DEFAULT_TIMER_URL),
         token: config.token || "",
+        timerToken: config.timerToken || "",
         lastPullAt: config.lastPullAt || null,
         lastPushAt: config.lastPushAt || null,
         lastSyncAt: config.lastSyncAt || null
       };
     } catch (error) {
-      return { apiBase: DEFAULT_CLOUD_API_BASE, timerUrl: DEFAULT_TIMER_URL, token: "", lastPullAt: null, lastPushAt: null, lastSyncAt: null };
+      return { apiBase: DEFAULT_CLOUD_API_BASE, timerUrl: DEFAULT_TIMER_URL, token: "", timerToken: "", lastPullAt: null, lastPushAt: null, lastSyncAt: null };
     }
   }
 
@@ -2398,7 +2814,8 @@
     saveSyncConfig({
       apiBase: String(data.get("apiBase") || ""),
       timerUrl: String(data.get("timerUrl") || ""),
-      token: String(data.get("token") || "")
+      token: String(data.get("token") || ""),
+      timerToken: String(data.get("timerToken") || "")
     });
     state.syncStatus.lastResult = "云数据库配置已保存";
     state.syncStatus.lastError = "";
@@ -2639,6 +3056,12 @@
     return `${date.getMonth() + 1}/${date.getDate()} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
   }
 
+  function formatTimeOnly(value) {
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return "";
+    return `${pad(date.getHours())}:${pad(date.getMinutes())}`;
+  }
+
   function getRecommendation(date, sourceWorkouts = state.workouts) {
     const last7 = getWindowWorkoutsFrom(sourceWorkouts, date, 7).filter(isCompletedRecord);
     const recent = [...sourceWorkouts].filter((item) => item.date < date).sort((a, b) => b.date.localeCompare(a.date));
@@ -2772,11 +3195,19 @@
   }
 
   function getWorkoutByDate(date) {
-    return state.workouts.find((item) => item.date === date) || null;
+    return getWorkoutsByDate(date)[0] || null;
   }
 
   function getMetricByDate(date) {
     return state.bodyMetrics.find((item) => item.date === date) || null;
+  }
+
+  function getWorkoutsByDate(date) {
+    return state.workouts.filter((item) => item.date === date).sort((a, b) => {
+      const left = a.createdAt || a.updatedAt || "";
+      const right = b.createdAt || b.updatedAt || "";
+      return left.localeCompare(right);
+    });
   }
 
   function getPlanItemsByDate(date) {
@@ -2794,7 +3225,123 @@
   function getTimerSessionsForDate(date) {
     return (state.records.timer_sessions || [])
       .filter((item) => !item.deletedAt && item.data?.date === date)
-      .sort((a, b) => timerSessionMatchScore(a, date) - timerSessionMatchScore(b, date) || compareSharedEnvelopes(a, b));
+      .sort(compareTimerSessionsForDate);
+  }
+
+  function compareTimerSessionsForDate(a, b) {
+    return String(a.data?.startedAt || a.updatedAt || "").localeCompare(String(b.data?.startedAt || b.updatedAt || ""));
+  }
+
+  function getAllTimerSessions() {
+    return (state.records.timer_sessions || [])
+      .filter((item) => !item.deletedAt)
+      .sort((a, b) => String(b.data?.startedAt || b.updatedAt || "").localeCompare(String(a.data?.startedAt || a.updatedAt || "")));
+  }
+
+  function getFilteredTimerSessions() {
+    const filters = state.timerFilters;
+    return getAllTimerSessions().filter((item) => {
+      const data = item.data || {};
+      const handling = getTimerSessionHandling(item);
+      if (filters.date && data.date !== filters.date) return false;
+      if (filters.type !== "all" && data.trainingType !== filters.type) return false;
+      if (filters.status !== "all" && handling.action !== filters.status) return false;
+      return true;
+    });
+  }
+
+  function getSelectedTimerSession(sessions = getFilteredTimerSessions()) {
+    const selectedId = state.timerFilters.selectedSessionId;
+    return sessions.find((item) => item.data?.id === selectedId || item.id === selectedId) || sessions[0] || null;
+  }
+
+  function getTimerTypeOptions() {
+    const observed = new Set(getAllTimerSessions().map((item) => item.data?.trainingType).filter(Boolean));
+    const defaultTypes = ["warmup", "stretch", "recovery", "strength", "indoor_cardio", "travel_strength", "seat_recovery", "easy_walk", "quality_walk"];
+    const values = ["all", ...defaultTypes, ...Array.from(observed).filter((value) => !defaultTypes.includes(value)).sort()];
+    return values.map((value) => [value, value === "all" ? "全部类型" : getTimerTypeMeta(value).label]);
+  }
+
+  function getTimerTypeMeta(type) {
+    const value = normalizeTimerTrainingType(type);
+    if (TIMER_TYPE_META[value]) return TIMER_TYPE_META[value];
+    const legacyType = toLegacyTrainingType(value);
+    return {
+      label: TYPE_META[legacyType]?.label || value || "计时器",
+      legacyType,
+      defaultRole: "note",
+      canConvert: false
+    };
+  }
+
+  function getTimerSessionTitle(session) {
+    return session.title || session.routineTitle || session.routineName || session.routineId || "未命名流程";
+  }
+
+  function getTimerSessionLink(sessionId) {
+    if (!sessionId) return null;
+    return (state.records.timer_session_links || [])
+      .filter((item) => !item.deletedAt && item.data?.timerSessionId === sessionId)
+      .sort(compareSharedEnvelopes)
+      .slice(-1)[0] || null;
+  }
+
+  function getTimerSessionHandling(envelope) {
+    const session = envelope?.data || envelope || {};
+    const link = getTimerSessionLink(session.id);
+    if (link) {
+      const data = link.data || {};
+      return {
+        action: data.action,
+        label: TIMER_LINK_ACTION_META[data.action] || data.action,
+        role: data.role || "note",
+        roleLabel: TIMER_LINK_ROLE_META[data.role] || data.role || "",
+        targetTrainingLogId: data.targetTrainingLogId || null,
+        link
+      };
+    }
+    const linkedLog = getTrainingLogForTimerSession(session.id);
+    if (linkedLog) {
+      const targetTrainingLogId = linkedLog.data?.id || linkedLog.trainingLogId || null;
+      return {
+        action: "converted",
+        label: TIMER_LINK_ACTION_META.converted,
+        role: "main",
+        roleLabel: TIMER_LINK_ROLE_META.main,
+        targetTrainingLogId,
+        link: null
+      };
+    }
+    return {
+      action: "pending",
+      label: TIMER_LINK_ACTION_META.pending,
+      role: getTimerTypeMeta(session.trainingType).defaultRole,
+      roleLabel: TIMER_LINK_ROLE_META[getTimerTypeMeta(session.trainingType).defaultRole],
+      targetTrainingLogId: null,
+      link: null
+    };
+  }
+
+  function isShortTimerSession(session) {
+    return toNullableNumber(session?.actualSeconds) !== null && toNullableNumber(session.actualSeconds) < 60;
+  }
+
+  function canConvertTimerSession(session) {
+    if (!isConfirmableTimerSession(session)) return false;
+    const seconds = toNullableNumber(session.actualSeconds) || 0;
+    if (seconds < 60) return false;
+    const meta = getTimerTypeMeta(session.trainingType);
+    if (seconds < 300) return false;
+    return Boolean(meta.canConvert);
+  }
+
+  function dateWithinDays(date, endDate, days) {
+    if (!isIsoDate(date) || !isIsoDate(endDate)) return false;
+    const item = parseIsoDate(date);
+    const end = parseIsoDate(endDate);
+    const start = new Date(end);
+    start.setDate(end.getDate() - days + 1);
+    return item >= start && item <= end;
   }
 
   function timerSessionMatchScore(envelope, date) {
@@ -2807,14 +3354,14 @@
   }
 
   function getConfirmableTimerSessions(date) {
-    return getTimerSessionsForDate(date).filter((item) => isConfirmableTimerSession(item.data) && !getTrainingLogForTimerSession(item.data.id));
+    return getTimerSessionsForDate(date).filter((item) => isConfirmableTimerSession(item.data) && getTimerSessionHandling(item).action === "pending");
   }
 
   function countPendingTimerSessions() {
     return (state.records.timer_sessions || []).filter((item) => (
       !item.deletedAt &&
       isConfirmableTimerSession(item.data) &&
-      !getTrainingLogForTimerSession(item.data.id)
+      getTimerSessionHandling(item).action === "pending"
     )).length;
   }
 
@@ -2824,9 +3371,12 @@
 
   function getTrainingLogForTimerSession(sessionId) {
     if (!sessionId) return null;
-    const sharedLog = (state.records.training_logs || []).find((item) => !item.deletedAt && item.data?.timerSessionId === sessionId);
+    const sharedLog = (state.records.training_logs || []).find((item) => (
+      !item.deletedAt &&
+      (item.data?.timerSessionId === sessionId || (Array.isArray(item.data?.timerSessionIds) && item.data.timerSessionIds.includes(sessionId)))
+    ));
     if (sharedLog) return sharedLog;
-    return state.workouts.find((item) => item.timerSessionId === sessionId) || null;
+    return state.workouts.find((item) => item.timerSessionId === sessionId || (Array.isArray(item.timerSessionIds) && item.timerSessionIds.includes(sessionId))) || null;
   }
 
   function isConfirmableTimerSession(session) {
@@ -2849,8 +3399,9 @@
 
   function formatDuration(seconds) {
     if (!seconds) return "";
-    const minutes = Math.floor(seconds / 60);
-    const remain = seconds % 60;
+    const totalSeconds = Math.round(Number(seconds));
+    const minutes = Math.floor(totalSeconds / 60);
+    const remain = totalSeconds % 60;
     if (minutes >= 60) {
       return `${Math.floor(minutes / 60)}:${pad(minutes % 60)}:${pad(remain)}`;
     }
@@ -2867,6 +3418,20 @@
     if (LEGACY_TO_SHARED_TYPE[type]) return LEGACY_TO_SHARED_TYPE[type];
     if (SHARED_TO_LEGACY_TYPE[type]) return type;
     return "easy_walk";
+  }
+
+  function normalizeTimerTrainingType(type) {
+    const value = String(type || "").trim();
+    if (!value) return "easy_walk";
+    if (TIMER_TYPE_META[value]) return value;
+    if (LEGACY_TO_SHARED_TYPE[value]) return LEGACY_TO_SHARED_TYPE[value];
+    if (SHARED_TO_LEGACY_TYPE[value]) return value;
+    return value;
+  }
+
+  function defaultTimerLinkRole(roleOrType) {
+    if (TIMER_LINK_ROLE_META[roleOrType]) return roleOrType;
+    return getTimerTypeMeta(roleOrType).defaultRole || "note";
   }
 
   function toLegacyTrainingType(type) {

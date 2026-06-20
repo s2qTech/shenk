@@ -15,7 +15,7 @@ Do not merge timer execution code into 身刻. 身刻 can open timer by URL and 
 Both clients may read shared records. Writes are role-scoped:
 
 - `admin`: all entities.
-- `shenk`: `plan_templates`, `routine_templates`, `daily_plan_items`, `plan_adjustments`, `training_logs`, `body_metrics`, `weather_logs`, `media_assets`, `feedback_summaries`.
+- `shenk`: `plan_templates`, `routine_templates`, `daily_plan_items`, `plan_adjustments`, `timer_session_links`, `training_logs`, `body_metrics`, `weather_logs`, `media_assets`, `feedback_summaries`.
 - `timer`: `timer_sessions`.
 
 ## Shared Entities
@@ -25,6 +25,7 @@ Both clients may read shared records. Writes are role-scoped:
 - `daily_plan_items`
 - `plan_adjustments`
 - `timer_sessions`
+- `timer_session_links`
 - `training_logs`
 - `body_metrics`
 - `weather_logs`
@@ -41,9 +42,11 @@ Phase 1 stores these entities as JSON envelopes in D1 table `cloud_records`. Ent
 - Compatibility mapper from legacy `workouts` and `bodyMetrics` to shared `training_logs` and `body_metrics`.
 - Cloud database settings panel in `src/app.js`.
 - Cloud sync reads all shared entities and writes only 身刻-owned entities; `timer_sessions` is read-only in 身刻.
-- Day detail is layered as plan, adjustment, timer session, actual training log, and body metrics.
-- Completed/stopped timer sessions can be confirmed into local `training_logs` without duplicating existing timer-linked logs.
-- Timer launch URLs are generated from daily plan items without putting timer tokens in the URL.
+- Timer session handling is stored separately in `timer_session_links`; `timer_sessions` are never mutated by 身刻.
+- Dedicated "计时器记录" page shows recent timer sessions with date/type/status filters, details, and actions.
+- Day detail is layered as plan, adjustment, formal training logs, timer sessions, and body metrics.
+- Completed/stopped timer sessions can be converted, linked, marked auxiliary, or ignored without duplicating existing timer-linked logs.
+- Timer launch URLs are generated from daily plan items without putting timer tokens in the URL; `TIMER_TOKEN` is saved in settings and sent by `postMessage`.
 - Cloudflare Worker API in `cloudflare/worker.js`.
 - D1 migration in `cloudflare/migrations/0001_cloud_records.sql`.
 - Deployment template in `wrangler.toml.example`.
@@ -84,8 +87,9 @@ Rules:
 
 ## Next Steps
 
-1. Fill 身刻 settings with the Cloudflare Worker API base and `SHENK_TOKEN` locally.
-2. Pull `timer_sessions` from cloud and confirm completed/stopped sessions into training logs.
-3. Push 身刻-owned records with `/api/records/upsert`.
-4. Exercise conflict handling with "use cloud" and "use local override".
-5. Build the later feedback-summary export for Codex planning.
+1. Deploy the updated Cloudflare Worker when `CLOUDFLARE_API_TOKEN` is available, so the live API accepts `timer_session_links`.
+2. Fill 身刻 settings with the Cloudflare Worker API base, `SHENK_TOKEN`, and optional `TIMER_TOKEN` locally.
+3. Pull `timer_sessions` from cloud and process them through the dedicated timer sessions page.
+4. Push 身刻-owned records with `/api/records/upsert`.
+5. Exercise conflict handling with "use cloud" and "use local override".
+6. Build the later feedback-summary export for Codex planning.
