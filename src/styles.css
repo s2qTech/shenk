@@ -1020,7 +1020,7 @@ textarea {
 }
 
 .sync-metrics {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
 .sync-status {
@@ -1085,6 +1085,10 @@ textarea {
 
 .legend-suggestion {
   background: var(--yellow);
+}
+
+.legend-timer {
+  background: #7b8fc7;
 }
 
 .legend-forecast {
@@ -1576,6 +1580,27 @@ textarea {
   color: #676f6a;
 }
 
+.calendar-timer {
+  --hover-border: rgba(73, 91, 150, 0.34);
+  --hover-glow: rgba(86, 112, 198, 0.28);
+  --hover-halo: rgba(86, 112, 198, 0.14);
+  background:
+    repeating-linear-gradient(
+      135deg,
+      rgba(73, 91, 150, 0.08) 0,
+      rgba(73, 91, 150, 0.08) 8px,
+      rgba(255, 255, 255, 0.18) 8px,
+      rgba(255, 255, 255, 0.18) 18px
+    ),
+    #e5eaf8;
+  color: #31416f;
+}
+
+.calendar-timer .day-kind,
+.calendar-timer .day-marker {
+  color: #31416f;
+}
+
 .calendar-actual.status-skipped:not(.type-rest) {
   --hover-border: rgba(103, 112, 106, 0.24);
   --hover-glow: rgba(115, 126, 119, 0.18);
@@ -1594,11 +1619,46 @@ textarea {
   gap: 8px;
 }
 
+.detail-layer-list {
+  display: grid;
+  gap: 12px;
+}
+
+.detail-layer {
+  display: grid;
+  gap: 8px;
+}
+
+.detail-layer > h3 {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.detail-layer-body {
+  display: grid;
+  gap: 8px;
+}
+
 .record-card {
   border: 1px solid var(--line);
   border-radius: var(--radius);
   background: var(--surface);
   padding: 10px;
+}
+
+.timer-card.timer-pending {
+  border-color: rgba(73, 91, 150, 0.28);
+  background: #f7f9ff;
+}
+
+.timer-card.timer-linked {
+  background: var(--surface-2);
+}
+
+.compact-actions {
+  margin-top: 8px;
 }
 
 .record-top {
@@ -1637,6 +1697,11 @@ textarea {
   border-radius: var(--radius);
   color: var(--muted);
   padding: 16px;
+}
+
+.empty-state.compact {
+  padding: 10px;
+  font-size: 13px;
 }
 
 .data-grid {

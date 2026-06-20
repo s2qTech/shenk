@@ -40,6 +40,10 @@ Phase 1 stores these entities as JSON envelopes in D1 table `cloud_records`. Ent
 - Calendar and day-detail recording UI.
 - Compatibility mapper from legacy `workouts` and `bodyMetrics` to shared `training_logs` and `body_metrics`.
 - Cloud database settings panel in `src/app.js`.
+- Cloud sync reads all shared entities and writes only 身刻-owned entities; `timer_sessions` is read-only in 身刻.
+- Day detail is layered as plan, adjustment, timer session, actual training log, and body metrics.
+- Completed/stopped timer sessions can be confirmed into local `training_logs` without duplicating existing timer-linked logs.
+- Timer launch URLs are generated from daily plan items without putting timer tokens in the URL.
 - Cloudflare Worker API in `cloudflare/worker.js`.
 - D1 migration in `cloudflare/migrations/0001_cloud_records.sql`.
 - Deployment template in `wrangler.toml.example`.
@@ -80,8 +84,8 @@ Rules:
 
 ## Next Steps
 
-1. Add timer cloud write support to `home-training-timer`.
-2. Deploy Worker + D1 and configure role tokens.
-3. Configure 身刻 with `SHENK_TOKEN`.
-4. Configure timer with `TIMER_TOKEN`.
-5. Verify a completed timer session appears in D1 and is readable by 身刻.
+1. Fill 身刻 settings with the Cloudflare Worker API base and `SHENK_TOKEN` locally.
+2. Pull `timer_sessions` from cloud and confirm completed/stopped sessions into training logs.
+3. Push 身刻-owned records with `/api/records/upsert`.
+4. Exercise conflict handling with "use cloud" and "use local override".
+5. Build the later feedback-summary export for Codex planning.

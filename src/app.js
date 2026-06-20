@@ -7,6 +7,8 @@
   const FALLBACK_KEY = "training-assistant-v2:snapshot";
   const DEVICE_KEY = "training-assistant-v2:device-id";
   const SYNC_CONFIG_KEY = "training-assistant-v2:sync-config";
+  const DEFAULT_CLOUD_API_BASE = "https://shenke-cloud-db.sq-muyi.workers.dev/api";
+  const DEFAULT_TIMER_URL = "https://s2qtech.github.io/home-training-timer/";
   const SHARED_SCHEMA_VERSION = "2026-06-19-001";
   const SHARED_ENTITIES = [
     "plan_templates",
@@ -15,7 +17,21 @@
     "plan_adjustments",
     "timer_sessions",
     "training_logs",
-    "body_metrics"
+    "body_metrics",
+    "weather_logs",
+    "media_assets",
+    "feedback_summaries"
+  ];
+  const SHENK_WRITE_ENTITIES = [
+    "plan_templates",
+    "routine_templates",
+    "daily_plan_items",
+    "plan_adjustments",
+    "training_logs",
+    "body_metrics",
+    "weather_logs",
+    "media_assets",
+    "feedback_summaries"
   ];
   const LEGACY_TO_SHARED_TYPE = {
     strength: "strength",
@@ -433,8 +449,10 @@
       id: data.id || `session_${date}_${makeId()}`,
       date,
       dailyPlanItemId: data.dailyPlanItemId || data.daily_plan_item_id || null,
+      planTemplateId: data.planTemplateId || data.plan_template_id || null,
       routineId: data.routineId || data.routine_id || "",
       routineVersion: data.routineVersion || data.routine_version || null,
+      trainingType: toSharedTrainingType(data.trainingType || data.training_type || data.type),
       startedAt: data.startedAt || data.started_at || new Date().toISOString(),
       endedAt: data.endedAt || data.ended_at || null,
       actualSeconds: toNullableNumber(data.actualSeconds ?? data.actual_seconds),
@@ -1396,6 +1414,11 @@
       const record = getWorkoutByDate(date);
       if (record) {
         entries.set(date, calendarEntryFromRecord(record));
+      } else {
+        const pendingTimers = getConfirmableTimerSessions(date);
+        if (pendingTimers.length) {
+          entries.set(date, calendarEntryFromTimerSession(pendingTimers[0]));
+        }
       }
     }
 
@@ -1405,7 +1428,7 @@
       while (cursor <= end) {
         const date = dateToISO(cursor);
         const record = getWorkoutByDate(date);
-        if (!record) {
+        if (!record && !entries.has(date)) {
           const recommendation = getRecommendation(date, virtualWorkouts);
           if (date >= monthStart) {
             const kind = date === today ? "suggestion" : "forecast";
@@ -1469,6 +1492,21 @@
       marker: kind === "suggestion" ? "建议" : "预测",
       text: meta.label,
       className: meta.className
+    };
+  }
+
+  function calendarEntryFromTimerSession(envelope) {
+    const data = envelope.data || {};
+    const type = toLegacyTrainingType(data.trainingType || data.type);
+    const meta = TYPE_META[type] || TYPE_META.easyWalk;
+    return {
+      kind: "timer",
+      type,
+      icon: meta.icon,
+      marker: "待确认",
+      text: "计时器记录",
+      className: meta.className,
+      statusClass: "status-pending"
     };
   }
 
@@ -1541,6 +1579,7 @@
           </div>
           <div class="calendar-legend">
             <span><i class="legend-dot legend-actual"></i>记录</span>
+            <span><i class="legend-dot legend-timer"></i>计时器待确认</span>
             <span><i class="legend-dot legend-suggestion"></i>今日建议</span>
             <span><i class="legend-dot legend-forecast"></i>未来预测</span>
           </div>
@@ -1554,31 +1593,140 @@
   }
 
   function renderSelectedSummary() {
-    const record = getWorkoutByDate(state.selectedDate);
-    const metric = getMetricByDate(state.selectedDate);
-    const painSummary = metric ? formatPainSummary(metric.pain) : "";
-    const measureSummary = metric ? formatBodyMeasureSummary(metric) : "";
-    if (!record && !metric) {
-      if (state.selectedDate >= todayISO()) {
-        return renderAdviceCard(state.selectedDate, state.selectedDate === todayISO() ? "suggestion" : "forecast");
-      }
+    const date = state.selectedDate;
+    const record = getWorkoutByDate(date);
+    const metric = getMetricByDate(date);
+    const planItems = getPlanItemsByDate(date);
+    const adjustments = getPlanAdjustmentsByDate(date);
+    const timerSessions = getTimerSessionsForDate(date);
+    const sections = [];
+
+    if (planItems.length) {
+      sections.push(renderLayerSection("计划", planItems.map(renderPlanItemCard).join("")));
+    } else if (date >= todayISO() && !record) {
+      sections.push(renderLayerSection(date === todayISO() ? "今日建议" : "未来预测", renderAdviceCard(date, date === todayISO() ? "suggestion" : "forecast")));
+    }
+
+    if (adjustments.length) {
+      sections.push(renderLayerSection("调整", adjustments.map(renderPlanAdjustmentCard).join("")));
+    }
+
+    if (timerSessions.length) {
+      sections.push(renderLayerSection("计时器记录", timerSessions.map(renderTimerSessionCard).join("")));
+    }
+
+    if (record) {
+      sections.push(renderLayerSection("实际记录", renderRecordCard(record)));
+    } else if (timerSessions.some((session) => isConfirmableTimerSession(session.data))) {
+      sections.push(renderLayerSection("实际记录", `<div class="empty-state compact">有计时器记录待确认。</div>`));
+    }
+
+    if (metric) {
+      sections.push(renderLayerSection("身体状态", renderMetricCard(metric)));
+    }
+
+    if (!sections.length) {
       return `<div class="empty-state">这一天还没有记录。</div>`;
     }
+
+    return `<div class="detail-layer-list">${sections.join("")}</div>`;
+  }
+
+  function renderLayerSection(title, body) {
     return `
-      <div class="record-list">
-        ${record ? renderRecordCard(record) : ""}
-        ${metric ? `
-          <div class="record-card">
-            <div class="record-top">
-              <h3>状态记录</h3>
-              <span class="tag">${escapeHtml(formatMetricTag(metric))}</span>
-            </div>
-            <p>疲劳 ${FATIGUE_META[metric.fatigue]}，昨晚睡眠 ${SLEEP_META[metric.sleepQuality]}，今日精力 ${metric.energy}/5。</p>
-            ${measureSummary ? `<p>${escapeHtml(measureSummary)}</p>` : ""}
-            ${painSummary ? `<p>不适：${escapeHtml(painSummary)}。</p>` : ""}
-            ${metric.notes ? `<p>${escapeHtml(metric.notes)}</p>` : ""}
+      <section class="detail-layer">
+        <h3>${escapeHtml(title)}</h3>
+        <div class="detail-layer-body">${body}</div>
+      </section>
+    `;
+  }
+
+  function renderPlanItemCard(envelope) {
+    const data = envelope.data || {};
+    const legacyType = toLegacyTrainingType(data.trainingType || data.type);
+    const meta = TYPE_META[legacyType] || TYPE_META.easyWalk;
+    const details = [
+      data.estimatedMinutes ? `${data.estimatedMinutes} 分` : "",
+      data.routineId ? `routine ${data.routineId}` : "",
+      data.sourcePlanVersion ? `计划版本 ${data.sourcePlanVersion}` : ""
+    ].filter(Boolean).join(" · ");
+    return `
+      <article class="record-card plan-card">
+        <div class="record-top">
+          <h3>${renderTypeIcon(legacyType, "record-type-icon")}${escapeHtml(data.title || meta.label)}</h3>
+          <span class="tag">计划</span>
+        </div>
+        ${details ? `<p>${escapeHtml(details)}</p>` : ""}
+        ${data.goal ? `<p>${escapeHtml(data.goal)}</p>` : ""}
+        ${Array.isArray(data.notes) && data.notes.length ? `<p>${escapeHtml(data.notes.join("；"))}</p>` : ""}
+        ${data.routineId ? `
+          <div class="button-row compact-actions">
+            <button type="button" data-action="open-timer-plan" data-plan-id="${escapeHtml(data.id)}">打开计时器</button>
           </div>
         ` : ""}
+      </article>
+    `;
+  }
+
+  function renderPlanAdjustmentCard(envelope) {
+    const data = envelope.data || {};
+    const toTitle = data.toSnapshot?.title || data.toSnapshot?.trainingType || "";
+    return `
+      <article class="record-card">
+        <div class="record-top">
+          <h3>${escapeHtml(toTitle || "计划调整")}</h3>
+          <span class="tag">${escapeHtml(data.adjustedBy || "adjusted")}</span>
+        </div>
+        ${data.reason ? `<p>${escapeHtml(data.reason)}</p>` : ""}
+        ${data.adjustedAt ? `<p>${escapeHtml(formatLocalDateTime(data.adjustedAt))}</p>` : ""}
+      </article>
+    `;
+  }
+
+  function renderTimerSessionCard(envelope) {
+    const data = envelope.data || {};
+    const legacyType = toLegacyTrainingType(data.trainingType || data.type);
+    const meta = TYPE_META[legacyType] || TYPE_META.easyWalk;
+    const linkedLog = getTrainingLogForTimerSession(data.id);
+    const existingWorkout = getWorkoutByDate(data.date);
+    const canConfirm = isConfirmableTimerSession(data) && !linkedLog;
+    const details = [
+      data.actualSeconds ? formatDuration(data.actualSeconds) : "",
+      data.routineId ? `routine ${data.routineId}` : "",
+      data.routineVersion ? `v${data.routineVersion}` : "",
+      data.completion ? `completion ${data.completion}` : ""
+    ].filter(Boolean).join(" · ");
+    const actionText = existingWorkout && !existingWorkout.timerSessionId ? "关联训练记录" : "生成训练记录";
+    return `
+      <article class="record-card timer-card ${linkedLog ? "timer-linked" : canConfirm ? "timer-pending" : ""}">
+        <div class="record-top">
+          <h3>${renderTypeIcon(legacyType, "record-type-icon")}${escapeHtml(meta.label)}计时</h3>
+          <span class="tag">${linkedLog ? "已生成记录" : getTimerCompletionLabel(data.completion)}</span>
+        </div>
+        ${details ? `<p>${escapeHtml(details)}</p>` : ""}
+        ${data.notes ? `<p>${escapeHtml(String(data.notes))}</p>` : ""}
+        ${canConfirm ? `
+          <div class="button-row compact-actions">
+            <button type="button" class="primary" data-action="confirm-timer-session" data-session-id="${escapeHtml(data.id)}">${actionText}</button>
+          </div>
+        ` : ""}
+      </article>
+    `;
+  }
+
+  function renderMetricCard(metric) {
+    const painSummary = formatPainSummary(metric.pain);
+    const measureSummary = formatBodyMeasureSummary(metric);
+    return `
+      <div class="record-card">
+        <div class="record-top">
+          <h3>状态记录</h3>
+          <span class="tag">${escapeHtml(formatMetricTag(metric))}</span>
+        </div>
+        <p>疲劳 ${FATIGUE_META[metric.fatigue]}，昨晚睡眠 ${SLEEP_META[metric.sleepQuality]}，今日精力 ${metric.energy}/5。</p>
+        ${measureSummary ? `<p>${escapeHtml(measureSummary)}</p>` : ""}
+        ${painSummary ? `<p>不适：${escapeHtml(painSummary)}。</p>` : ""}
+        ${metric.notes ? `<p>${escapeHtml(metric.notes)}</p>` : ""}
       </div>
     `;
   }
@@ -1683,8 +1831,10 @@
     const config = state.syncConfig || {};
     const dirtyCount = getDirtySharedRecords().length;
     const totalCount = getAllSharedRecords().length;
+    const conflictCount = getConflictRecords().length;
     const lastSyncAt = config.lastSyncAt ? formatLocalDateTime(config.lastSyncAt) : "未连接";
     const apiBase = config.apiBase || "";
+    const timerUrl = config.timerUrl || DEFAULT_TIMER_URL;
     const token = config.token || "";
     const status = state.syncStatus.busy ? "云端读写中..." : state.syncStatus.lastResult || "未连接";
     const error = state.syncStatus.lastError;
@@ -1695,12 +1845,17 @@
           <input type="url" name="apiBase" placeholder="https://your-worker.workers.dev/api" value="${escapeHtml(apiBase)}">
         </label>
         <label>
+          <span>Timer 地址</span>
+          <input type="url" name="timerUrl" placeholder="https://s2qtech.github.io/home-training-timer/" value="${escapeHtml(timerUrl)}">
+        </label>
+        <label>
           <span>身刻访问密钥</span>
           <input type="password" name="token" autocomplete="off" placeholder="Worker SHENK_TOKEN 或 ADMIN_TOKEN" value="${escapeHtml(token)}">
         </label>
         <div class="data-grid sync-metrics">
           <div class="metric"><strong>${dirtyCount}</strong><span>待写入云端</span></div>
           <div class="metric"><strong>${totalCount}</strong><span>共享记录</span></div>
+          <div class="metric"><strong>${conflictCount}</strong><span>冲突</span></div>
           <div class="metric"><strong>${escapeHtml(lastSyncAt)}</strong><span>最近云端读写</span></div>
         </div>
         <div class="button-row">
@@ -1710,6 +1865,12 @@
           <button type="button" data-action="sync-push">写入云端</button>
           <button type="button" class="primary" data-action="sync-now">云端读写</button>
         </div>
+        ${conflictCount ? `
+          <div class="button-row">
+            <button type="button" data-action="resolve-conflicts-cloud">使用云端</button>
+            <button type="button" data-action="resolve-conflicts-local">使用本地覆盖</button>
+          </div>
+        ` : ""}
         <p class="sync-status ${error ? "sync-error" : ""}">${escapeHtml(error || status)}</p>
       </form>
     `;
@@ -1819,6 +1980,10 @@
     bindAction("cancel-edit", cancelSelectedEdit);
     bindAction("delete-date", deleteSelectedDate);
     bindAction("restore-seed", restoreSeed);
+    bindAction("confirm-timer-session", confirmTimerSession);
+    bindAction("open-timer-plan", openTimerFromPlan);
+    bindAction("resolve-conflicts-cloud", resolveConflictsWithCloud);
+    bindAction("resolve-conflicts-local", resolveConflictsWithLocal);
   }
 
   function bindAction(action, handler) {
@@ -1945,6 +2110,119 @@
     render();
   }
 
+  async function confirmTimerSession(element) {
+    const envelope = findTimerSessionById(element.dataset.sessionId);
+    if (!envelope) return;
+    const session = envelope.data;
+    if (getTrainingLogForTimerSession(session.id)) {
+      state.message = "这条计时器记录已经生成过训练记录";
+      render();
+      return;
+    }
+    const existing = getWorkoutByDate(session.date);
+    if (existing && !existing.timerSessionId) {
+      if (!window.confirm("这一天已有手动训练记录，是否关联本次计时器记录？")) return;
+      const linked = normalizeWorkout({
+        ...existing,
+        timerSessionId: session.id,
+        dailyPlanItemId: existing.dailyPlanItemId || session.dailyPlanItemId || null,
+        notes: mergeNotes(existing.notes, timerSessionNote(session)),
+        updatedAt: new Date().toISOString()
+      });
+      upsertWorkout(linked);
+    } else if (!existing) {
+      const workout = timerSessionToWorkout(session);
+      if (!workout) return;
+      upsertWorkout(workout);
+    } else {
+      state.message = "这一天已有其他计时器关联记录";
+      render();
+      return;
+    }
+    state.selectedDate = session.date;
+    state.visibleMonth = session.date.slice(0, 7);
+    state.detailOpen = true;
+    state.editMode = false;
+    clearEditorDrafts();
+    await saveSnapshot(`已确认计时器记录 ${session.date}`);
+    render();
+  }
+
+  function timerSessionToWorkout(session) {
+    const now = new Date().toISOString();
+    const type = toLegacyTrainingType(session.trainingType || session.type);
+    return normalizeWorkout({
+      id: makeId(),
+      trainingLogId: `log_${session.date}_${safeIdPart(session.id)}`,
+      timerSessionId: session.id,
+      dailyPlanItemId: session.dailyPlanItemId || null,
+      date: session.date,
+      type,
+      status: timerCompletionToLegacyStatus(session),
+      source: "timer",
+      durationSec: toNullableNumber(session.actualSeconds),
+      distanceKm: null,
+      avgHeartRate: null,
+      fatigue: "normal",
+      pain: { calf: 0, back: 0, wrist: 0, outerThigh: 0 },
+      notes: timerSessionNote(session),
+      createdAt: now,
+      updatedAt: now
+    });
+  }
+
+  function timerCompletionToLegacyStatus(session) {
+    const completion = String(session.completion || "").toLowerCase();
+    if (completion === "completed") return "completed";
+    if (completion === "stopped") return toNullableNumber(session.actualSeconds) ? "short" : "skipped";
+    return toNullableNumber(session.actualSeconds) ? "short" : "skipped";
+  }
+
+  function timerSessionNote(session) {
+    return [
+      session.routineId ? `routineId: ${session.routineId}` : "",
+      session.routineVersion ? `routineVersion: ${session.routineVersion}` : "",
+      session.completion ? `completion: ${session.completion}` : "",
+      session.notes || ""
+    ].filter(Boolean).join("；");
+  }
+
+  function mergeNotes(current, addition) {
+    const left = String(current || "").trim();
+    const right = String(addition || "").trim();
+    if (!left) return right;
+    if (!right || left.includes(right)) return left;
+    return `${left}\n${right}`;
+  }
+
+  function safeIdPart(value) {
+    return String(value || makeId()).replace(/[^a-zA-Z0-9_-]/g, "_");
+  }
+
+  function openTimerFromPlan(element) {
+    const envelope = (state.records.daily_plan_items || []).find((item) => item.data?.id === element.dataset.planId || item.id === element.dataset.planId);
+    if (!envelope) return;
+    openTimerUrl(envelope.data || {});
+  }
+
+  function openTimerUrl(planItem) {
+    const url = new URL(normalizeTimerUrl(state.syncConfig.timerUrl), window.location.href);
+    const params = url.searchParams;
+    if (planItem.routineId) params.set("routineId", planItem.routineId);
+    if (planItem.date) params.set("date", planItem.date);
+    if (planItem.id) params.set("dailyPlanItemId", planItem.id);
+    if (planItem.sourcePlanId) params.set("planTemplateId", planItem.sourcePlanId);
+    if (planItem.trainingType) params.set("trainingType", planItem.trainingType);
+    params.set("source", "shenk");
+    params.set("cloudApiBase", normalizeSyncApiBase(state.syncConfig.apiBase || DEFAULT_CLOUD_API_BASE));
+    const timerOptions = planItem.timerOptions && typeof planItem.timerOptions === "object" ? planItem.timerOptions : {};
+    Object.entries(timerOptions).forEach(([key, value]) => {
+      if (value === null || value === undefined || typeof value === "object") return;
+      params.set(key, String(value));
+    });
+    window.open(url.toString(), "_blank", "noopener");
+  }
+
   function upsertMetric(metric) {
     state.bodyMetrics = state.bodyMetrics.filter((item) => item.date !== metric.date).concat(metric).sort((a, b) => a.date.localeCompare(b.date));
   }
@@ -2062,14 +2340,15 @@
       const raw = window.localStorage.getItem(SYNC_CONFIG_KEY);
       const config = raw ? JSON.parse(raw) : {};
       return {
-        apiBase: normalizeSyncApiBase(config.apiBase || ""),
+        apiBase: normalizeSyncApiBase(config.apiBase || DEFAULT_CLOUD_API_BASE),
+        timerUrl: normalizeTimerUrl(config.timerUrl || DEFAULT_TIMER_URL),
         token: config.token || "",
         lastPullAt: config.lastPullAt || null,
         lastPushAt: config.lastPushAt || null,
         lastSyncAt: config.lastSyncAt || null
       };
     } catch (error) {
-      return { apiBase: "", token: "", lastPullAt: null, lastPushAt: null, lastSyncAt: null };
+      return { apiBase: DEFAULT_CLOUD_API_BASE, timerUrl: DEFAULT_TIMER_URL, token: "", lastPullAt: null, lastPushAt: null, lastSyncAt: null };
     }
   }
 
@@ -2077,7 +2356,8 @@
     const next = {
       ...state.syncConfig,
       ...config,
-      apiBase: normalizeSyncApiBase(config.apiBase ?? state.syncConfig.apiBase)
+      apiBase: normalizeSyncApiBase(config.apiBase ?? state.syncConfig.apiBase),
+      timerUrl: normalizeTimerUrl(config.timerUrl ?? state.syncConfig.timerUrl)
     };
     state.syncConfig = next;
     window.localStorage.setItem(SYNC_CONFIG_KEY, JSON.stringify(next));
@@ -2089,12 +2369,27 @@
     return next.endsWith("/api") ? next : `${next}/api`;
   }
 
+  function normalizeTimerUrl(value) {
+    const next = String(value || "").trim();
+    if (!next) return DEFAULT_TIMER_URL;
+    return next;
+  }
+
   function getAllSharedRecords() {
     return SHARED_ENTITIES.flatMap((entity) => Array.isArray(state.records[entity]) ? state.records[entity] : []);
   }
 
+  function getConflictRecords() {
+    return getAllSharedRecords().filter((item) => item && item.conflict);
+  }
+
   function getDirtySharedRecords() {
-    return getAllSharedRecords().filter((item) => item && item.syncState !== "clean" && !item.conflict);
+    return getAllSharedRecords().filter((item) => (
+      item &&
+      SHENK_WRITE_ENTITIES.includes(item.entity) &&
+      item.syncState !== "clean" &&
+      !item.conflict
+    ));
   }
 
   async function handleSyncConfigSubmit(event) {
@@ -2102,6 +2397,7 @@
     const data = new FormData(event.currentTarget);
     saveSyncConfig({
       apiBase: String(data.get("apiBase") || ""),
+      timerUrl: String(data.get("timerUrl") || ""),
       token: String(data.get("token") || "")
     });
     state.syncStatus.lastResult = "云数据库配置已保存";
@@ -2159,7 +2455,8 @@
     }
     const now = result.serverTime || new Date().toISOString();
     saveSyncConfig({ lastPullAt: now, lastSyncAt: now });
-    state.syncStatus.lastResult = `已读取 ${records.length} 条云端记录`;
+    const pendingTimers = countPendingTimerSessions();
+    state.syncStatus.lastResult = `已读取 ${records.length} 条云端记录${pendingTimers ? `，${pendingTimers} 条计时器记录待确认` : ""}`;
     state.syncStatus.lastError = "";
     await saveSnapshot();
   }
@@ -2285,6 +2582,48 @@
         happenedAt: new Date().toISOString()
       };
     });
+  }
+
+  async function resolveConflictsWithCloud() {
+    const conflicts = getConflictRecords();
+    if (!conflicts.length) return;
+    if (!window.confirm(`使用云端版本替换 ${conflicts.length} 条冲突记录？`)) return;
+    conflicts.forEach((record) => {
+      const serverRecord = record.conflict?.serverRecord;
+      const normalized = normalizeSharedEnvelope(record.entity, serverRecord);
+      if (!normalized) return;
+      normalized.syncState = "clean";
+      normalized.lastSyncedAt = normalized.updatedAt || new Date().toISOString();
+      normalized.conflict = null;
+      state.records[record.entity] = (state.records[record.entity] || [])
+        .filter((item) => item.id !== normalized.id)
+        .concat(normalized)
+        .sort(compareSharedEnvelopes);
+    });
+    syncLegacyFromSharedRecords();
+    state.syncStatus.lastResult = "已使用云端版本处理冲突";
+    state.syncStatus.lastError = "";
+    await saveSnapshot();
+    render();
+  }
+
+  async function resolveConflictsWithLocal() {
+    const conflicts = getConflictRecords();
+    if (!conflicts.length) return;
+    if (!window.confirm(`使用本地版本覆盖 ${conflicts.length} 条云端冲突记录？`)) return;
+    const now = new Date().toISOString();
+    conflicts.forEach((record) => {
+      const serverRevision = toNullableNumber(record.conflict?.serverRecord?.revision);
+      if (serverRevision) record.revision = serverRevision;
+      record.updatedAt = now;
+      if (record.data) record.data.updatedAt = now;
+      record.syncState = "dirty";
+      record.conflict = null;
+    });
+    state.syncStatus.lastResult = "已标记本地版本覆盖，下一次写入云端生效";
+    state.syncStatus.lastError = "";
+    await saveSnapshot();
+    render();
   }
 
   function syncLegacyFromSharedRecords() {
@@ -2438,6 +2777,70 @@
 
   function getMetricByDate(date) {
     return state.bodyMetrics.find((item) => item.date === date) || null;
+  }
+
+  function getPlanItemsByDate(date) {
+    return (state.records.daily_plan_items || [])
+      .filter((item) => !item.deletedAt && item.data?.date === date)
+      .sort(compareSharedEnvelopes);
+  }
+
+  function getPlanAdjustmentsByDate(date) {
+    return (state.records.plan_adjustments || [])
+      .filter((item) => !item.deletedAt && item.data?.date === date)
+      .sort(compareSharedEnvelopes);
+  }
+
+  function getTimerSessionsForDate(date) {
+    return (state.records.timer_sessions || [])
+      .filter((item) => !item.deletedAt && item.data?.date === date)
+      .sort((a, b) => timerSessionMatchScore(a, date) - timerSessionMatchScore(b, date) || compareSharedEnvelopes(a, b));
+  }
+
+  function timerSessionMatchScore(envelope, date) {
+    const data = envelope.data || {};
+    const plans = getPlanItemsByDate(date).map((item) => item.data || {});
+    if (data.dailyPlanItemId && plans.some((item) => item.id === data.dailyPlanItemId)) return 0;
+    if (data.routineId && plans.some((item) => item.routineId === data.routineId)) return 1;
+    if (data.trainingType && plans.some((item) => item.trainingType === data.trainingType)) return 2;
+    return 3;
+  }
+
+  function getConfirmableTimerSessions(date) {
+    return getTimerSessionsForDate(date).filter((item) => isConfirmableTimerSession(item.data) && !getTrainingLogForTimerSession(item.data.id));
+  }
+
+  function countPendingTimerSessions() {
+    return (state.records.timer_sessions || []).filter((item) => (
+      !item.deletedAt &&
+      isConfirmableTimerSession(item.data) &&
+      !getTrainingLogForTimerSession(item.data.id)
+    )).length;
+  }
+
+  function findTimerSessionById(id) {
+    return (state.records.timer_sessions || []).find((item) => item.data?.id === id || item.id === id) || null;
+  }
+
+  function getTrainingLogForTimerSession(sessionId) {
+    if (!sessionId) return null;
+    const sharedLog = (state.records.training_logs || []).find((item) => !item.deletedAt && item.data?.timerSessionId === sessionId);
+    if (sharedLog) return sharedLog;
+    return state.workouts.find((item) => item.timerSessionId === sessionId) || null;
+  }
+
+  function isConfirmableTimerSession(session) {
+    if (!session) return false;
+    const completion = String(session.completion || "").toLowerCase();
+    return completion === "completed" || completion === "stopped";
+  }
+
+  function getTimerCompletionLabel(completion) {
+    const value = String(completion || "").toLowerCase();
+    if (value === "completed") return "已完成";
+    if (value === "stopped") return "已停止";
+    if (value === "skipped") return "已跳过";
+    return completion || "计时";
   }
 
   function recentWorkouts(limit) {
