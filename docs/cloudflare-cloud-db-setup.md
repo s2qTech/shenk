@@ -21,7 +21,7 @@ Do not commit a real `wrangler.toml`, API tokens, personal exports, screenshots,
 ## Create D1
 
 ```powershell
-npx wrangler d1 create shenke
+npx wrangler d1 create shenk
 ```
 
 Copy `wrangler.toml.example` to `wrangler.toml`, then fill the returned `database_id`.
@@ -29,7 +29,7 @@ Copy `wrangler.toml.example` to `wrangler.toml`, then fill the returned `databas
 ## Apply Migration
 
 ```powershell
-npx wrangler d1 migrations apply shenke --remote
+npx wrangler d1 migrations apply shenk --remote
 ```
 
 ## Configure Secrets

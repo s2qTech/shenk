@@ -12,6 +12,7 @@ node_modules/
 dist/
 .vite/
 wrangler.toml
+.wrangler/
 .agents/
 .codex/
 Example txt file.txt
