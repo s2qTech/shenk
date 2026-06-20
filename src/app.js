@@ -95,7 +95,7 @@
 
   const APP_ICON_META = {
     calendar: { label: "日历", asset: "assets/app/calendar.png" },
-    timer: { label: "计时器记录", asset: "assets/app/timer.png" },
+    timer: { label: "计时器记录", asset: "assets/app/list.png" },
     data: { label: "数据", asset: "assets/app/notebook.png" },
     settings: { label: "设置", asset: "assets/app/setting.png" }
   };
