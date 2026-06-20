@@ -222,6 +222,7 @@
       status: "all",
       selectedSessionId: ""
     },
+    dataView: "summary",
     editorDrafts: null,
     workouts: [],
     bodyMetrics: [],
@@ -993,21 +994,7 @@
     }
 
     if (state.activeTab === "data") {
-      return `
-        <section class="content-page data-page">
-          ${renderPageHead("数据")}
-          <div class="data-grid-layout">
-            <div class="data-column">
-              ${panel("体重趋势", "最近体重记录", renderWeightTrend())}
-              ${panel("腰围趋势", "最近腰围记录", renderWaistTrend())}
-            </div>
-            <div class="data-column">
-              ${panel("记录概览", "最近训练节奏", renderOverview())}
-              ${panel("最近记录", "按日期倒序", renderRecordList(recentWorkouts(12)))}
-            </div>
-          </div>
-        </section>
-      `;
+      return state.dataView === "records" ? renderAllRecordsPage() : renderDataSummaryPage();
     }
 
     if (state.activeTab === "settings") {
@@ -1041,7 +1028,7 @@
     `;
   }
 
-  function panel(title, subtitle, body) {
+  function panel(title, subtitle, body, action = "") {
     return `
       <section class="panel">
         <div class="panel-header">
@@ -1049,8 +1036,47 @@
             <h2 class="panel-title">${escapeHtml(title)}</h2>
             <p class="panel-subtitle">${escapeHtml(subtitle)}</p>
           </div>
+          ${action}
         </div>
         <div class="panel-body">${body}</div>
+      </section>
+    `;
+  }
+
+  function renderDataSummaryPage() {
+    return `
+      <section class="content-page data-page">
+        ${renderPageHead("数据")}
+        <div class="data-grid-layout">
+          <div class="data-column">
+            ${panel("体重趋势", "最近体重记录", renderWeightTrend())}
+            ${panel("腰围趋势", "最近腰围记录", renderWaistTrend())}
+          </div>
+          <div class="data-column">
+            ${panel("记录概览", "最近训练节奏", renderOverview())}
+            ${panel(
+              "最近记录",
+              "只显示最近几条",
+              renderRecordList(recentWorkouts(4), "recent-record-list"),
+              `<button type="button" class="subtle panel-action" data-action="open-all-records">全部记录</button>`
+            )}
+          </div>
+        </div>
+      </section>
+    `;
+  }
+
+  function renderAllRecordsPage() {
+    const records = recentWorkouts();
+    return `
+      <section class="content-page records-page">
+        <div class="page-head records-page-head">
+          <div class="page-title-group">
+            <h1>全部记录</h1>
+          </div>
+          <button type="button" class="subtle" data-action="back-to-data">返回数据</button>
+        </div>
+        ${records.length ? renderWeeklyRecordTimeline(records) : `<div class="empty-state">暂无记录。</div>`}
       </section>
     `;
   }
@@ -2009,11 +2035,60 @@
     `;
   }
 
-  function renderRecordList(records) {
+  function renderRecordList(records, className = "") {
     if (!records.length) {
       return `<div class="empty-state">暂无记录。</div>`;
     }
-    return `<div class="record-list">${records.map(renderRecordCard).join("")}</div>`;
+    return `<div class="record-list ${className}">${records.map(renderRecordCard).join("")}</div>`;
+  }
+
+  function renderWeeklyRecordTimeline(records) {
+    const weeks = groupRecordsByWeek(records);
+    return `
+      <div class="records-timeline">
+        ${weeks.map((week) => `
+          <section class="week-group">
+            <div class="week-head">
+              <h2>${escapeHtml(week.label)}</h2>
+              <span>${week.records.length} 条</span>
+            </div>
+            <div class="record-list timeline-record-list">
+              ${week.records.map(renderRecordCard).join("")}
+            </div>
+          </section>
+        `).join("")}
+      </div>
+    `;
+  }
+
+  function groupRecordsByWeek(records) {
+    const map = new Map();
+    records.forEach((record) => {
+      const weekStart = getWeekStartISO(record.date);
+      if (!map.has(weekStart)) {
+        map.set(weekStart, {
+          start: weekStart,
+          label: formatWeekLabel(weekStart),
+          records: []
+        });
+      }
+      map.get(weekStart).records.push(record);
+    });
+    return Array.from(map.values()).sort((a, b) => b.start.localeCompare(a.start));
+  }
+
+  function getWeekStartISO(date) {
+    const parsed = parseIsoDate(date);
+    const offset = (parsed.getDay() + 6) % 7;
+    parsed.setDate(parsed.getDate() - offset);
+    return dateToISO(parsed);
+  }
+
+  function formatWeekLabel(weekStart) {
+    const start = parseIsoDate(weekStart);
+    const end = parseIsoDate(weekStart);
+    end.setDate(end.getDate() + 6);
+    return `${dateToISO(start).replace(/-/g, "/")} - ${formatShortDate(dateToISO(end))}`;
   }
 
   function renderRecordCard(record) {
@@ -2140,6 +2215,7 @@
     app.querySelectorAll("[data-tab]").forEach((button) => {
       button.addEventListener("click", () => {
         state.activeTab = button.dataset.tab;
+        if (state.activeTab === "data") state.dataView = "summary";
         state.detailOpen = false;
         state.editMode = false;
         clearEditorDrafts();
@@ -2255,6 +2331,8 @@
     bindAction("mark-timer-session-role", markTimerSessionRole);
     bindAction("ignore-timer-session", ignoreTimerSession);
     bindAction("open-timer-plan", openTimerFromPlan);
+    bindAction("open-all-records", openAllRecords);
+    bindAction("back-to-data", backToDataSummary);
     bindAction("resolve-conflicts-cloud", resolveConflictsWithCloud);
     bindAction("resolve-conflicts-local", resolveConflictsWithLocal);
   }
@@ -2300,6 +2378,24 @@
     field.style.setProperty("--range-fill", `${rangeFill(Number(input.value), Number(input.min), Number(input.max))}%`);
     field.classList.remove("tone-good", "tone-steady", "tone-warning", "tone-risk");
     field.classList.add(`tone-${rangeTone(kind, input.value)}`);
+  }
+
+  function openAllRecords() {
+    state.activeTab = "data";
+    state.dataView = "records";
+    state.detailOpen = false;
+    state.editMode = false;
+    clearEditorDrafts();
+    render();
+  }
+
+  function backToDataSummary() {
+    state.activeTab = "data";
+    state.dataView = "summary";
+    state.detailOpen = false;
+    state.editMode = false;
+    clearEditorDrafts();
+    render();
   }
 
   async function handleTrainingSubmit(event) {
@@ -3394,7 +3490,8 @@
   }
 
   function recentWorkouts(limit) {
-    return [...state.workouts].sort((a, b) => b.date.localeCompare(a.date)).slice(0, limit);
+    const records = [...state.workouts].sort((a, b) => b.date.localeCompare(a.date));
+    return Number.isFinite(limit) ? records.slice(0, limit) : records;
   }
 
   function formatDuration(seconds) {

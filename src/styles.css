@@ -300,6 +300,103 @@ textarea {
   min-width: 0;
 }
 
+.data-page {
+  grid-template-rows: auto minmax(0, 1fr);
+  height: 100%;
+  min-height: 0;
+}
+
+.data-page .data-grid-layout {
+  height: 100%;
+  min-height: 0;
+  align-items: stretch;
+}
+
+.data-page .data-column {
+  gap: 12px;
+  min-height: 0;
+}
+
+.data-page .panel-header {
+  padding: 12px 14px 10px;
+}
+
+.data-page .panel-body {
+  padding: 12px;
+}
+
+.data-page .metric,
+.data-page .trend-stat {
+  min-height: 58px;
+  padding: 8px 10px;
+}
+
+.data-page .trend-chart {
+  height: clamp(126px, 16vh, 168px);
+  min-height: 0;
+}
+
+.panel-action {
+  white-space: nowrap;
+}
+
+.records-page {
+  gap: 14px;
+  padding-bottom: 18px;
+}
+
+.records-page-head {
+  align-items: center;
+  position: sticky;
+  top: -16px;
+  z-index: 4;
+  border-bottom: 1px solid rgba(223, 229, 223, 0.78);
+  background: rgba(246, 247, 244, 0.94);
+  padding: 10px 0 12px;
+  backdrop-filter: blur(12px);
+}
+
+.records-timeline {
+  display: grid;
+  gap: 12px;
+}
+
+.week-group {
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+
+.week-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-bottom: 1px solid var(--line);
+  padding: 12px 14px;
+}
+
+.week-head h2 {
+  margin: 0;
+  font-size: 17px;
+  line-height: 1.2;
+}
+
+.week-head span {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.timeline-record-list {
+  padding: 12px;
+}
+
+.timeline-record-list .record-card {
+  background: #fbfcfa;
+}
+
 .settings-page .data-grid-layout {
   grid-template-columns: minmax(0, 1fr);
 }
@@ -1630,6 +1727,22 @@ textarea {
   gap: 8px;
 }
 
+.recent-record-list {
+  gap: 6px;
+}
+
+.recent-record-list .record-card {
+  padding: 8px 10px;
+}
+
+.recent-record-list .record-card p {
+  margin-top: 4px;
+}
+
+.recent-record-list .record-card p + p {
+  display: none;
+}
+
 .detail-layer-list {
   display: grid;
   gap: 12px;
@@ -1991,6 +2104,18 @@ textarea {
   .topbar-inner,
   .main-grid {
     grid-template-columns: 1fr;
+  }
+
+  .data-page {
+    height: auto;
+  }
+
+  .data-page .data-grid-layout {
+    height: auto;
+  }
+
+  .records-page-head {
+    top: 0;
   }
 
   .header-tools {
