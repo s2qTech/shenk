@@ -248,6 +248,7 @@
     timerFrameUrl: "",
     dataView: "summary",
     editorDrafts: null,
+    editorSections: null,
     workouts: [],
     bodyMetrics: [],
     records: createEmptySharedRecords(),
@@ -1349,9 +1350,10 @@
     const painOuterThigh = draftValue(statusDraft, "painOuterThigh", pain.outerThigh);
     const statusNotes = draftValue(statusDraft, "statusNotes", metric ? metric.notes : "");
     const hasRecord = Boolean(record);
+    const visibleSections = getEditorSections();
 
     return `
-      <form class="editor-form" id="training-form">
+      ${visibleSections.training ? `<form class="editor-form" id="training-form">
         ${formSection("训练记录", "实际做了什么，只填已经发生的训练数据。", `
           <div class="form-grid">
             ${field("日期", `<input name="date" type="date" value="${escapeHtml(trainingDate)}">`)}
@@ -1369,8 +1371,8 @@
           <button type="submit" class="primary">保存训练</button>
           ${hasRecord ? `<button type="button" class="danger" data-action="delete-date">删除当天</button>` : ""}
         </div>
-      </form>
-      <form class="editor-form" id="status-form">
+      </form>` : ""}
+      ${visibleSections.status ? `<form class="editor-form" id="status-form">
         <input name="date" type="hidden" value="${state.selectedDate}">
         ${formSection("状态记录", "", `
           <div class="status-editor">
@@ -1397,7 +1399,7 @@
         <div class="button-row form-actions">
           <button type="submit" class="primary">保存状态</button>
         </div>
-      </form>
+      </form>` : ""}
     `;
   }
 
@@ -2412,8 +2414,35 @@
     return state.editorDrafts && state.editorDrafts.date === date ? state.editorDrafts : null;
   }
 
+  function getEditorSections() {
+    return state.editorSections || { training: true, status: true };
+  }
+
+  function openAllEditorSections() {
+    state.editorSections = { training: true, status: true };
+  }
+
+  function closeEditorSection(section) {
+    const sections = { ...getEditorSections(), [section]: false };
+    state.editorSections = sections;
+    clearEditorDraftSection(section);
+    if (!sections.training && !sections.status) {
+      state.editMode = false;
+      clearEditorDrafts();
+    }
+  }
+
+  function clearEditorDraftSection(section) {
+    if (!state.editorDrafts) return;
+    state.editorDrafts = {
+      ...state.editorDrafts,
+      [section]: {}
+    };
+  }
+
   function clearEditorDrafts() {
     state.editorDrafts = null;
+    state.editorSections = null;
   }
 
   function draftValue(draft, key, fallback) {
@@ -2481,7 +2510,7 @@
     state.selectedDate = date;
     state.visibleMonth = date.slice(0, 7);
     state.detailOpen = true;
-    state.editMode = true;
+    closeEditorSection("training");
     await saveSnapshot(`已保存训练 ${date}`);
     render();
   }
@@ -2525,7 +2554,7 @@
     state.selectedDate = date;
     state.visibleMonth = date.slice(0, 7);
     state.detailOpen = true;
-    state.editMode = true;
+    closeEditorSection("status");
     await saveSnapshot(`已保存状态 ${date}`);
     render();
   }
@@ -2828,6 +2857,7 @@
 
   function enableSelectedEdit() {
     clearEditorDrafts();
+    openAllEditorSections();
     state.editMode = true;
     render();
   }
