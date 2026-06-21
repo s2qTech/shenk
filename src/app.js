@@ -95,9 +95,9 @@
 
   const APP_ICON_META = {
     calendar: { label: "日历", asset: "assets/app/calendar.png" },
-    timer: { label: "计时器", asset: "assets/app/timer.png" },
-    records: { label: "运动记录", asset: "assets/app/list.png" },
-    data: { label: "数据", asset: "assets/app/notebook.png" },
+    timer: { label: "计时", asset: "assets/app/timer.png" },
+    records: { label: "记录", asset: "assets/app/list.png" },
+    data: { label: "洞察", asset: "assets/app/notebook.png" },
     settings: { label: "设置", asset: "assets/app/setting.png" }
   };
 
@@ -1074,7 +1074,7 @@
   function renderDataSummaryPage() {
     return `
       <section class="content-page data-page">
-        ${renderPageHead("数据")}
+        ${renderPageHead("洞察")}
         <div class="data-grid-layout">
           <div class="data-column">
             ${panel("体重趋势", "最近体重记录", renderWeightTrend())}
@@ -1883,7 +1883,7 @@
     const selected = getSelectedTimerSession(sessions);
     return `
       <section class="content-page records-log-page">
-        ${renderPageHead("运动记录")}
+        ${renderPageHead("记录")}
         ${renderTimerStats()}
         <div class="timer-workspace">
           <section class="panel timer-list-panel">
