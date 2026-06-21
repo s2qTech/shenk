@@ -1084,8 +1084,8 @@
             ${panel("记录概览", "最近训练节奏", renderOverview())}
             ${panel(
               "最近记录",
-              "只显示最近 6 条",
-              renderRecordList(recentWorkouts(6), "recent-record-list"),
+              "只显示最近 8 条",
+              renderRecordList(recentWorkouts(8), "recent-record-list"),
               `<button type="button" class="subtle panel-action" data-action="open-all-records">全部记录</button>`
             )}
           </div>
@@ -1301,7 +1301,7 @@
             <small>最近 ${records.length} 条</small>
           </div>
         </div>
-        <svg class="trend-chart" viewBox="0 0 ${width} ${height}" role="img" aria-label="${escapeHtml(title)}">
+        <svg class="trend-chart" viewBox="0 0 ${width} ${height}" preserveAspectRatio="none" role="img" aria-label="${escapeHtml(title)}">
           ${yTicks.map((tick) => {
             const y = padTop + ((chartMax - tick) / chartRange) * innerHeight;
             return `
