@@ -1110,9 +1110,10 @@
   }
 
   function renderTimerPage() {
-    const src = state.timerFrameUrl || getBaseTimerUrl();
+    const src = state.timerFrameUrl || buildTimerUrl();
     return `
       <section class="timer-embed-page" aria-label="计时器">
+        ${renderPageHead("计时器")}
         <iframe
           class="timer-embed-frame"
           src="${escapeHtml(src)}"
