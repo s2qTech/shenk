@@ -7,6 +7,7 @@
   const FALLBACK_KEY = "training-assistant-v2:snapshot";
   const DEVICE_KEY = "training-assistant-v2:device-id";
   const SYNC_CONFIG_KEY = "training-assistant-v2:sync-config";
+  const SYNC_CONFIG_PACKAGE_PREFIX = "shenke-config-v1:";
   const DEFAULT_CLOUD_API_BASE = "https://shenke-cloud-db.sq-muyi.workers.dev/api";
   const DEFAULT_TIMER_URL = "https://s2qtech.github.io/home-training-timer/";
   const SHARED_SCHEMA_VERSION = "2026-06-19-001";
@@ -1116,6 +1117,7 @@
       <section class="timer-embed-page" aria-label="计时器">
         ${renderPageHead("计时器")}
         <iframe
+          data-timer-frame
           class="timer-embed-frame"
           src="${escapeHtml(src)}"
           title="计时器"
@@ -2239,6 +2241,20 @@
           <span>计时器访问密钥</span>
           <input type="password" name="timerToken" autocomplete="off" placeholder="Worker TIMER_TOKEN，仅本地保存，不进 URL" value="${escapeHtml(timerToken)}">
         </label>
+        <section class="sync-transfer" aria-label="多端配置">
+          <div>
+            <strong>多端配置</strong>
+            <p>把本机云数据库配置打包到剪贴板，新设备粘贴一次即可。配置包包含访问密钥，只给自己的设备使用。</p>
+          </div>
+          <div class="button-row">
+            <button type="button" data-action="copy-sync-config-package">复制配置包</button>
+            <button type="button" data-action="paste-sync-config-package">从剪贴板导入</button>
+          </div>
+          <textarea id="sync-config-package" rows="3" placeholder="也可以把配置包粘贴到这里，然后点击导入。"></textarea>
+          <div class="button-row">
+            <button type="button" data-action="import-sync-config-package">导入配置包</button>
+          </div>
+        </section>
         <div class="data-grid sync-metrics">
           <div class="metric"><strong>${dirtyCount}</strong><span>待写入云端</span></div>
           <div class="metric"><strong>${totalCount}</strong><span>共享记录</span></div>
@@ -2290,6 +2306,13 @@
       syncForm.addEventListener("submit", handleSyncConfigSubmit);
     }
 
+    const timerFrame = app.querySelector("[data-timer-frame]");
+    if (timerFrame) {
+      const sendConfig = () => sendTimerConfigToFrame(timerFrame);
+      timerFrame.addEventListener("load", sendConfig);
+      window.setTimeout(sendConfig, 250);
+    }
+
     app.querySelectorAll("[data-action='sync-health']").forEach((button) => {
       button.addEventListener("click", testSyncConnection);
     });
@@ -2304,6 +2327,18 @@
 
     app.querySelectorAll("[data-action='sync-now']").forEach((button) => {
       button.addEventListener("click", syncNow);
+    });
+
+    app.querySelectorAll("[data-action='copy-sync-config-package']").forEach((button) => {
+      button.addEventListener("click", copySyncConfigPackage);
+    });
+
+    app.querySelectorAll("[data-action='paste-sync-config-package']").forEach((button) => {
+      button.addEventListener("click", pasteSyncConfigPackage);
+    });
+
+    app.querySelectorAll("[data-action='import-sync-config-package']").forEach((button) => {
+      button.addEventListener("click", importSyncConfigPackage);
     });
 
     app.querySelectorAll("[data-timer-filter]").forEach((input) => {
@@ -2962,6 +2997,68 @@
     return next;
   }
 
+  function encodeBase64Url(value) {
+    const bytes = new TextEncoder().encode(value);
+    let binary = "";
+    bytes.forEach((byte) => {
+      binary += String.fromCharCode(byte);
+    });
+    return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
+  }
+
+  function decodeBase64Url(value) {
+    const base64 = String(value || "").replace(/-/g, "+").replace(/_/g, "/");
+    const padded = base64.padEnd(base64.length + ((4 - base64.length % 4) % 4), "=");
+    const binary = atob(padded);
+    const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0));
+    return new TextDecoder().decode(bytes);
+  }
+
+  function createSyncConfigPackage() {
+    const payload = {
+      schema: "shenke_config_v1",
+      exportedAt: new Date().toISOString(),
+      apiBase: state.syncConfig.apiBase || DEFAULT_CLOUD_API_BASE,
+      timerUrl: state.syncConfig.timerUrl || DEFAULT_TIMER_URL,
+      token: state.syncConfig.token || "",
+      timerToken: state.syncConfig.timerToken || ""
+    };
+    return `${SYNC_CONFIG_PACKAGE_PREFIX}${encodeBase64Url(JSON.stringify(payload))}`;
+  }
+
+  function hasCompleteSyncConfig() {
+    return Boolean(state.syncConfig?.apiBase && state.syncConfig?.token && state.syncConfig?.timerToken);
+  }
+
+  function parseSyncConfigPackage(rawValue) {
+    const raw = String(rawValue || "").trim();
+    if (!raw) throw new Error("请先粘贴配置包");
+    const body = raw.startsWith(SYNC_CONFIG_PACKAGE_PREFIX) ? raw.slice(SYNC_CONFIG_PACKAGE_PREFIX.length) : raw;
+    let payload = null;
+    try {
+      payload = body.trim().startsWith("{") ? JSON.parse(body) : JSON.parse(decodeBase64Url(body));
+    } catch (error) {
+      throw new Error("配置包格式不正确");
+    }
+    if (!payload || typeof payload !== "object") throw new Error("配置包内容无效");
+    const config = {
+      apiBase: normalizeSyncApiBase(payload.apiBase || payload.cloudApiBase || ""),
+      timerUrl: normalizeTimerUrl(payload.timerUrl || DEFAULT_TIMER_URL),
+      token: String(payload.token || payload.shenkToken || ""),
+      timerToken: String(payload.timerToken || "")
+    };
+    if (!config.apiBase || !config.token || !config.timerToken) {
+      throw new Error("配置包缺少 API、身刻密钥或计时器密钥");
+    }
+    return config;
+  }
+
+  function setSyncPanelMessage(message, isError = false) {
+    state.syncStatus.lastResult = isError ? "" : message;
+    state.syncStatus.lastError = isError ? message : "";
+    state.message = message;
+  }
+
   function getAllSharedRecords() {
     return SHARED_ENTITIES.flatMap((entity) => Array.isArray(state.records[entity]) ? state.records[entity] : []);
   }
@@ -2991,6 +3088,75 @@
     state.syncStatus.lastResult = "云数据库配置已保存";
     state.syncStatus.lastError = "";
     render();
+  }
+
+  async function copySyncConfigPackage() {
+    if (!hasCompleteSyncConfig()) {
+      setSyncPanelMessage("请先保存 API 地址、身刻访问密钥和计时器访问密钥，再复制配置包。", true);
+      render();
+      return;
+    }
+    const packageText = createSyncConfigPackage();
+    try {
+      await navigator.clipboard.writeText(packageText);
+      setSyncPanelMessage("配置包已复制。到新设备的身刻设置页点击“从剪贴板导入”即可。");
+    } catch (error) {
+      window.prompt("复制这段配置包到新设备：", packageText);
+      setSyncPanelMessage("浏览器没有允许自动复制，已弹出配置包。");
+    }
+    render();
+  }
+
+  async function pasteSyncConfigPackage() {
+    try {
+      const text = await navigator.clipboard.readText();
+      applySyncConfigPackage(text);
+    } catch (error) {
+      setSyncPanelMessage("浏览器没有允许读取剪贴板，请手动粘贴配置包后点击导入。", true);
+      render();
+    }
+  }
+
+  function importSyncConfigPackage() {
+    const input = app.querySelector("#sync-config-package");
+    applySyncConfigPackage(input?.value || "");
+  }
+
+  function applySyncConfigPackage(rawValue) {
+    try {
+      const config = parseSyncConfigPackage(rawValue);
+      saveSyncConfig(config);
+      setSyncPanelMessage("配置包已导入，新设备可以直接使用云数据库和计时器。");
+    } catch (error) {
+      setSyncPanelMessage(error.message || "配置包导入失败", true);
+    }
+    render();
+  }
+
+  function getTimerConfigPayload() {
+    return {
+      apiBase: state.syncConfig.apiBase || DEFAULT_CLOUD_API_BASE,
+      cloudApiBase: state.syncConfig.apiBase || DEFAULT_CLOUD_API_BASE,
+      timerToken: state.syncConfig.timerToken || "",
+      token: state.syncConfig.timerToken || ""
+    };
+  }
+
+  function getFrameTargetOrigin(frame) {
+    try {
+      const origin = new URL(frame.getAttribute("src") || frame.src, window.location.href).origin;
+      return origin === "null" ? "*" : origin;
+    } catch (error) {
+      return window.location.origin;
+    }
+  }
+
+  function sendTimerConfigToFrame(frame) {
+    if (!frame?.contentWindow || !state.syncConfig?.timerToken) return;
+    frame.contentWindow.postMessage({
+      type: "shenke.timer.config",
+      payload: getTimerConfigPayload()
+    }, getFrameTargetOrigin(frame));
   }
 
   async function testSyncConnection() {

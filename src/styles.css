@@ -1180,6 +1180,32 @@ textarea {
   width: 100%;
 }
 
+.sync-transfer {
+  display: grid;
+  gap: 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  padding: 12px;
+}
+
+.sync-transfer strong {
+  color: var(--ink);
+  font-size: 15px;
+}
+
+.sync-transfer p {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.sync-transfer textarea {
+  min-height: 76px;
+  resize: vertical;
+}
+
 .sync-metrics {
   grid-template-columns: repeat(4, minmax(0, 1fr));
 }
