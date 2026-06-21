@@ -339,11 +339,14 @@ textarea {
 
 .data-page .data-column:first-child .panel-body,
 .data-page .data-column:last-child .panel:last-child .panel-body {
+  display: grid;
+  grid-template-rows: minmax(0, 1fr);
   min-height: 0;
 }
 
 .data-page .weight-trend {
   grid-template-rows: auto minmax(0, 1fr);
+  height: 100%;
   min-height: 0;
 }
 
@@ -362,8 +365,8 @@ textarea {
 }
 
 .data-page .trend-chart {
-  height: clamp(180px, 20vh, 220px);
-  min-height: 180px;
+  height: 100%;
+  min-height: 0;
 }
 
 .panel-action {
@@ -2196,6 +2199,15 @@ textarea {
 
   .data-page .data-grid-layout {
     height: auto;
+  }
+
+  .data-page .weight-trend {
+    height: auto;
+  }
+
+  .data-page .trend-chart {
+    height: clamp(190px, 30vh, 260px);
+    min-height: 190px;
   }
 
   .records-page-head {
