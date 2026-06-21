@@ -95,7 +95,8 @@
 
   const APP_ICON_META = {
     calendar: { label: "日历", asset: "assets/app/calendar.png" },
-    timer: { label: "计时器记录", asset: "assets/app/list.png" },
+    timer: { label: "计时器", asset: "assets/app/timer.png" },
+    records: { label: "运动记录", asset: "assets/app/list.png" },
     data: { label: "数据", asset: "assets/app/notebook.png" },
     settings: { label: "设置", asset: "assets/app/setting.png" }
   };
@@ -244,6 +245,7 @@
       status: "all",
       selectedSessionId: ""
     },
+    timerFrameUrl: "",
     dataView: "summary",
     editorDrafts: null,
     workouts: [],
@@ -987,7 +989,7 @@
   }
 
   function renderSideNav() {
-    const tabs = ["calendar", "timer", "data"];
+    const tabs = ["calendar", "timer", "records", "data"];
     return `
       <aside class="side-nav" aria-label="主导航">
         <nav class="side-tabs">
@@ -1012,6 +1014,10 @@
 
   function renderActiveTab() {
     if (state.activeTab === "timer") {
+      return renderTimerPage();
+    }
+
+    if (state.activeTab === "records") {
       return renderTimerSessionsPage();
     }
 
@@ -1099,6 +1105,21 @@
           <button type="button" class="subtle" data-action="back-to-data">返回数据</button>
         </div>
         ${records.length ? renderWeeklyRecordTimeline(records) : `<div class="empty-state">暂无记录。</div>`}
+      </section>
+    `;
+  }
+
+  function renderTimerPage() {
+    const src = state.timerFrameUrl || getBaseTimerUrl();
+    return `
+      <section class="timer-embed-page" aria-label="计时器">
+        <iframe
+          class="timer-embed-frame"
+          src="${escapeHtml(src)}"
+          title="计时器"
+          loading="eager"
+          allow="wake-lock; fullscreen"
+        ></iframe>
       </section>
     `;
   }
@@ -1861,14 +1882,14 @@
     const sessions = getFilteredTimerSessions();
     const selected = getSelectedTimerSession(sessions);
     return `
-      <section class="content-page timer-page">
-        ${renderPageHead("计时器记录")}
+      <section class="content-page records-log-page">
+        ${renderPageHead("运动记录")}
         ${renderTimerStats()}
         <div class="timer-workspace">
           <section class="panel timer-list-panel">
             <div class="panel-header timer-panel-header">
               <div>
-                <h2 class="panel-title">最近计时器记录</h2>
+                <h2 class="panel-title">最近运动记录</h2>
                 <p class="panel-subtitle">来自 home-training-timer 的事实记录</p>
               </div>
               ${renderTimerFilters()}
@@ -1940,7 +1961,7 @@
 
   function renderTimerSessionList(sessions) {
     if (!sessions.length) {
-      return `<div class="empty-state">没有符合条件的计时器记录。</div>`;
+      return `<div class="empty-state">没有符合条件的运动记录。</div>`;
     }
     return `
       <div class="timer-table">
@@ -1986,7 +2007,7 @@
 
   function renderTimerSessionDetail(envelope) {
     if (!envelope) {
-      return `<div class="empty-state">选择一条计时器记录查看详情。</div>`;
+      return `<div class="empty-state">选择一条运动记录查看详情。</div>`;
     }
     const data = envelope.data || {};
     const typeMeta = getTimerTypeMeta(data.trainingType);
@@ -2244,6 +2265,7 @@
       button.addEventListener("click", () => {
         state.activeTab = button.dataset.tab;
         if (state.activeTab === "data") state.dataView = "summary";
+        if (state.activeTab === "timer") state.timerFrameUrl = "";
         state.detailOpen = false;
         state.editMode = false;
         clearEditorDrafts();
@@ -2522,7 +2544,7 @@
     const session = envelope.data;
     const existingLink = getTimerSessionLink(session.id);
     if (existingLink) {
-      state.message = "这条计时器记录已经处理过";
+      state.message = "这条运动记录已经处理过";
       render();
       return;
     }
@@ -2539,7 +2561,7 @@
 
     const sameDayWorkouts = getWorkoutsByDate(session.date);
     if (sameDayWorkouts.length) {
-      const choice = window.prompt("这一天已有正式训练记录：输入 1 关联到已有记录，输入 2 创建新训练日志，输入 3 忽略本次计时器记录。", "2");
+      const choice = window.prompt("这一天已有正式训练记录：输入 1 关联到已有记录，输入 2 创建新训练日志，输入 3 忽略本次运动记录。", "2");
       if (choice === "1") {
         await linkTimerSessionToExistingLog(element);
         return;
@@ -2563,7 +2585,7 @@
     if (!envelope) return;
     const session = envelope.data;
     if (getTimerSessionLink(session.id)) {
-      state.message = "这条计时器记录已经处理过";
+      state.message = "这条运动记录已经处理过";
       render();
       return;
     }
@@ -2582,7 +2604,7 @@
     if (!envelope) return;
     const session = envelope.data;
     if (getTimerSessionLink(session.id)) {
-      state.message = "这条计时器记录已经处理过";
+      state.message = "这条运动记录已经处理过";
       render();
       return;
     }
@@ -2597,12 +2619,12 @@
     if (!envelope) return;
     const session = envelope.data;
     if (getTimerSessionLink(session.id)) {
-      state.message = "这条计时器记录已经处理过";
+      state.message = "这条运动记录已经处理过";
       render();
       return;
     }
     upsertTimerSessionLink(createTimerSessionLinkData(session, "ignored", "note", null, "用户忽略"));
-    await refreshAfterTimerSessionAction(session, "已忽略计时器记录");
+    await refreshAfterTimerSessionAction(session, "已忽略运动记录");
   }
 
   function chooseExistingWorkoutForTimerSession(session) {
@@ -2721,37 +2743,30 @@
   }
 
   function openTimerUrl(planItem) {
-    const url = new URL(normalizeTimerUrl(state.syncConfig.timerUrl), window.location.href);
+    state.timerFrameUrl = buildTimerUrl(planItem);
+    state.activeTab = "timer";
+    state.detailOpen = false;
+    state.editMode = false;
+    clearEditorDrafts();
+    render();
+  }
+
+  function getBaseTimerUrl() {
+    return normalizeTimerUrl(state.syncConfig.timerUrl || DEFAULT_TIMER_URL);
+  }
+
+  function buildTimerUrl(planItem = {}) {
+    const url = new URL(getBaseTimerUrl(), window.location.href);
     const params = url.searchParams;
-    if (planItem.routineId) params.set("routineId", planItem.routineId);
-    if (planItem.date) params.set("date", planItem.date);
-    if (planItem.id) params.set("dailyPlanItemId", planItem.id);
-    if (planItem.sourcePlanId) params.set("planTemplateId", planItem.sourcePlanId);
-    if (planItem.trainingType) params.set("trainingType", planItem.trainingType);
-    params.set("source", "shenk");
-    params.set("cloudApiBase", normalizeSyncApiBase(state.syncConfig.apiBase || DEFAULT_CLOUD_API_BASE));
     const timerOptions = planItem.timerOptions && typeof planItem.timerOptions === "object" ? planItem.timerOptions : {};
-    Object.entries(timerOptions).forEach(([key, value]) => {
-      if (value === null || value === undefined || typeof value === "object") return;
-      params.set(key, String(value));
-    });
-    const timerWindow = window.open(url.toString(), "_blank");
-    if (timerWindow && state.syncConfig.timerToken) {
-      const targetOrigin = url.origin;
-      const payload = {
-        type: "shenk:cloud-config",
-        cloudApiBase: normalizeSyncApiBase(state.syncConfig.apiBase || DEFAULT_CLOUD_API_BASE),
-        timerToken: state.syncConfig.timerToken
-      };
-      window.setTimeout(() => {
-        try {
-          timerWindow.postMessage(payload, targetOrigin);
-        } catch (error) {
-          state.message = "计时器配置消息发送失败，请在计时器内保留本地配置";
-          render();
-        }
-      }, 800);
-    }
+    const preset = planItem.preset || timerOptions.preset;
+    if (planItem.routineId) params.set("routineId", planItem.routineId);
+    if (preset) params.set("preset", String(preset));
+    if (planItem.date) params.set("date", planItem.date);
+    if (planItem.dailyPlanItemId || planItem.id) params.set("dailyPlanItemId", planItem.dailyPlanItemId || planItem.id);
+    if (planItem.planTemplateId || planItem.sourcePlanId) params.set("planTemplateId", planItem.planTemplateId || planItem.sourcePlanId);
+    params.set("source", "shenk");
+    return url.toString();
   }
 
   function upsertMetric(metric) {
@@ -3405,10 +3420,13 @@
   }
 
   function getTimerSessionTitle(session) {
+    const title = cleanUserRoutineName(session.title || session.routineTitle || session.routineName);
+    const variant = cleanUserRoutineName(session.routineVariant || session.routine_variant);
+    if (title && variant) return `${title} · ${variant}`;
+    if (title) return title;
     const routine = getRoutineDisplayMeta(session);
     if (routine?.label) return routine.label;
-    const title = cleanUserRoutineName(session.title || session.routineTitle || session.routineName);
-    return title || getTimerTypeMeta(session.trainingType || session.type).label || "计时器记录";
+    return getTimerTypeMeta(session.trainingType || session.type).label || "计时器记录";
   }
 
   function getRoutineDisplayMeta(source) {
@@ -3420,6 +3438,8 @@
   }
 
   function getRoutineVariantLabel(source) {
+    const explicit = cleanUserRoutineName(typeof source === "string" ? "" : source?.routineVariant || source?.routine_variant);
+    if (explicit) return explicit;
     const routine = getRoutineDisplayMeta(source);
     if (routine?.variant) return routine.variant;
     const routineId = typeof source === "string" ? source : source?.routineId || source?.routine_id || "";

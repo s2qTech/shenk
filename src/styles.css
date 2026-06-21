@@ -256,6 +256,11 @@ textarea {
   overflow: hidden;
 }
 
+.workspace-main:has(.timer-embed-page) {
+  overflow: hidden;
+  padding: 0;
+}
+
 [data-calendar-area] {
   display: grid;
   min-height: 0;
@@ -427,6 +432,23 @@ textarea {
 
 .settings-page .data-grid-layout {
   grid-template-columns: minmax(0, 1fr);
+}
+
+.timer-embed-page {
+  display: grid;
+  width: 100%;
+  height: 100vh;
+  min-height: 0;
+  background: var(--surface);
+}
+
+.timer-embed-frame {
+  display: block;
+  width: 100%;
+  height: 100%;
+  min-height: 100vh;
+  border: 0;
+  background: var(--surface);
 }
 
 .calendar-board {
@@ -2104,7 +2126,8 @@ textarea {
     z-index: 20;
     height: auto;
     flex-direction: row;
-    justify-content: space-between;
+    justify-content: flex-start;
+    overflow-x: auto;
     border-right: 0;
     border-bottom: 1px solid rgba(31, 41, 36, 0.1);
     padding: 10px;
@@ -2125,6 +2148,19 @@ textarea {
     height: auto;
     overflow: visible;
     padding: 18px 12px 28px;
+  }
+
+  .workspace-main:has(.timer-embed-page) {
+    height: calc(100vh - 86px);
+    min-height: calc(100vh - 86px);
+    overflow: hidden;
+    padding: 0;
+  }
+
+  .timer-embed-page,
+  .timer-embed-frame {
+    height: 100%;
+    min-height: calc(100vh - 86px);
   }
 
   .calendar-page,
@@ -2175,6 +2211,17 @@ textarea {
 }
 
 @media (max-width: 620px) {
+  .side-tab {
+    width: 58px;
+    min-height: 54px;
+    font-size: 9px;
+  }
+
+  .side-tab-icon-img {
+    width: 24px;
+    height: 24px;
+  }
+
   .page-head {
     align-items: flex-start;
     flex-direction: row;
