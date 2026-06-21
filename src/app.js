@@ -230,6 +230,7 @@
   const app = document.getElementById("app");
   let db = null;
   let messageTimer = null;
+  let autoPushRetryTimer = null;
 
   const state = {
     ready: false,
@@ -275,6 +276,19 @@
     }
     state.ready = true;
     render();
+    scheduleInitialCloudSync();
+  }
+
+  function scheduleInitialCloudSync() {
+    if (!hasShenkSyncConfig()) return;
+    window.setTimeout(async () => {
+      await runSyncTask(async () => {
+        await doPullCloudRecords();
+        await doPushDirtyRecords();
+        await doPullCloudRecords();
+      }, false);
+      render();
+    }, 300);
   }
 
   async function loadSnapshot() {
@@ -2546,7 +2560,9 @@
     state.visibleMonth = date.slice(0, 7);
     state.detailOpen = true;
     closeEditorSection("training");
-    await saveSnapshot(`已保存训练 ${date}`);
+    const message = `已保存训练 ${date}`;
+    await saveSnapshot(message);
+    await autoPushDirtyRecords(message);
     render();
   }
 
@@ -2590,7 +2606,9 @@
     state.visibleMonth = date.slice(0, 7);
     state.detailOpen = true;
     closeEditorSection("status");
-    await saveSnapshot(`已保存状态 ${date}`);
+    const message = `已保存状态 ${date}`;
+    await saveSnapshot(message);
+    await autoPushDirtyRecords(message);
     render();
   }
 
@@ -2744,6 +2762,7 @@
     state.editMode = false;
     clearEditorDrafts();
     await saveSnapshot(message);
+    await autoPushDirtyRecords(message);
     render();
   }
 
@@ -2944,7 +2963,9 @@
           state.bodyMetrics = mergeBodyMetricsByDate(state.bodyMetrics, snapshot.bodyMetrics);
         }
         state.records = hasSharedPayload ? mergeSharedRecords(state.records, snapshot.records) : snapshot.records;
-        await saveSnapshot("JSON 已导入");
+        const message = "JSON 已导入";
+        await saveSnapshot(message);
+        await autoPushDirtyRecords(message);
         render();
       } catch (error) {
         state.message = "JSON 导入失败";
@@ -3030,6 +3051,10 @@
     return Boolean(state.syncConfig?.apiBase && state.syncConfig?.token && state.syncConfig?.timerToken);
   }
 
+  function hasShenkSyncConfig() {
+    return Boolean(state.syncConfig?.apiBase && state.syncConfig?.token);
+  }
+
   function parseSyncConfigPackage(rawValue) {
     const raw = String(rawValue || "").trim();
     if (!raw) throw new Error("请先粘贴配置包");
@@ -3085,8 +3110,12 @@
       token: String(data.get("token") || ""),
       timerToken: String(data.get("timerToken") || "")
     });
-    state.syncStatus.lastResult = "云数据库配置已保存";
+    const message = "云数据库配置已保存";
+    state.syncStatus.lastResult = message;
     state.syncStatus.lastError = "";
+    if (hasShenkSyncConfig()) {
+      await autoPushDirtyRecords(message);
+    }
     render();
   }
 
@@ -3192,6 +3221,33 @@
     await runSyncTask(async () => {
       await doPushDirtyRecords();
     }, shouldRender);
+  }
+
+  async function autoPushDirtyRecords(localMessage) {
+    if (!hasShenkSyncConfig()) {
+      state.syncStatus.lastError = "云同步未配置，已仅保存到本地";
+      state.syncStatus.lastResult = "";
+      state.message = `${localMessage}（仅本地）`;
+      return;
+    }
+    if (state.syncStatus.busy) {
+      state.message = `${localMessage}，云端稍后同步`;
+      if (!autoPushRetryTimer) {
+        autoPushRetryTimer = window.setTimeout(async () => {
+          autoPushRetryTimer = null;
+          await autoPushDirtyRecords(localMessage);
+          render();
+        }, 1200);
+      }
+      return;
+    }
+
+    await pushDirtyRecords({ silent: true });
+    if (state.syncStatus.lastError) {
+      state.message = `${localMessage}，云端同步失败`;
+      return;
+    }
+    state.message = `${localMessage}，已同步云端`;
   }
 
   async function doPullCloudRecords() {
