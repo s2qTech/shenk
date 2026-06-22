@@ -1148,9 +1148,7 @@
     const hasRecord = Boolean(getWorkoutByDate(date) || getMetricByDate(date));
     const hasEditableDate = date <= todayISO();
     const canEdit = canEditSelectedDate();
-    const editLabel = isPast ? "修正" : "编辑";
-    const cancelLabel = isPast ? "取消修正" : "取消编辑";
-    const editorTitle = isPast ? "修正记录" : hasRecord ? "编辑今天" : "记录今天";
+    const editorTitle = getEditorTitle(date, hasRecord, isPast);
     return `
       <aside class="date-drawer" aria-label="日期详情">
         <div class="drawer-head">
@@ -1159,8 +1157,7 @@
             <h2>${escapeHtml(date)}</h2>
           </div>
           <div class="drawer-actions">
-            ${hasEditableDate && !state.editMode ? `<button type="button" class="subtle" data-action="enable-edit">${editLabel}</button>` : ""}
-            ${hasEditableDate && state.editMode ? `<button type="button" class="subtle" data-action="cancel-edit">${cancelLabel}</button>` : ""}
+            ${renderDrawerEditActions(date, isPast, hasEditableDate)}
             <button type="button" class="icon-button" data-action="close-detail" aria-label="关闭">×</button>
           </div>
         </div>
@@ -1175,6 +1172,28 @@
         </div>
       </aside>
     `;
+  }
+
+  function renderDrawerEditActions(date, isPast, hasEditableDate) {
+    if (!hasEditableDate) return "";
+    if (state.editMode) {
+      return `<button type="button" class="subtle" data-action="cancel-edit">${isPast ? "取消修正" : "取消编辑"}</button>`;
+    }
+    const hasTraining = getWorkoutsByDate(date).length > 0;
+    const hasStatus = Boolean(getMetricByDate(date));
+    const trainingLabel = isPast ? "修正训练" : hasTraining ? "编辑训练" : "补训练";
+    const statusLabel = isPast ? "修正状态" : hasStatus ? "编辑状态" : "补状态";
+    return `
+      <button type="button" class="subtle" data-action="enable-edit-status">${statusLabel}</button>
+      <button type="button" class="subtle" data-action="enable-edit-training">${trainingLabel}</button>
+    `;
+  }
+
+  function getEditorTitle(date, hasRecord, isPast) {
+    const sections = getEditorSections();
+    if (sections.status && !sections.training) return isPast ? "修正状态" : getMetricByDate(date) ? "编辑状态" : "补状态";
+    if (sections.training && !sections.status) return isPast ? "修正训练" : getWorkoutsByDate(date).length ? "编辑训练" : "补训练";
+    return isPast ? "修正记录" : hasRecord ? "编辑今天" : "记录今天";
   }
 
   function renderReadOnlyNote() {
@@ -1769,6 +1788,7 @@
     const planItems = getPlanItemsByDate(date);
     const adjustments = getPlanAdjustmentsByDate(date);
     const timerSessions = getTimerSessionsForDate(date);
+    const visibleTimerSessions = timerSessions.filter((session) => getTimerSessionHandling(session).action !== "converted");
     const sections = [];
 
     if (planItems.length) {
@@ -1783,12 +1803,12 @@
 
     if (records.length) {
       sections.push(renderLayerSection("正式训练记录", records.map(renderRecordCard).join("")));
-    } else if (timerSessions.some((session) => getTimerSessionHandling(session).action === "pending")) {
+    } else if (visibleTimerSessions.some((session) => getTimerSessionHandling(session).action === "pending")) {
       sections.push(renderLayerSection("正式训练记录", `<div class="empty-state compact">有计时器记录待处理，确认后才会进入正式训练记录。</div>`));
     }
 
-    if (timerSessions.length) {
-      sections.push(renderLayerSection("计时器记录", timerSessions.map(renderTimerSessionCard).join("")));
+    if (visibleTimerSessions.length) {
+      sections.push(renderLayerSection("计时器记录", visibleTimerSessions.map(renderTimerSessionCard).join("")));
     }
 
     if (metric) {
@@ -2423,6 +2443,8 @@
     bindAction("month-next", () => shiftMonth(1));
     bindAction("close-detail", closeDetail);
     bindAction("enable-edit", enableSelectedEdit);
+    bindAction("enable-edit-training", () => enableSelectedEditorSection("training"));
+    bindAction("enable-edit-status", () => enableSelectedEditorSection("status"));
     bindAction("cancel-edit", cancelSelectedEdit);
     bindAction("delete-date", deleteSelectedDate);
     bindAction("restore-seed", restoreSeed);
@@ -2469,6 +2491,13 @@
 
   function openAllEditorSections() {
     state.editorSections = { training: true, status: true };
+  }
+
+  function openEditorSection(section) {
+    state.editorSections = {
+      training: section === "training",
+      status: section === "status"
+    };
   }
 
   function closeEditorSection(section) {
@@ -2912,6 +2941,13 @@
   function enableSelectedEdit() {
     clearEditorDrafts();
     openAllEditorSections();
+    state.editMode = true;
+    render();
+  }
+
+  function enableSelectedEditorSection(section) {
+    clearEditorDrafts();
+    openEditorSection(section);
     state.editMode = true;
     render();
   }
