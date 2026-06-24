@@ -141,21 +141,16 @@
   function getRecentRisk(date, sourceWorkouts, bodyMetrics) {
     const workouts = Array.isArray(sourceWorkouts) ? sourceWorkouts : [];
     const metrics = Array.isArray(bodyMetrics) ? bodyMetrics : [];
-    const actualWorkouts = workouts.filter((item) => item && item.source !== "forecast" && item.date <= date);
-    const candidates = actualWorkouts.concat(metrics.filter((item) => item && item.date <= date));
-    if (!candidates.length) return normalRisk();
-
-    const latestDate = candidates.reduce((latest, item) => item.date > latest ? item.date : latest, "");
-    const ageDays = daysBetween(latestDate, date);
-    if (ageDays > 2) return normalRisk();
-
-    const recoveryAfterSignal = workouts.some((item) => {
-      return item && item.date > latestDate && item.date < date && RECOVERY_TYPES.has(item.type) && isCompletedRecord(item);
+    const morningMetrics = metrics.filter((item) => item && item.date === date);
+    const previousDate = addDays(date, -1);
+    const previousWorkoutSignals = workouts.filter((item) => {
+      return item && item.source !== "forecast" && item.date === previousDate && isCompletedRecord(item);
     });
-    if (recoveryAfterSignal) return normalRisk();
+    const signals = morningMetrics.length ? morningMetrics : previousWorkoutSignals;
+    if (!signals.length) return normalRisk();
 
-    const latestSignals = candidates.filter((item) => item.date === latestDate);
-    const snapshot = latestSignals.reduce((result, item) => {
+    const sourceKind = morningMetrics.length ? "morning" : "workout";
+    const snapshot = signals.reduce((result, item) => {
       const pain = item.pain || {};
       result.fatigueRank = Math.max(result.fatigueRank, FATIGUE_RANK[item.fatigue] ?? FATIGUE_RANK.normal);
       result.sleepPoor = result.sleepPoor || item.sleepQuality === "poor";
@@ -178,29 +173,29 @@
     const severeFatigue = snapshot.fatigueRank >= FATIGUE_RANK.severe;
     const highFatigue = snapshot.fatigueRank >= FATIGUE_RANK.high;
     const lowReadiness = snapshot.sleepPoor || snapshot.energy <= 2;
-    const sourceLabel = latestDate === date ? "今天记录的状态" : "上一条状态";
+    const sourceLabel = sourceKind === "morning" ? "今天晨起状态" : "昨天训练后的记录";
 
-    if ((ageDays <= 1 && (severeFatigue || maxPain >= 2)) || (ageDays === 0 && highFatigue && lowReadiness)) {
+    if (severeFatigue || maxPain >= 2 || (sourceKind === "morning" && highFatigue && lowReadiness)) {
       return {
         level: "high",
         calf,
         backOrWrist,
         preferRecovery: true,
         reason: `${sourceLabel}${describeRisk(snapshot)}，先安排恢复。`,
-        sourceDate: latestDate,
-        ageDays
+        sourceDate: sourceKind === "morning" ? date : previousDate,
+        ageDays: sourceKind === "morning" ? 0 : 1
       };
     }
 
-    if ((ageDays <= 1 && (highFatigue || lowReadiness || maxPain === 1)) || (ageDays === 2 && (severeFatigue || maxPain >= 2))) {
+    if (highFatigue || maxPain === 1 || (sourceKind === "morning" && lowReadiness)) {
       return {
         level: "caution",
         calf,
         backOrWrist,
         preferRecovery: highFatigue || lowReadiness || maxPain >= 2,
         reason: `${sourceLabel}${describeRisk(snapshot)}，今天降低强度。`,
-        sourceDate: latestDate,
-        ageDays
+        sourceDate: sourceKind === "morning" ? date : previousDate,
+        ageDays: sourceKind === "morning" ? 0 : 1
       };
     }
 

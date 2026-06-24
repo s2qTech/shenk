@@ -65,16 +65,33 @@ const recentHistory = [
     energy: 1
   });
   const result = forecast("2026-06-25", 4, recentHistory, [tired]);
-  assert.equal(result[0].type, "recovery", "severe recent fatigue should downgrade the next day");
-  assert.notEqual(result[1].type, "recovery", "one stale status must not lock all future dates");
+  assert.equal(result[0].type, "strength", "yesterday morning status must not downgrade tomorrow");
 }
 
 {
-  const calfPain = metric("2026-06-24", {
+  const tiredToday = metric("2026-06-25", {
+    fatigue: "severe",
+    sleepQuality: "poor",
+    energy: 1
+  });
+  const result = engine.getRecommendation("2026-06-25", recentHistory, [tiredToday]);
+  assert.equal(result.type, "recovery", "today morning status should downgrade today");
+}
+
+{
+  const calfPain = metric("2026-06-25", {
     pain: { calf: 1, back: 0, wrist: 0, outerThigh: 0 }
   });
   const result = engine.getRecommendation("2026-06-25", recentHistory, [calfPain]);
   assert.ok(["easyWalk", "recovery"].includes(result.type), "mild calf pain should avoid hard training");
+}
+
+{
+  const fatiguedWorkout = recentHistory.concat(workout("2026-06-25", "easyWalk", {
+    fatigue: "severe"
+  }));
+  const result = engine.getRecommendation("2026-06-26", fatiguedWorkout, []);
+  assert.equal(result.type, "recovery", "post-workout severe fatigue should affect the next day");
 }
 
 {

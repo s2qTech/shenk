@@ -1416,7 +1416,7 @@
       </form>` : ""}
       ${visibleSections.status ? `<form class="editor-form" id="status-form">
         <input name="date" type="hidden" value="${state.selectedDate}">
-        ${formSection("状态记录", "", `
+        ${formSection("晨起状态", "按当天起床后的状态填写，主要用于调整当天建议。", `
           <div class="status-editor">
             <div class="status-primary-grid">
             ${field("体重（kg）", `<input name="weightKg" type="number" min="0" step="0.1" value="${escapeHtml(weightKg)}">`)}
@@ -1913,7 +1913,7 @@
     return `
       <div class="record-card">
         <div class="record-top">
-          <h3>状态记录</h3>
+          <h3>晨起状态</h3>
           <span class="tag">${escapeHtml(formatMetricTag(metric))}</span>
         </div>
         <p>疲劳 ${FATIGUE_META[metric.fatigue]}，昨晚睡眠 ${SLEEP_META[metric.sleepQuality]}，今日精力 ${metric.energy}/5。</p>
