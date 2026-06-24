@@ -16,6 +16,8 @@
 
 - 前端：静态 HTML/CSS/JS。
 - 本地存储：IndexedDB，失败时回退到 localStorage。
+- 本地建议：滚动训练规则在浏览器内计算，不依赖云端或 AI 在线。
+- 离线使用：成功打开一次后缓存应用外壳；断网时仍可查看、记录和生成建议，恢复联网后再同步。
 - 云端：Cloudflare Worker + D1，使用通用 `cloud_records` JSON envelope。
 - 部署：可放 GitHub Pages / Cloudflare Pages。
 - Android：后续可用 WebView 壳封装。

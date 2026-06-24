@@ -266,6 +266,7 @@
 
   async function init() {
     render();
+    registerOfflineSupport();
     const snapshot = normalizeSnapshot(await loadSnapshot());
     state.workouts = normalizeWorkouts(snapshot.workouts);
     state.bodyMetrics = normalizeBodyMetrics(snapshot.bodyMetrics);
@@ -289,6 +290,13 @@
       }, false);
       render();
     }, 300);
+  }
+
+  function registerOfflineSupport() {
+    if (!("serviceWorker" in navigator) || !/^https?:$/.test(window.location.protocol)) return;
+    navigator.serviceWorker.register("./sw.js").catch(() => {
+      // Local records and recommendations remain available even if registration fails.
+    });
   }
 
   async function loadSnapshot() {
@@ -1220,13 +1228,12 @@
   function renderAdviceCard(date, kind) {
     const recommendation = getDisplayRecommendation(date);
     const meta = TYPE_META[recommendation.type];
-    const isToday = date === todayISO();
     const label = kind === "forecast" ? "预测" : "建议";
     return `
       <div class="suggestion advice-${kind}">
         <div class="suggestion-top">
           <div>
-            <span class="suggestion-label">${label} · ${escapeHtml(recommendation.label)}</span>
+            <span class="suggestion-label">${label} · ${escapeHtml(recommendation.sourceLabel || "本地规则")} · ${escapeHtml(recommendation.label)}</span>
             <h2>${renderTypeIcon(recommendation.type, "title-icon-img")}${escapeHtml(recommendation.title)}</h2>
           </div>
           <div class="suggestion-time">${recommendation.minutes}<span class="sr-only">分钟</span></div>
@@ -3492,121 +3499,17 @@
   }
 
   function getRecommendation(date, sourceWorkouts = state.workouts) {
-    const last7 = getWindowWorkoutsFrom(sourceWorkouts, date, 7).filter(isCompletedRecord);
-    const recent = [...sourceWorkouts].filter((item) => item.date < date).sort((a, b) => b.date.localeCompare(a.date));
-    const yesterday = recent[0] || null;
-    const strengthCount = last7.filter((item) => item.type === "strength").length;
-    const aerobicCount = last7.filter((item) => ["easyWalk", "qualityWalk", "indoorCardio"].includes(item.type)).length;
-    const qualityCount = last7.filter((item) => item.type === "qualityWalk").length;
-    const recoveryCount = last7.filter((item) => ["recovery", "rest"].includes(item.type)).length;
-    const risk = getRecentRisk(date, sourceWorkouts);
-
-    if (risk.level === "high") {
-      return {
-        type: "recovery",
-        label: "降级优先",
-        title: "恢复或轻拉伸",
-        minutes: 12,
-        reasons: [
-          risk.reason,
-          "状态文件要求疼痛、疲劳或异常体感优先降级。",
-          "今天只保留低压力活动，不补课。"
-        ]
-      };
-    }
-
-    if (yesterday && ["qualityWalk", "strength"].includes(yesterday.type)) {
+    if (!window.ShenkeRecommendationEngine) {
       return {
         type: "easyWalk",
-        label: "承接昨天",
-        title: "普通走或室内有氧",
-        minutes: 35,
-        reasons: [
-          `上一条记录是${TYPE_META[yesterday.type].label}，今天避免连续偏硬。`,
-          `近 7 天力量 ${strengthCount} 次，有氧 ${aerobicCount} 次。`,
-          "保持可交谈强度，完成比拉高强度更重要。"
-        ]
-      };
-    }
-
-    if (strengthCount < 2 && !risk.backOrWrist) {
-      return {
-        type: "strength",
-        label: "补足力量",
-        title: "短版力量训练",
-        minutes: 32,
-        reasons: [
-          `近 7 天力量 ${strengthCount} 次，目标约 2 次。`,
-          "避开手腕承重动作，保护腰背。",
-          "强度不按出汗判断，以动作稳定为准。"
-        ]
-      };
-    }
-
-    if (aerobicCount < 3) {
-      return {
-        type: "easyWalk",
-        label: "补足有氧",
+        label: "基础建议",
         title: "普通走",
-        minutes: 40,
-        reasons: [
-          `近 7 天有氧 ${aerobicCount} 次，目标约 3 次。`,
-          "不追求配速，保持轻松和稳定。",
-          "若小腿发紧，改为室内恢复。"
-        ]
+        minutes: 35,
+        reasons: ["建议模块暂未载入，先保持轻松活动。"],
+        sourceLabel: "本地规则"
       };
     }
-
-    if (qualityCount < 1 && aerobicCount >= 2 && !risk.calf) {
-      return {
-        type: "qualityWalk",
-        label: "可控提高",
-        title: "提高走",
-        minutes: 45,
-        reasons: [
-          "近 7 天还没有提高走，且基础有氧已有铺垫。",
-          "只做可控提高，不做冲刺。",
-          "小腿或腰背不适时立即降级。"
-        ]
-      };
-    }
-
-    return {
-      type: recoveryCount < 1 ? "recovery" : "easyWalk",
-      label: "维持节奏",
-      title: recoveryCount < 1 ? "恢复日" : "普通走",
-      minutes: recoveryCount < 1 ? 15 : 35,
-      reasons: [
-        `近 7 天力量 ${strengthCount} 次，有氧 ${aerobicCount} 次，提高走 ${qualityCount} 次。`,
-        "当前不需要补课，按身体状态维持节奏。",
-        "疲劳上来时改为恢复。"
-      ]
-    };
-  }
-
-  function getRecentRisk(date, sourceWorkouts = state.workouts) {
-    const recentWorkout = [...sourceWorkouts]
-      .filter((item) => item.date < date && item.source !== "forecast")
-      .sort((a, b) => b.date.localeCompare(a.date))[0] || null;
-    const recentMetric = [...state.bodyMetrics]
-      .filter((item) => item.date < date)
-      .sort((a, b) => b.date.localeCompare(a.date))[0] || null;
-    const recent = recentMetric && (!recentWorkout || recentMetric.date >= recentWorkout.date) ? recentMetric : recentWorkout;
-    if (!recent) return { level: "normal", calf: false, backOrWrist: false, reason: "" };
-    const sourceName = recent === recentMetric ? "最近状态" : "最近记录";
-    const pain = recent.pain || {};
-    const calf = pain.calf > 0;
-    const backOrWrist = pain.back > 0 || pain.wrist > 0;
-    if (recent.fatigue === "severe" || recent.fatigue === "high") {
-      return { level: "high", calf, backOrWrist, reason: `${sourceName}疲劳为${FATIGUE_META[recent.fatigue]}。` };
-    }
-    if (calf) {
-      return { level: "high", calf, backOrWrist, reason: `${sourceName}有小腿不适。` };
-    }
-    if (pain.back > 1 || pain.wrist > 1) {
-      return { level: "high", calf, backOrWrist, reason: `${sourceName}有腰背或手腕不适。` };
-    }
-    return { level: "normal", calf, backOrWrist, reason: "" };
+    return window.ShenkeRecommendationEngine.getRecommendation(date, sourceWorkouts, state.bodyMetrics);
   }
 
   function getWindowWorkouts(date, days) {
