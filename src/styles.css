@@ -326,7 +326,7 @@ textarea {
 }
 
 .data-page .data-column:last-child {
-  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-rows: auto auto minmax(0, 1fr);
 }
 
 .data-page .data-column:first-child .panel,
@@ -366,6 +366,124 @@ textarea {
 .data-page .trend-chart {
   height: 100%;
   min-height: 0;
+}
+
+.feedback-export {
+  display: grid;
+  gap: 8px;
+}
+
+.feedback-controls {
+  display: grid;
+  grid-template-columns: minmax(120px, 0.42fr) minmax(0, 1fr);
+  gap: 8px;
+  align-items: end;
+}
+
+.feedback-controls label {
+  display: grid;
+  gap: 5px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.feedback-controls select {
+  width: 100%;
+}
+
+.feedback-controls .button-row {
+  justify-content: flex-end;
+}
+
+.feedback-status {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.feedback-output {
+  min-height: 96px;
+  max-height: 150px;
+  resize: vertical;
+  font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.plan-patch-panel {
+  display: grid;
+  gap: 10px;
+}
+
+.plan-patch-input {
+  min-height: 132px;
+  resize: vertical;
+  font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.compact-metrics {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.preview-note {
+  margin: 8px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.preview-list {
+  display: grid;
+  gap: 4px;
+  margin: 8px 0 0;
+  color: #8a5a16;
+  font-size: 12px;
+  padding-left: 18px;
+}
+
+.preview-timeline {
+  display: grid;
+  gap: 5px;
+  max-height: 180px;
+  overflow: auto;
+  margin-top: 10px;
+}
+
+.preview-row {
+  display: grid;
+  grid-template-columns: 88px minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-2);
+  padding: 7px 9px;
+  font-size: 12px;
+}
+
+.preview-row span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.preview-row em {
+  color: var(--green-dark);
+  font-style: normal;
+}
+
+.preview-row.is-skipped {
+  color: var(--muted);
+  background: #f3f4f1;
+}
+
+.preview-row.is-skipped em {
+  color: var(--muted);
+}
+
+.danger-text {
+  color: #9a3c30;
 }
 
 .panel-action {
@@ -1274,6 +1392,14 @@ textarea {
   background: var(--yellow);
 }
 
+.legend-plan {
+  background: #8fb79c;
+}
+
+.legend-adjustment {
+  background: #d4a640;
+}
+
 .legend-timer {
   background: #7b8fc7;
 }
@@ -1488,6 +1614,16 @@ textarea {
   color: #7b6429;
 }
 
+.marker-plan {
+  color: #365a41;
+  font-weight: 600;
+}
+
+.marker-adjustment {
+  color: #7b5720;
+  font-weight: 700;
+}
+
 .marker-forecast {
   color: #516d7d;
 }
@@ -1654,16 +1790,37 @@ textarea {
   color: #5e6d64;
 }
 
+.calendar-plan {
+  color: #405b48;
+}
+
+.calendar-adjustment {
+  background:
+    repeating-linear-gradient(
+      135deg,
+      rgba(188, 129, 31, 0.12) 0,
+      rgba(188, 129, 31, 0.12) 8px,
+      rgba(255, 255, 255, 0.18) 8px,
+      rgba(255, 255, 255, 0.18) 18px
+    ),
+    #f0dfb8;
+  color: #6a4c19;
+}
+
 .calendar-forecast {
   color: #676f6a;
 }
 
 .calendar-suggestion .day-marker,
+.calendar-plan .day-marker,
+.calendar-adjustment .day-marker,
 .calendar-forecast .day-marker {
   font-weight: 400;
 }
 
-.calendar-suggestion .day-content {
+.calendar-suggestion .day-content,
+.calendar-plan .day-content,
+.calendar-adjustment .day-content {
   background: transparent;
 }
 
@@ -1678,7 +1835,8 @@ textarea {
 }
 
 .calendar-actual.type-strength,
-.calendar-suggestion.type-strength {
+.calendar-suggestion.type-strength,
+.calendar-plan.type-strength {
   --hover-border: rgba(43, 116, 65, 0.32);
   --hover-glow: rgba(57, 152, 82, 0.34);
   --hover-halo: rgba(57, 152, 82, 0.18);
@@ -1687,7 +1845,8 @@ textarea {
 }
 
 .calendar-actual.type-easyWalk,
-.calendar-suggestion.type-easyWalk {
+.calendar-suggestion.type-easyWalk,
+.calendar-plan.type-easyWalk {
   --hover-border: rgba(54, 125, 153, 0.3);
   --hover-glow: rgba(69, 157, 189, 0.32);
   --hover-halo: rgba(69, 157, 189, 0.16);
@@ -1696,7 +1855,8 @@ textarea {
 }
 
 .calendar-actual.type-qualityWalk,
-.calendar-suggestion.type-qualityWalk {
+.calendar-suggestion.type-qualityWalk,
+.calendar-plan.type-qualityWalk {
   --hover-border: rgba(75, 101, 174, 0.34);
   --hover-glow: rgba(86, 123, 218, 0.34);
   --hover-halo: rgba(86, 123, 218, 0.16);
@@ -1705,7 +1865,8 @@ textarea {
 }
 
 .calendar-actual.type-indoorCardio,
-.calendar-suggestion.type-indoorCardio {
+.calendar-suggestion.type-indoorCardio,
+.calendar-plan.type-indoorCardio {
   --hover-border: rgba(44, 132, 120, 0.3);
   --hover-glow: rgba(54, 168, 151, 0.32);
   --hover-halo: rgba(54, 168, 151, 0.16);
@@ -1714,7 +1875,8 @@ textarea {
 }
 
 .calendar-actual.type-recovery,
-.calendar-suggestion.type-recovery {
+.calendar-suggestion.type-recovery,
+.calendar-plan.type-recovery {
   --hover-border: rgba(163, 117, 28, 0.3);
   --hover-glow: rgba(210, 155, 42, 0.34);
   --hover-halo: rgba(210, 155, 42, 0.17);
@@ -1723,7 +1885,8 @@ textarea {
 }
 
 .calendar-actual.type-rest,
-.calendar-suggestion.type-rest {
+.calendar-suggestion.type-rest,
+.calendar-plan.type-rest {
   --hover-border: rgba(118, 106, 83, 0.26);
   --hover-glow: rgba(156, 140, 108, 0.27);
   --hover-halo: rgba(156, 140, 108, 0.14);
@@ -1733,16 +1896,23 @@ textarea {
 
 .calendar-actual.type-strength .day-kind,
 .calendar-suggestion.type-strength .day-kind,
+.calendar-plan.type-strength .day-kind,
 .calendar-actual.type-easyWalk .day-kind,
 .calendar-suggestion.type-easyWalk .day-kind,
+.calendar-plan.type-easyWalk .day-kind,
 .calendar-actual.type-qualityWalk .day-kind,
 .calendar-suggestion.type-qualityWalk .day-kind,
+.calendar-plan.type-qualityWalk .day-kind,
 .calendar-actual.type-indoorCardio .day-kind,
 .calendar-suggestion.type-indoorCardio .day-kind,
+.calendar-plan.type-indoorCardio .day-kind,
 .calendar-actual.type-recovery .day-kind,
 .calendar-suggestion.type-recovery .day-kind,
+.calendar-plan.type-recovery .day-kind,
 .calendar-actual.type-rest .day-kind,
-.calendar-suggestion.type-rest .day-kind {
+.calendar-suggestion.type-rest .day-kind,
+.calendar-plan.type-rest .day-kind,
+.calendar-adjustment .day-kind {
   color: currentColor;
 }
 
@@ -2328,11 +2498,16 @@ textarea {
   .form-grid,
   .status-primary-grid,
   .status-pain-grid,
+  .feedback-controls,
   .timer-stat-grid,
   .timer-filters,
   .timer-detail-grid,
   .data-grid {
     grid-template-columns: 1fr;
+  }
+
+  .feedback-controls .button-row {
+    justify-content: flex-start;
   }
 
   .timer-table {

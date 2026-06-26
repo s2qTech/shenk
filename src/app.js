@@ -249,6 +249,10 @@
     },
     timerFrameUrl: "",
     dataView: "summary",
+    feedbackDays: 14,
+    feedbackExport: null,
+    planPatchText: "",
+    planPatchPreview: null,
     editorDrafts: null,
     editorSections: null,
     workouts: [],
@@ -1055,6 +1059,7 @@
           ${renderPageHead("设置")}
           <div class="data-grid-layout">
             ${panel("云数据库", "Cloudflare Worker + D1，同一份云端数据，按角色读写", renderSyncPanel())}
+            ${panel("计划草案", "粘贴 Codex 输出，预览后再写入日历计划", renderPlanPatchPanel())}
             ${panel("本地数据", "导入、导出和种子记录", renderDataPanel())}
           </div>
         </section>
@@ -1106,6 +1111,7 @@
           </div>
           <div class="data-column">
             ${panel("记录概览", "最近训练节奏", renderOverview())}
+            ${panel("Codex 反馈", "导出训练、状态和计时器摘要", renderFeedbackExportPanel())}
             ${panel(
               "最近记录",
               "只显示最近 8 条",
@@ -1259,6 +1265,30 @@
         <div class="metric"><strong>${completed}</strong><span>30 天完成</span></div>
         <div class="metric"><strong>${formatNumber(distance, 1)}</strong><span>30 天公里</span></div>
         <div class="metric"><strong>${strength}/${aerobic}</strong><span>7 天力/有氧</span></div>
+      </div>
+    `;
+  }
+
+  function renderFeedbackExportPanel() {
+    const output = state.feedbackExport;
+    const generated = output ? `已生成 ${output.period.from} - ${output.period.to}` : "选择时间范围后生成";
+    return `
+      <div class="feedback-export">
+        <div class="feedback-controls">
+          <label>
+            <span>范围</span>
+            <select data-feedback-range>
+              ${[7, 14, 30].map((days) => `<option value="${days}" ${state.feedbackDays === days ? "selected" : ""}>最近 ${days} 天</option>`).join("")}
+            </select>
+          </label>
+          <div class="button-row">
+            <button type="button" class="primary" data-action="generate-feedback">生成摘要</button>
+            <button type="button" data-action="copy-feedback" ${output ? "" : "disabled"}>复制</button>
+            <button type="button" data-action="download-feedback" ${output ? "" : "disabled"}>下载</button>
+          </div>
+        </div>
+        <p class="feedback-status">${escapeHtml(generated)}</p>
+        <textarea class="feedback-output" readonly placeholder="生成后可复制给训练计划对话。">${output ? escapeHtml(output.text) : ""}</textarea>
       </div>
     `;
   }
@@ -1610,10 +1640,12 @@
       if (record) {
         entries.set(date, calendarEntryFromRecord(record));
       } else {
+        const adjustment = getPlanAdjustmentsByDate(date).at(-1);
+        const planItem = getPlanItemsByDate(date)[0];
         const pendingTimers = getConfirmableTimerSessions(date);
-        if (pendingTimers.length) {
-          entries.set(date, calendarEntryFromTimerSession(pendingTimers[0]));
-        }
+        if (adjustment) entries.set(date, calendarEntryFromPlanAdjustment(adjustment));
+        else if (planItem) entries.set(date, calendarEntryFromPlanItem(planItem));
+        else if (pendingTimers.length) entries.set(date, calendarEntryFromTimerSession(pendingTimers[0]));
       }
     }
 
@@ -1705,6 +1737,29 @@
     };
   }
 
+  function calendarEntryFromPlanItem(envelope) {
+    const data = envelope.data || {};
+    return calendarEntryFromPlanData(data, "plan", "计划");
+  }
+
+  function calendarEntryFromPlanAdjustment(envelope) {
+    const data = envelope.data || {};
+    return calendarEntryFromPlanData(data.toSnapshot || data.to_snapshot || {}, "adjustment", "调整");
+  }
+
+  function calendarEntryFromPlanData(data, kind, marker) {
+    const type = toLegacyTrainingType(data.trainingType || data.type);
+    const meta = TYPE_META[type] || TYPE_META.easyWalk;
+    return {
+      kind,
+      type,
+      icon: meta.icon,
+      marker,
+      text: getPlanItemDisplayTitle(data) || meta.label,
+      className: meta.className
+    };
+  }
+
   function makeVirtualWorkout(date, recommendation) {
     return {
       id: `forecast-${date}`,
@@ -1774,6 +1829,8 @@
           </div>
           <div class="calendar-legend">
             <span><i class="legend-dot legend-actual"></i>记录</span>
+            <span><i class="legend-dot legend-plan"></i>计划</span>
+            <span><i class="legend-dot legend-adjustment"></i>调整</span>
             <span><i class="legend-dot legend-timer"></i>计时器待确认</span>
             <span><i class="legend-dot legend-suggestion"></i>今日建议</span>
             <span><i class="legend-dot legend-forecast"></i>未来预测</span>
@@ -2129,6 +2186,58 @@
     `;
   }
 
+  function renderPlanPatchPanel() {
+    const preview = state.planPatchPreview;
+    const result = preview && preview.patch ? previewPlanPatch(preview.patch) : null;
+    const invalid = preview && preview.error;
+    return `
+      <div class="plan-patch-panel">
+        <textarea
+          id="plan-patch-input"
+          class="plan-patch-input"
+          rows="7"
+          placeholder="粘贴包含 coach_plan_patch 的 JSON 或 Codex 回复。"
+        >${escapeHtml(state.planPatchText)}</textarea>
+        <div class="button-row">
+          <button type="button" data-action="parse-plan-patch">校验预览</button>
+          <button type="button" class="primary" data-action="apply-plan-patch" ${result && result.valid ? "" : "disabled"}>确认写入</button>
+          <button type="button" data-action="clear-plan-patch" ${state.planPatchText || preview ? "" : "disabled"}>清空</button>
+        </div>
+        ${invalid ? `<div class="empty-state compact danger-text">${escapeHtml(preview.error)}</div>` : ""}
+        ${result ? renderPlanPatchPreview(result) : `<div class="empty-state compact">草案不会自动生效，必须先预览再确认。</div>`}
+      </div>
+    `;
+  }
+
+  function renderPlanPatchPreview(result) {
+    const rows = [
+      ["计划模板", result.planTemplate ? result.planAction : "无"],
+      ["动作模板", `${result.routineCount} 个`],
+      ["日计划", `新增 ${result.newDailyCount}，调整 ${result.adjustedDailyCount}，跳过 ${result.skippedDailyCount}`],
+      ["计划调整", `${result.adjustmentCount} 条`]
+    ];
+    return `
+      <div class="plan-patch-preview">
+        <div class="metric-row compact-metrics">
+          ${rows.map(([label, value]) => `<div class="metric"><strong>${escapeHtml(value)}</strong><span>${escapeHtml(label)}</span></div>`).join("")}
+        </div>
+        ${result.skippedDates.length ? `<p class="preview-note">已有实际训练，不覆盖：${escapeHtml(result.skippedDates.join("、"))}</p>` : ""}
+        ${result.warnings.length ? `<ul class="preview-list">${result.warnings.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>` : ""}
+        ${result.dailyPreview.length ? `
+          <div class="preview-timeline">
+            ${result.dailyPreview.map((item) => `
+              <div class="preview-row ${item.skipped ? "is-skipped" : ""}">
+                <strong>${escapeHtml(item.date)}</strong>
+                <span>${escapeHtml(item.title)}</span>
+                <em>${escapeHtml(item.action)}</em>
+              </div>
+            `).join("")}
+          </div>
+        ` : ""}
+      </div>
+    `;
+  }
+
   function renderRecordList(records, className = "") {
     if (!records.length) {
       return `<div class="empty-state">暂无记录。</div>`;
@@ -2390,6 +2499,22 @@
       });
     });
 
+    app.querySelectorAll("[data-feedback-range]").forEach((input) => {
+      input.addEventListener("change", () => {
+        state.feedbackDays = clamp(Math.round(toNullableNumber(input.value) || 14), 7, 30);
+        state.feedbackExport = null;
+        render();
+      });
+    });
+
+    const planPatchInput = app.querySelector("#plan-patch-input");
+    if (planPatchInput) {
+      planPatchInput.addEventListener("input", () => {
+        state.planPatchText = planPatchInput.value;
+        state.planPatchPreview = null;
+      });
+    }
+
     app.querySelectorAll("[data-date]").forEach((button) => {
       button.addEventListener("click", () => {
         state.selectedDate = button.dataset.date;
@@ -2464,6 +2589,12 @@
     bindAction("open-timer-plan", openTimerFromPlan);
     bindAction("open-all-records", openAllRecords);
     bindAction("back-to-data", backToDataSummary);
+    bindAction("generate-feedback", generateFeedbackExport);
+    bindAction("copy-feedback", copyFeedbackExport);
+    bindAction("download-feedback", downloadFeedbackExport);
+    bindAction("parse-plan-patch", parsePlanPatchFromInput);
+    bindAction("apply-plan-patch", applyPlanPatchFromPreview);
+    bindAction("clear-plan-patch", clearPlanPatchInput);
     bindAction("resolve-conflicts-cloud", resolveConflictsWithCloud);
     bindAction("resolve-conflicts-local", resolveConflictsWithLocal);
   }
@@ -2561,6 +2692,599 @@
     state.editMode = false;
     clearEditorDrafts();
     render();
+  }
+
+  async function generateFeedbackExport() {
+    await persistFeedbackExport();
+    render();
+  }
+
+  async function copyFeedbackExport() {
+    const output = state.feedbackExport || await persistFeedbackExport();
+    try {
+      await navigator.clipboard.writeText(output.text);
+      state.message = "反馈摘要已复制";
+    } catch (error) {
+      window.prompt("复制这段反馈摘要给 Codex：", output.text);
+      state.message = "浏览器未允许自动复制，已弹出摘要文本";
+    }
+    render();
+  }
+
+  async function downloadFeedbackExport() {
+    const output = state.feedbackExport || await persistFeedbackExport();
+    downloadTextFile(`shenk-feedback-${output.period.from}_${output.period.to}.md`, output.text, "text/markdown");
+    state.message = "反馈摘要已下载";
+    render();
+  }
+
+  async function persistFeedbackExport() {
+    const output = buildFeedbackExport(state.feedbackDays);
+    state.feedbackExport = output;
+    upsertSharedEnvelope(state.records, "feedback_summaries", output.summary);
+    const message = `已生成 ${output.period.from} - ${output.period.to} 反馈摘要`;
+    await saveSnapshot(message);
+    await autoPushDirtyRecords(message);
+    return output;
+  }
+
+  function buildFeedbackExport(days) {
+    const period = getPeriodForRecentDays(days);
+    const dates = enumerateDates(period.from, period.to);
+    const workouts = state.workouts.filter((item) => dateInRange(item.date, period.from, period.to));
+    const metrics = state.bodyMetrics.filter((item) => dateInRange(item.date, period.from, period.to));
+    const timerSessions = getAllTimerSessions().filter((item) => dateInRange(item.data?.date, period.from, period.to));
+    const planItems = (state.records.daily_plan_items || []).filter((item) => !item.deletedAt && dateInRange(item.data?.date, period.from, period.to));
+    const adjustments = (state.records.plan_adjustments || []).filter((item) => !item.deletedAt && dateInRange(item.data?.date, period.from, period.to));
+    const todayRecommendation = recommendationToFeedback(todayISO(), getDisplayRecommendation(todayISO()));
+    const upcomingRecommendations = dates
+      .filter((date) => date >= todayISO())
+      .slice(0, 7)
+      .map((date) => recommendationToFeedback(date, getDisplayRecommendation(date)));
+    const generatedAt = new Date().toISOString();
+    const summary = {
+      id: `feedback_${period.from}_${period.to}`,
+      schema: "shenk_feedback_summary",
+      schemaVersion: "1.0",
+      generatedAt,
+      period,
+      currentPlan: getCurrentPlanForFeedback(),
+      actualSummary: summarizeFeedbackWorkouts(workouts),
+      planSummary: summarizeFeedbackPlans(planItems, adjustments, dates, workouts),
+      timerSessions: timerSessions.map(timerSessionToFeedback),
+      trainingLogs: workouts.map(workoutToFeedback),
+      bodyMetrics: metrics.map(metricToFeedback),
+      bodyTrend: summarizeBodyTrend(metrics),
+      painTrend: summarizePainTrend(metrics),
+      localRecommendations: {
+        today: todayRecommendation,
+        upcoming: upcomingRecommendations
+      },
+      openQuestions: buildFeedbackOpenQuestions(workouts, metrics, timerSessions)
+    };
+    return {
+      period,
+      summary,
+      text: renderFeedbackMarkdown(summary)
+    };
+  }
+
+  function getPeriodForRecentDays(days) {
+    const to = todayISO();
+    const start = parseIsoDate(to);
+    start.setDate(start.getDate() - Math.max(1, days) + 1);
+    return { from: dateToISO(start), to, days };
+  }
+
+  function enumerateDates(from, to) {
+    const dates = [];
+    const cursor = parseIsoDate(from);
+    const end = parseIsoDate(to);
+    while (cursor <= end) {
+      dates.push(dateToISO(cursor));
+      cursor.setDate(cursor.getDate() + 1);
+    }
+    return dates;
+  }
+
+  function dateInRange(date, from, to) {
+    return isIsoDate(date) && date >= from && date <= to;
+  }
+
+  function workoutToFeedback(record) {
+    const meta = TYPE_META[record.type] || TYPE_META.easyWalk;
+    return {
+      date: record.date,
+      type: toSharedTrainingType(record.type),
+      typeLabel: meta.label,
+      status: toSharedCompletionStatus(record.status, toSharedTrainingType(record.type)),
+      statusLabel: getStatusLabel(record.status, record.type),
+      source: record.source || "manual",
+      durationSec: toNullableNumber(record.durationSec),
+      distanceKm: toNullableNumber(record.distanceKm),
+      avgHeartRate: toNullableNumber(record.avgHeartRate),
+      avgPace: getPace(record) || "",
+      timerLinked: Boolean(record.timerSessionId || (Array.isArray(record.timerSessionIds) && record.timerSessionIds.length)),
+      notes: formatPublicNotes(record.notes)
+    };
+  }
+
+  function metricToFeedback(metric) {
+    return {
+      date: metric.date,
+      weightKg: toNullableNumber(metric.weightKg),
+      waistCm: toNullableNumber(metric.waistCm),
+      bodyFatPct: toNullableNumber(metric.bodyFatPct),
+      muscleKg: toNullableNumber(metric.muscleKg),
+      sleepQuality: metric.sleepQuality || "normal",
+      sleepLabel: SLEEP_META[metric.sleepQuality] || "一般",
+      energy: toNullableNumber(metric.energy),
+      fatigue: normalizeSharedFatigue(metric.fatigue),
+      fatigueLabel: FATIGUE_META[metric.fatigue] || FATIGUE_META[sharedFatigueToLegacy(metric.fatigue)] || "正常",
+      painSummary: formatPainSummary(metric.pain) || "无",
+      notes: formatPublicNotes(metric.notes)
+    };
+  }
+
+  function timerSessionToFeedback(envelope) {
+    const data = envelope.data || {};
+    const handling = getTimerSessionHandling(envelope);
+    return {
+      date: data.date,
+      title: getTimerSessionTitle(data),
+      type: data.trainingType || "",
+      typeLabel: getTimerTypeMeta(data.trainingType).label,
+      startedAt: data.startedAt || "",
+      endedAt: data.endedAt || "",
+      actualSeconds: toNullableNumber(data.actualSeconds),
+      duration: data.actualSeconds ? formatDuration(data.actualSeconds) : "",
+      completion: data.completion || "",
+      completionLabel: getTimerCompletionLabel(data.completion),
+      handling: handling.action,
+      handlingLabel: handling.label,
+      role: handling.role || "",
+      roleLabel: handling.roleLabel || "",
+      notes: formatPublicNotes(data.notes)
+    };
+  }
+
+  function recommendationToFeedback(date, recommendation) {
+    const type = recommendation.type || "easyWalk";
+    return {
+      date,
+      type: toSharedTrainingType(type),
+      typeLabel: TYPE_META[type]?.label || getTimerTypeMeta(type).label,
+      title: recommendation.title || TYPE_META[type]?.label || "普通走",
+      label: recommendation.label || "",
+      minutes: recommendation.minutes || null,
+      reasons: Array.isArray(recommendation.reasons) ? recommendation.reasons : [],
+      sourceLabel: recommendation.sourceLabel || "本地规则"
+    };
+  }
+
+  function summarizeFeedbackWorkouts(workouts) {
+    const completed = workouts.filter(isCompletedRecord).length;
+    const distanceKm = workouts.reduce((sum, item) => sum + (toNullableNumber(item.distanceKm) || 0), 0);
+    const durationSec = workouts.reduce((sum, item) => sum + (toNullableNumber(item.durationSec) || 0), 0);
+    return {
+      total: workouts.length,
+      completed,
+      skipped: workouts.filter((item) => item.status === "skipped").length,
+      short: workouts.filter((item) => item.status === "short").length,
+      stretchOnly: workouts.filter((item) => item.status === "stretchOnly").length,
+      distanceKm: Number(distanceKm.toFixed(2)),
+      durationSec,
+      byType: countBy(workouts, (item) => TYPE_META[item.type]?.label || item.type)
+    };
+  }
+
+  function summarizeFeedbackPlans(planItems, adjustments, dates, workouts) {
+    const workoutDates = new Set(workouts.map((item) => item.date));
+    const plannedDates = new Set(planItems.map((item) => item.data?.date).filter(Boolean));
+    return {
+      plannedDays: plannedDates.size,
+      adjustmentCount: adjustments.length,
+      plannedWithoutActual: Array.from(plannedDates).filter((date) => date <= todayISO() && !workoutDates.has(date)),
+      fallbackDays: dates.filter((date) => !plannedDates.has(date) && !workoutDates.has(date)).length,
+      planItems: planItems.map((item) => {
+        const data = item.data || {};
+        return {
+          date: data.date,
+          title: getPlanItemDisplayTitle(data) || data.title || "",
+          trainingType: data.trainingType || "",
+          estimatedMinutes: toNullableNumber(data.estimatedMinutes),
+          status: data.status || "planned",
+          notes: formatPublicNotes(data.notes)
+        };
+      }),
+      adjustments: adjustments.map((item) => {
+        const data = item.data || {};
+        return {
+          date: data.date,
+          reason: formatPublicNotes(data.reason),
+          from: getPlanItemDisplayTitle(data.fromSnapshot || {}) || data.fromSnapshot?.title || "",
+          to: getPlanItemDisplayTitle(data.toSnapshot || {}) || data.toSnapshot?.title || ""
+        };
+      })
+    };
+  }
+
+  function summarizeBodyTrend(metrics) {
+    return {
+      count: metrics.length,
+      weight: numericTrend(metrics, "weightKg", "kg"),
+      waist: numericTrend(metrics, "waistCm", "cm"),
+      bodyFat: numericTrend(metrics, "bodyFatPct", "%"),
+      muscle: numericTrend(metrics, "muscleKg", "kg")
+    };
+  }
+
+  function numericTrend(records, key, unit) {
+    const values = records.filter((item) => item[key] !== null && item[key] !== undefined);
+    if (!values.length) return null;
+    const first = values[0];
+    const latest = values[values.length - 1];
+    const delta = latest[key] - first[key];
+    return {
+      first: { date: first.date, value: first[key] },
+      latest: { date: latest.date, value: latest[key] },
+      delta: Number(delta.toFixed(1)),
+      unit
+    };
+  }
+
+  function summarizePainTrend(metrics) {
+    return metrics
+      .map((metric) => ({ date: metric.date, pain: formatPainSummary(metric.pain), fatigue: FATIGUE_META[metric.fatigue] || "正常" }))
+      .filter((item) => item.pain || item.fatigue !== "正常");
+  }
+
+  function getCurrentPlanForFeedback() {
+    const plans = (state.records.plan_templates || []).filter((item) => !item.deletedAt).map((item) => item.data || {});
+    if (!plans.length) return null;
+    const active = plans.find((item) => item.status === "active") || plans.sort((a, b) => String(b.updatedAt || "").localeCompare(String(a.updatedAt || "")))[0];
+    return {
+      title: active.title || "",
+      version: active.version || "",
+      status: active.status || "",
+      effectiveFrom: active.effectiveFrom || null,
+      effectiveTo: active.effectiveTo || null,
+      goal: active.goal || [],
+      rules: active.rules || {}
+    };
+  }
+
+  function buildFeedbackOpenQuestions(workouts, metrics, timerSessions) {
+    const questions = [];
+    const recentPain = metrics.filter((item) => formatPainSummary(item.pain)).slice(-3);
+    if (recentPain.length) questions.push("近期仍有疼痛记录，是否需要继续降低提高走或力量密度？");
+    if (workouts.some((item) => item.status === "skipped" || item.status === "short")) questions.push("最近存在跳过或缩短训练，是否需要调整下一阶段计划容量？");
+    if (timerSessions.some((item) => getTimerSessionHandling(item).action === "pending")) questions.push("仍有计时器记录未确认，是否先补齐正式训练日志再改计划？");
+    return questions;
+  }
+
+  function countBy(items, keyFn) {
+    return items.reduce((acc, item) => {
+      const key = keyFn(item) || "其他";
+      acc[key] = (acc[key] || 0) + 1;
+      return acc;
+    }, {});
+  }
+
+  function renderFeedbackMarkdown(summary) {
+    const actual = summary.actualSummary;
+    const body = summary.bodyTrend;
+    const recommendation = summary.localRecommendations.today;
+    const lines = [
+      "# 身刻反馈摘要",
+      "",
+      `范围：${summary.period.from} 至 ${summary.period.to}（${summary.period.days} 天）`,
+      `生成时间：${summary.generatedAt}`,
+      "",
+      "## 快速概览",
+      `- 训练记录：${actual.total} 条，完成 ${actual.completed} 条，跳过 ${actual.skipped} 条，短版 ${actual.short} 条，只拉伸 ${actual.stretchOnly} 条。`,
+      `- 训练总量：${formatDuration(actual.durationSec)}，距离 ${formatNumber(actual.distanceKm, 2)} km。`,
+      `- 计时器记录：${summary.timerSessions.length} 条，其中待处理 ${summary.timerSessions.filter((item) => item.handling === "pending").length} 条。`,
+      `- 状态记录：${summary.bodyMetrics.length} 条。`,
+      body.weight ? `- 体重：${body.weight.latest.value} ${body.weight.unit}，区间变化 ${body.weight.delta} ${body.weight.unit}。` : "- 体重：无记录。",
+      body.waist ? `- 腰围：${body.waist.latest.value} ${body.waist.unit}，区间变化 ${body.waist.delta} ${body.waist.unit}。` : "- 腰围：无记录。",
+      "",
+      "## 今日本地建议",
+      `- ${recommendation.title}${recommendation.minutes ? `，${recommendation.minutes} 分钟` : ""}。`,
+      ...recommendation.reasons.map((reason) => `- ${reason}`),
+      "",
+      "## 最近训练",
+      ...(summary.trainingLogs.length ? summary.trainingLogs.map((item) => `- ${item.date}：${item.typeLabel}，${item.statusLabel}${item.durationSec ? `，${formatDuration(item.durationSec)}` : ""}${item.distanceKm ? `，${formatNumber(item.distanceKm, 2)} km` : ""}${item.notes ? `。备注：${item.notes}` : ""}`) : ["- 无训练记录。"]),
+      "",
+      "## 身体状态",
+      ...(summary.bodyMetrics.length ? summary.bodyMetrics.map((item) => `- ${item.date}：睡眠${item.sleepLabel}，精力 ${item.energy || "-"}，疲劳${item.fatigueLabel}，疼痛 ${item.painSummary}${item.weightKg ? `，体重 ${item.weightKg} kg` : ""}${item.waistCm ? `，腰围 ${item.waistCm} cm` : ""}${item.notes ? `。备注：${item.notes}` : ""}`) : ["- 无身体状态记录。"]),
+      "",
+      "## 结构化 JSON",
+      "```json",
+      JSON.stringify(summary, null, 2),
+      "```"
+    ];
+    return lines.join("\n");
+  }
+
+  function downloadTextFile(filename, text, type) {
+    const blob = new Blob([text], { type: type || "text/plain" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+  }
+
+  function parsePlanPatchFromInput() {
+    const input = app.querySelector("#plan-patch-input");
+    state.planPatchText = input ? input.value : state.planPatchText;
+    try {
+      const patch = extractCoachPlanPatch(state.planPatchText);
+      const preview = previewPlanPatch(patch);
+      state.planPatchPreview = { patch, error: null };
+      state.message = preview.valid ? "计划草案已通过校验" : "计划草案需要修正";
+    } catch (error) {
+      state.planPatchPreview = { patch: null, error: error.message || "无法识别计划草案" };
+      state.message = "计划草案解析失败";
+    }
+    render();
+  }
+
+  async function applyPlanPatchFromPreview() {
+    const patch = state.planPatchPreview?.patch || extractCoachPlanPatch(state.planPatchText);
+    const preview = previewPlanPatch(patch);
+    if (!preview.valid) {
+      state.planPatchPreview = { patch, error: null };
+      state.message = "计划草案未通过校验";
+      render();
+      return;
+    }
+    if (!window.confirm(`确认写入计划草案？将新增 ${preview.newDailyCount} 个日计划，写入 ${preview.adjustmentCount} 条调整。`)) return;
+    const result = applyCoachPlanPatch(patch);
+    state.planPatchText = "";
+    state.planPatchPreview = null;
+    if (result.firstDate) state.visibleMonth = result.firstDate.slice(0, 7);
+    const message = `计划草案已写入：日计划 ${result.dailyWritten}，调整 ${result.adjustmentsWritten}`;
+    await saveSnapshot(message);
+    await autoPushDirtyRecords(message);
+    state.message = message;
+    render();
+  }
+
+  function clearPlanPatchInput() {
+    state.planPatchText = "";
+    state.planPatchPreview = null;
+    render();
+  }
+
+  function extractCoachPlanPatch(text) {
+    const candidates = extractJsonCandidates(String(text || ""));
+    for (const candidate of candidates) {
+      try {
+        const parsed = JSON.parse(candidate);
+        const patch = unwrapCoachPlanPatch(parsed);
+        if (patch) return patch;
+      } catch (error) {
+        // Keep trying later JSON candidates from the pasted Codex reply.
+      }
+    }
+    throw new Error("未找到 schema 为 coach_plan_patch 的 JSON。");
+  }
+
+  function extractJsonCandidates(text) {
+    const codeBlocks = Array.from(text.matchAll(/```(?:json)?\s*([\s\S]*?)```/gi)).map((match) => match[1].trim());
+    const candidates = [...codeBlocks];
+    let start = -1;
+    let depth = 0;
+    let inString = false;
+    let escape = false;
+    for (let index = 0; index < text.length; index += 1) {
+      const char = text[index];
+      if (inString) {
+        if (escape) {
+          escape = false;
+        } else if (char === "\\") {
+          escape = true;
+        } else if (char === "\"") {
+          inString = false;
+        }
+        continue;
+      }
+      if (char === "\"") {
+        inString = true;
+      } else if (char === "{") {
+        if (depth === 0) start = index;
+        depth += 1;
+      } else if (char === "}") {
+        depth -= 1;
+        if (depth === 0 && start >= 0) {
+          candidates.push(text.slice(start, index + 1));
+          start = -1;
+        }
+      }
+    }
+    return candidates.length ? candidates : [text.trim()];
+  }
+
+  function unwrapCoachPlanPatch(parsed) {
+    if (!parsed || typeof parsed !== "object") return null;
+    if (parsed.schema === "coach_plan_patch") return parsed;
+    if (parsed.coach_plan_patch) return unwrapCoachPlanPatch(parsed.coach_plan_patch);
+    if (parsed.patch) return unwrapCoachPlanPatch(parsed.patch);
+    return null;
+  }
+
+  function previewPlanPatch(patch) {
+    const errors = validateCoachPlanPatch(patch);
+    const warnings = [...errors];
+    const planTemplate = patch?.planTemplate && typeof patch.planTemplate === "object" ? patch.planTemplate : null;
+    const existingPlan = planTemplate ? findSharedRecord("plan_templates", planTemplate.id) : null;
+    const dailyItems = Array.isArray(patch?.dailyPlanItems) ? patch.dailyPlanItems.map(normalizeDailyPlanItemData).filter(Boolean) : [];
+    const patchAdjustments = Array.isArray(patch?.planAdjustments) ? patch.planAdjustments.map(normalizePlanAdjustmentData).filter(Boolean) : [];
+    const dailyPreview = dailyItems.map((item) => {
+      const existingDaily = findPlanItemForDate(item.date);
+      const hasActual = getWorkoutsByDate(item.date).length > 0;
+      const isPast = item.date < todayISO();
+      const skipped = hasActual || isPast;
+      const title = getPlanItemDisplayTitle(item) || TYPE_META[toLegacyTrainingType(item.trainingType)]?.label || "计划";
+      let action = "新增";
+      if (hasActual) action = "已有实际记录";
+      else if (isPast) action = "过去日期";
+      else if (existingDaily) action = "写入调整";
+      return { date: item.date, title, action, skipped };
+    });
+    const adjustedDailyCount = dailyPreview.filter((item) => item.action === "写入调整").length;
+    return {
+      valid: !errors.length,
+      warnings,
+      planTemplate,
+      planAction: existingPlan ? "更新" : "新增",
+      routineCount: Array.isArray(patch?.routineTemplates) ? patch.routineTemplates.length : 0,
+      newDailyCount: dailyPreview.filter((item) => item.action === "新增").length,
+      adjustedDailyCount,
+      skippedDailyCount: dailyPreview.filter((item) => item.skipped).length,
+      adjustmentCount: patchAdjustments.length + adjustedDailyCount,
+      skippedDates: dailyPreview.filter((item) => item.skipped).map((item) => item.date),
+      dailyPreview: dailyPreview.slice(0, 16)
+    };
+  }
+
+  function validateCoachPlanPatch(patch) {
+    const errors = [];
+    if (!patch || typeof patch !== "object") return ["计划草案不是有效对象。"];
+    if (patch.schema !== "coach_plan_patch") errors.push("schema 必须是 coach_plan_patch。");
+    if (!isIsoDate(patch.effectiveFrom)) errors.push("effectiveFrom 必须是 YYYY-MM-DD。");
+    if (patch.effectiveTo && !isIsoDate(patch.effectiveTo)) errors.push("effectiveTo 必须是 YYYY-MM-DD。");
+    const hasPlan = patch.planTemplate && typeof patch.planTemplate === "object";
+    const hasRoutines = Array.isArray(patch.routineTemplates) && patch.routineTemplates.length;
+    const hasDaily = Array.isArray(patch.dailyPlanItems) && patch.dailyPlanItems.length;
+    const hasAdjustments = Array.isArray(patch.planAdjustments) && patch.planAdjustments.length;
+    if (!hasPlan && !hasRoutines && !hasDaily && !hasAdjustments) errors.push("草案没有可写入的计划内容。");
+    if (hasDaily) {
+      patch.dailyPlanItems.forEach((item, index) => {
+        if (!item || typeof item !== "object" || !isIsoDate(item.date)) errors.push(`dailyPlanItems[${index}] 缺少有效日期。`);
+      });
+    }
+    return errors;
+  }
+
+  function applyCoachPlanPatch(patch) {
+    const preview = previewPlanPatch(patch);
+    if (!preview.valid) throw new Error("计划草案未通过校验。");
+    const now = new Date().toISOString();
+    let dailyWritten = 0;
+    let adjustmentsWritten = 0;
+    let firstDate = null;
+
+    const planTemplate = patch.planTemplate ? normalizeLooseSharedData({
+      ...(patch.planTemplate || {}),
+      createdBy: patch.planTemplate?.createdBy || "coach",
+      generatedBy: patch.generatedBy || "codex",
+      effectiveFrom: patch.planTemplate?.effectiveFrom || patch.effectiveFrom,
+      effectiveTo: patch.planTemplate?.effectiveTo ?? patch.effectiveTo ?? null,
+      status: patch.planTemplate?.status || "active",
+      reason: patch.reason || patch.planTemplate?.reason || "",
+      updatedAt: now,
+      createdAt: patch.planTemplate?.createdAt || now
+    }, "plan") : null;
+    if (planTemplate) {
+      closeOtherActivePlanTemplates(planTemplate, now);
+      upsertSharedEnvelope(state.records, "plan_templates", planTemplate);
+    }
+
+    (Array.isArray(patch.routineTemplates) ? patch.routineTemplates : []).forEach((routine) => {
+      const data = normalizeLooseSharedData({
+        ...routine,
+        updatedAt: now,
+        createdAt: routine.createdAt || now
+      }, "routine");
+      if (data) upsertSharedEnvelope(state.records, "routine_templates", data);
+    });
+
+    (Array.isArray(patch.dailyPlanItems) ? patch.dailyPlanItems : []).forEach((item) => {
+      const data = normalizeDailyPlanItemData({
+        ...item,
+        sourcePlanId: item.sourcePlanId || planTemplate?.id || null,
+        sourcePlanVersion: item.sourcePlanVersion || planTemplate?.version || null,
+        updatedAt: now,
+        createdAt: item.createdAt || now
+      });
+      if (!data || data.date < todayISO() || getWorkoutsByDate(data.date).length) return;
+      firstDate = firstDate || data.date;
+      const existingDaily = findPlanItemForDate(data.date);
+      if (existingDaily) {
+        const adjustment = normalizePlanAdjustmentData({
+          id: `adjust_${data.date}_${safeIdPart(existingDaily.id)}_${safeIdPart(data.id)}`,
+          date: data.date,
+          targetDailyPlanItemId: existingDaily.data?.id || existingDaily.id,
+          adjustedAt: now,
+          adjustedBy: patch.generatedBy || "coach",
+          reason: patch.reason || "计划草案调整",
+          fromSnapshot: existingDaily.data || {},
+          toSnapshot: data,
+          createdAt: now,
+          updatedAt: now
+        });
+        if (adjustment) {
+          upsertSharedEnvelope(state.records, "plan_adjustments", adjustment);
+          adjustmentsWritten += 1;
+        }
+      } else {
+        upsertSharedEnvelope(state.records, "daily_plan_items", data);
+        dailyWritten += 1;
+      }
+    });
+
+    (Array.isArray(patch.planAdjustments) ? patch.planAdjustments : []).forEach((adjustment) => {
+      const data = normalizePlanAdjustmentData({
+        ...adjustment,
+        adjustedBy: adjustment.adjustedBy || patch.generatedBy || "coach",
+        reason: adjustment.reason || patch.reason || "",
+        updatedAt: now,
+        createdAt: adjustment.createdAt || now
+      });
+      if (data) {
+        upsertSharedEnvelope(state.records, "plan_adjustments", data);
+        adjustmentsWritten += 1;
+        firstDate = firstDate || data.date;
+      }
+    });
+
+    return { dailyWritten, adjustmentsWritten, firstDate };
+  }
+
+  function closeOtherActivePlanTemplates(activePlan, now) {
+    if (activePlan.status !== "active") return;
+    (state.records.plan_templates || []).forEach((item) => {
+      const data = item.data || {};
+      if (item.deletedAt || data.id === activePlan.id || data.status !== "active") return;
+      upsertSharedEnvelope(state.records, "plan_templates", {
+        ...data,
+        status: "superseded",
+        effectiveTo: data.effectiveTo || previousDate(activePlan.effectiveFrom),
+        updatedAt: now
+      }, item);
+    });
+  }
+
+  function previousDate(date) {
+    if (!isIsoDate(date)) return null;
+    const value = parseIsoDate(date);
+    value.setDate(value.getDate() - 1);
+    return dateToISO(value);
+  }
+
+  function findSharedRecord(entity, id) {
+    if (!id) return null;
+    return (state.records[entity] || []).find((item) => !item.deletedAt && (item.id === id || item.data?.id === id)) || null;
+  }
+
+  function findPlanItemForDate(date) {
+    return getPlanItemsByDate(date)[0] || null;
   }
 
   async function handleTrainingSubmit(event) {
