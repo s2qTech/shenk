@@ -50,7 +50,8 @@ Phase 1 stores these entities as JSON envelopes in D1 table `cloud_records`. Ent
 - Completed/stopped timer sessions can be converted, linked, marked auxiliary, or ignored without duplicating existing timer-linked logs.
 - Timer launch URLs are generated from daily plan items without putting timer tokens in the URL; `TIMER_TOKEN` is saved in settings and sent by `postMessage`.
 - Cloudflare Worker API in `cloudflare/worker.js`.
-- D1 migration in `cloudflare/migrations/0001_cloud_records.sql`.
+- D1 migrations in `cloudflare/migrations/`.
+- Encrypted sync profiles use `sync_profiles` for multi-device configuration; the cloud stores ciphertext only, not plaintext tokens.
 - Deployment template in `wrangler.toml.example`.
 - Setup guide in `docs/cloudflare-cloud-db-setup.md`.
 - API contract in `docs/cloud-records-api.md`.
@@ -66,6 +67,8 @@ Preferred endpoints:
 - `POST /api/training-logs`
 - `POST /api/body-metrics`
 - `POST /api/daily-plan-items`
+- `GET /api/sync-profiles/:profileId`
+- `PUT /api/sync-profiles/:profileId`
 
 Legacy `/api/sync/pull` and `/api/sync/push` are kept only for compatibility.
 

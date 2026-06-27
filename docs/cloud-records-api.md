@@ -122,6 +122,69 @@ Response:
 
 The Worker rejects writes outside the caller role.
 
+## Encrypted Sync Profiles
+
+Sync profiles solve multi-device configuration without storing plaintext tokens in `cloud_records`.
+
+`sync_profiles` are separate from business records:
+
+- They are encrypted by the client before upload.
+- The Worker stores only ciphertext and crypto metadata.
+- The profile password is never sent to the Worker.
+- A profile pointer string contains only `apiBase` and `profileId`; it does not contain tokens.
+
+### Read Profile
+
+```text
+GET /api/sync-profiles/:profileId
+```
+
+This endpoint does not require a role token because the returned payload is encrypted. The caller still needs the local password to decrypt it.
+
+Response:
+
+```json
+{
+  "ok": true,
+  "id": "shenk_qi_main",
+  "revision": 1,
+  "updatedAt": "2026-06-28T12:00:00.000Z",
+  "profile": {
+    "schema": "shenk_sync_profile/v1",
+    "cipher": "AES-GCM",
+    "kdf": "PBKDF2-SHA256",
+    "iterations": 210000,
+    "salt": "...",
+    "iv": "...",
+    "ciphertext": "..."
+  }
+}
+```
+
+### Upsert Profile
+
+```text
+PUT /api/sync-profiles/:profileId
+```
+
+Requires `ADMIN_TOKEN` or `SHENK_TOKEN`.
+
+Request:
+
+```json
+{
+  "profile": {
+    "schema": "shenk_sync_profile/v1",
+    "cipher": "AES-GCM",
+    "kdf": "PBKDF2-SHA256",
+    "iterations": 210000,
+    "salt": "...",
+    "iv": "...",
+    "ciphertext": "..."
+  }
+}
+```
+
 ## Convenience Endpoints
 
 These wrap `records/upsert` and validate ownership:

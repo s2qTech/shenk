@@ -1,6 +1,6 @@
 # Shared Data Contract
 
-Last updated: 2026-06-27
+Last updated: 2026-06-28
 
 ## Purpose
 
@@ -33,6 +33,30 @@ Both sides may read all data. Write ownership is narrower:
 8. All records must be exportable as JSON.
 9. Timer routine selection is driven by `routine_templates.timerVisible === true`.
 10. Built-in timer routines are fallback/debug only; they must not be treated as the normal plan source.
+11. Web, Android, and timer clients share the same business records; UI layout, colors, icons, and navigation state stay outside the shared data model.
+12. Tokens and API keys are local configuration, not shared business records. Multi-device setup uses encrypted sync profiles, not plaintext records.
+
+## Platform Boundary
+
+The shared contract is UI-agnostic. A record may store stable business fields such as `trainingType`, `routineId`, `status`, `date`, `durationSec`, `timerSessionId`, `planTemplateId`, or body measurements. It must not depend on Web-specific CSS classes, card names, navigation tabs, Android screen names, or temporary rendering state.
+
+Each client maps shared business values into its own UI:
+
+- Web can keep its existing calendar and drawer presentation.
+- Android can redesign screens and controls without changing record schemas.
+- Timer can render routines as a sequence/round engine without inheriting 身刻 page layout.
+
+## Encrypted Sync Profiles
+
+Manual entry of multiple keys does not scale across devices. The long-term setup path is:
+
+1. A configured 身刻 client creates an encrypted sync profile locally.
+2. The encrypted profile is stored in Cloudflare D1 as `sync_profiles`.
+3. The cloud stores only ciphertext plus crypto metadata. It does not store plaintext tokens.
+4. A new device uses a config string containing `apiBase` and `profileId`, then the user enters the profile password locally.
+5. The client downloads the encrypted profile, decrypts it locally, and stores the resulting local config.
+
+The password must never be sent to the Worker or committed to Git. `sync_profiles` is configuration metadata, not a shared health/training entity, so it is intentionally separate from `cloud_records`.
 
 ## Naming
 

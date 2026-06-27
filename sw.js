@@ -1,6 +1,6 @@
 "use strict";
 
-const CACHE_NAME = "shenke-static-2026-06-25-2";
+const CACHE_NAME = "shenke-static-2026-06-28-1";
 const STATIC_PATHS = [
   "./",
   "./index.html",

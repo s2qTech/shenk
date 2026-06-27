@@ -13,7 +13,7 @@
 ## Files
 
 - `cloudflare/worker.js`: Worker API.
-- `cloudflare/migrations/0001_cloud_records.sql`: D1 migration.
+- `cloudflare/migrations/`: D1 migrations for shared records and encrypted sync profiles.
 - `wrangler.toml.example`: local deployment template.
 
 Do not commit a real `wrangler.toml`, API tokens, personal exports, screenshots, or health data.

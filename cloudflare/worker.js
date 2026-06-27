@@ -1,4 +1,4 @@
-const SCHEMA_VERSION = "2026-06-20-cloud-records-v1";
+const SCHEMA_VERSION = "2026-06-28-cloud-records-v2";
 
 const ENTITIES = [
   "plan_templates",
@@ -54,7 +54,17 @@ export default {
         }, 200, request, env);
       }
 
+      const syncProfileMatch = url.pathname.match(/^\/api\/sync-profiles\/([^/]+)$/);
+      if (syncProfileMatch && request.method === "GET") {
+        return json(await getSyncProfile(env, syncProfileMatch[1]), 200, request, env);
+      }
+
       const client = requireAuth(request, env);
+
+      if (syncProfileMatch && request.method === "PUT") {
+        const body = await readJson(request);
+        return json(await upsertSyncProfile(env, syncProfileMatch[1], body, client), 200, request, env);
+      }
 
       if (url.pathname === "/api/bootstrap" && request.method === "POST") {
         return json({
@@ -264,6 +274,83 @@ async function upsertRecords(env, body, client) {
   };
 }
 
+async function getSyncProfile(env, rawId) {
+  const id = normalizeSyncProfileId(rawId);
+  const row = await env.DB.prepare(
+    "SELECT id, revision, device_id, created_at, updated_at, profile_json FROM sync_profiles WHERE id = ?"
+  ).bind(id).first();
+  if (!row) {
+    const error = new Error("sync_profile_not_found");
+    error.status = 404;
+    throw error;
+  }
+  return {
+    ok: true,
+    id: row.id,
+    revision: row.revision,
+    deviceId: row.device_id || null,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    profile: safeJson(row.profile_json, {})
+  };
+}
+
+async function upsertSyncProfile(env, rawId, body, client) {
+  if (!["admin", "shenk"].includes(client.role)) {
+    const error = new Error("forbidden_sync_profile_role");
+    error.status = 403;
+    throw error;
+  }
+  const id = normalizeSyncProfileId(rawId);
+  const profile = body.profile || body.data || body;
+  if (!isValidEncryptedSyncProfile(profile)) {
+    const error = new Error("invalid_sync_profile");
+    error.status = 400;
+    throw error;
+  }
+  const existing = await env.DB.prepare(
+    "SELECT revision, created_at FROM sync_profiles WHERE id = ?"
+  ).bind(id).first();
+  const now = new Date().toISOString();
+  const nextRevision = existing ? Number(existing.revision || 0) + 1 : 1;
+  await env.DB.prepare(
+    `INSERT INTO sync_profiles(id, revision, device_id, created_at, updated_at, profile_json)
+     VALUES (?, ?, ?, ?, ?, ?)
+     ON CONFLICT(id) DO UPDATE SET
+       revision = excluded.revision,
+       device_id = excluded.device_id,
+       updated_at = excluded.updated_at,
+       profile_json = excluded.profile_json`
+  ).bind(
+    id,
+    nextRevision,
+    client.deviceId || String(body.deviceId || "shenke_web"),
+    existing?.created_at || now,
+    now,
+    JSON.stringify(profile)
+  ).run();
+  return { ok: true, id, revision: nextRevision, updatedAt: now };
+}
+
+function normalizeSyncProfileId(value) {
+  const id = String(value || "").trim();
+  if (!/^[a-zA-Z0-9_-]{6,80}$/.test(id)) {
+    const error = new Error("invalid_sync_profile_id");
+    error.status = 400;
+    throw error;
+  }
+  return id;
+}
+
+function isValidEncryptedSyncProfile(profile) {
+  if (!profile || typeof profile !== "object") return false;
+  if (profile.schema !== "shenk_sync_profile/v1") return false;
+  if (profile.kdf !== "PBKDF2-SHA256") return false;
+  if (profile.cipher !== "AES-GCM") return false;
+  if (!Number.isFinite(Number(profile.iterations)) || Number(profile.iterations) < 100000) return false;
+  return ["salt", "iv", "ciphertext"].every((key) => typeof profile[key] === "string" && profile[key].length >= 12);
+}
+
 function rowToRecord(row) {
   return {
     entity: row.entity,
@@ -361,7 +448,7 @@ function corsHeaders(request, env) {
     : "*";
   return {
     "Access-Control-Allow-Origin": allowedOrigin,
-    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+    "Access-Control-Allow-Methods": "GET, POST, PUT, OPTIONS",
     "Access-Control-Allow-Headers": "Authorization, Content-Type, X-Shenke-Cloud-Key, X-Shenke-Device-Id, X-Shenke-Sync-Key",
     "Access-Control-Max-Age": "86400",
     "Vary": "Origin"
