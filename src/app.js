@@ -2317,25 +2317,26 @@
 
   function renderPlanPatchPreview(result) {
     const rows = [
-      ["计划模板", result.planTemplate ? result.planAction : "无"],
-      ["动作模板", `${result.routineCount} 个`],
-      ["日计划", `新增 ${result.newDailyCount}，调整 ${result.adjustedDailyCount}，跳过 ${result.skippedDailyCount}`],
-      ["计划调整", `${result.adjustmentCount} 条`]
+      ["计划模板", formatPatchCounts(result.planPreview)],
+      ["动作模板", formatPatchCounts(result.routinePreview)],
+      ["日计划", `${formatPatchCounts(result.dailyPreviewCounts)}，跳过 ${result.skippedDailyCount}`],
+      ["计划调整", formatPatchCounts(result.adjustmentPreview)]
     ];
     return `
       <div class="plan-patch-preview">
         <div class="metric-row compact-metrics">
           ${rows.map(([label, value]) => `<div class="metric"><strong>${escapeHtml(value)}</strong><span>${escapeHtml(label)}</span></div>`).join("")}
         </div>
+        ${result.deleteCount ? `<p class="preview-note danger-text">本次将删除 ${result.deleteCount} 条记录，写入前会再次确认。</p>` : ""}
         ${result.skippedDates.length ? `<p class="preview-note">已有实际训练，不覆盖：${escapeHtml(result.skippedDates.join("、"))}</p>` : ""}
         ${result.warnings.length ? `<ul class="preview-list">${result.warnings.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>` : ""}
-        ${result.dailyPreview.length ? `
+        ${result.previewRows.length ? `
           <div class="preview-timeline">
-            ${result.dailyPreview.map((item) => `
-              <div class="preview-row ${item.skipped ? "is-skipped" : ""}">
-                <strong>${escapeHtml(item.date)}</strong>
-                <span>${escapeHtml(item.title)}</span>
-                <em>${escapeHtml(item.action)}</em>
+            ${result.previewRows.map((item) => `
+              <div class="preview-row ${item.action === "跳过" ? "is-skipped" : ""}">
+                <strong>${escapeHtml(item.id || item.entity)}</strong>
+                <span>${escapeHtml(item.entity)}</span>
+                <em>${escapeHtml(item.reason ? `${item.action}：${item.reason}` : item.action)}</em>
               </div>
             `).join("")}
           </div>
@@ -3155,12 +3156,13 @@
       render();
       return;
     }
-    if (!window.confirm(`确认写入计划草案？将新增 ${preview.newDailyCount} 个日计划，写入 ${preview.adjustmentCount} 条调整。`)) return;
+    if (!window.confirm(`确认写入计划草案？将新增 ${preview.totals.add} 条，更新 ${preview.totals.update} 条，删除 ${preview.totals.delete} 条。`)) return;
+    if (preview.deleteCount && !window.confirm(`本次包含 ${preview.deleteCount} 条删除。删除只会处理草案里明确 operation: "delete" 或 deletedAt 的记录。确认继续？`)) return;
     const result = applyCoachPlanPatch(patch);
     state.planPatchText = "";
     state.planPatchPreview = null;
     if (result.firstDate) state.visibleMonth = result.firstDate.slice(0, 7);
-    const message = `计划草案已写入：日计划 ${result.dailyWritten}，调整 ${result.adjustmentsWritten}`;
+    const message = `计划草案已写入：新增 ${result.added}，更新 ${result.updated}，删除 ${result.deleted}`;
     await saveSnapshot(message);
     await autoPushDirtyRecords(message);
     state.message = message;
@@ -3230,38 +3232,181 @@
     return null;
   }
 
+  function getPatchArray(patch, key) {
+    const value = patch?.[key];
+    return Array.isArray(value) && value.length ? value : [];
+  }
+
+  function getPatchPlanTemplates(patch) {
+    const list = getPatchArray(patch, "planTemplates");
+    if (list.length) return list;
+    const single = patch?.planTemplate;
+    return isNonEmptyObject(single) ? [single] : [];
+  }
+
+  function isNonEmptyObject(value) {
+    return value && typeof value === "object" && !Array.isArray(value) && Object.keys(value).length > 0;
+  }
+
+  function getPatchItemId(item) {
+    if (!item || typeof item !== "object") return "";
+    return String(item.id || item.routineId || item.routine_id || "").trim();
+  }
+
+  function isPatchDeleteItem(item) {
+    if (!item || typeof item !== "object") return false;
+    const operation = String(item.operation || item.op || item.action || "").trim().toLowerCase();
+    return operation === "delete" || Boolean(item.deletedAt || item.deleted_at);
+  }
+
+  function findSharedRecordById(entity, id, includeDeleted = false) {
+    if (!id) return null;
+    return (state.records[entity] || []).find((item) => {
+      if (!includeDeleted && item.deletedAt) return false;
+      return item.id === id || item.data?.id === id;
+    }) || null;
+  }
+
+  function buildPatchEntityPreview(entity, rawItems, normalizeItem, options = {}) {
+    const rows = [];
+    const counts = { add: 0, update: 0, delete: 0, skipped: 0, invalid: 0, rows };
+    rawItems.forEach((item, index) => {
+      const id = getPatchItemId(item);
+      if (isPatchDeleteItem(item)) {
+        if (!id) {
+          counts.invalid += 1;
+          rows.push({ entity, id: "", action: "无效删除", reason: `${options.label || entity}[${index}] 缺少 id。` });
+          return;
+        }
+        const existing = findSharedRecordById(entity, id, true);
+        if (!existing || existing.deletedAt) {
+          counts.skipped += 1;
+          rows.push({ entity, id, action: "跳过", reason: "记录不存在或已删除。" });
+          return;
+        }
+        counts.delete += 1;
+        rows.push({ entity, id, action: "删除", reason: "" });
+        return;
+      }
+
+      if (options.requireInputId && !id) {
+        counts.invalid += 1;
+        rows.push({ entity, id: "", action: "无效", reason: `${options.label || entity}[${index}] 缺少 id。` });
+        return;
+      }
+
+      const normalized = normalizeItem(item);
+      if (!normalized?.id) {
+        counts.invalid += 1;
+        rows.push({ entity, id, action: "无效", reason: `${options.label || entity}[${index}] 缺少必填字段。` });
+        return;
+      }
+      const skipReason = options.skipReason ? options.skipReason(normalized) : "";
+      if (skipReason) {
+        counts.skipped += 1;
+        rows.push({ entity, id: normalized.id, action: "跳过", reason: skipReason });
+        return;
+      }
+      const existing = findSharedRecordById(entity, normalized.id, true);
+      if (existing && !existing.deletedAt) {
+        counts.update += 1;
+        rows.push({ entity, id: normalized.id, action: "更新", reason: "" });
+      } else {
+        counts.add += 1;
+        rows.push({ entity, id: normalized.id, action: "新增", reason: "" });
+      }
+    });
+    return counts;
+  }
+
+  function sumPatchCounts(counts) {
+    return counts.reduce((total, item) => ({
+      add: total.add + item.add,
+      update: total.update + item.update,
+      delete: total.delete + item.delete,
+      skipped: total.skipped + item.skipped,
+      invalid: total.invalid + item.invalid
+    }), { add: 0, update: 0, delete: 0, skipped: 0, invalid: 0 });
+  }
+
+  function formatPatchCounts(counts) {
+    return `新增 ${counts.add}，更新 ${counts.update}，删除 ${counts.delete}`;
+  }
+
   function previewPlanPatch(patch) {
     const errors = validateCoachPlanPatch(patch);
     const warnings = [...errors];
-    const planTemplate = patch?.planTemplate && typeof patch.planTemplate === "object" ? patch.planTemplate : null;
-    const existingPlan = planTemplate ? findSharedRecord("plan_templates", planTemplate.id) : null;
-    const dailyItems = Array.isArray(patch?.dailyPlanItems) ? patch.dailyPlanItems.map(normalizeDailyPlanItemData).filter(Boolean) : [];
-    const patchAdjustments = Array.isArray(patch?.planAdjustments) ? patch.planAdjustments.map(normalizePlanAdjustmentData).filter(Boolean) : [];
-    const dailyPreview = dailyItems.map((item) => {
-      const existingDaily = findPlanItemForDate(item.date);
-      const hasActual = getWorkoutsByDate(item.date).length > 0;
-      const isPast = item.date < todayISO();
-      const skipped = hasActual || isPast;
-      const title = getPlanItemDisplayTitle(item) || TYPE_META[toLegacyTrainingType(item.trainingType)]?.label || "计划";
-      let action = "新增";
-      if (hasActual) action = "已有实际记录";
-      else if (isPast) action = "过去日期";
-      else if (existingDaily) action = "写入调整";
-      return { date: item.date, title, action, skipped };
-    });
-    const adjustedDailyCount = dailyPreview.filter((item) => item.action === "写入调整").length;
+    if (patch?.replaceMode) warnings.push("检测到 replaceMode: true。身刻仍按安全合并处理，只有明确 operation: delete 或 deletedAt 的记录才会删除。");
+    const now = new Date().toISOString();
+    const planPreview = buildPatchEntityPreview(
+      "plan_templates",
+      getPatchPlanTemplates(patch),
+      (item) => normalizeLooseSharedData({
+        ...item,
+        createdBy: item.createdBy || "coach",
+        generatedBy: patch.generatedBy || "codex",
+        effectiveFrom: item.effectiveFrom || patch.effectiveFrom,
+        effectiveTo: item.effectiveTo ?? patch.effectiveTo ?? null,
+        updatedAt: now,
+        createdAt: item.createdAt || now
+      }, "plan"),
+      { label: "planTemplates", requireInputId: true }
+    );
+    const routinePreview = buildPatchEntityPreview(
+      "routine_templates",
+      getPatchArray(patch, "routineTemplates"),
+      (item) => normalizeRoutineTemplateData({ ...item, updatedAt: now, createdAt: item.createdAt || now }),
+      { label: "routineTemplates", requireInputId: true }
+    );
+    const dailyPreviewCounts = buildPatchEntityPreview(
+      "daily_plan_items",
+      getPatchArray(patch, "dailyPlanItems"),
+      (item) => normalizeDailyPlanItemData({ ...item, updatedAt: now, createdAt: item.createdAt || now }),
+      {
+        label: "dailyPlanItems",
+        skipReason: (item) => {
+          if (item.date < todayISO()) return "过去日期不改写。";
+          if (getWorkoutsByDate(item.date).length) return "已有实际训练记录，不覆盖。";
+          return "";
+        }
+      }
+    );
+    const adjustmentPreview = buildPatchEntityPreview(
+      "plan_adjustments",
+      getPatchArray(patch, "planAdjustments"),
+      (item) => normalizePlanAdjustmentData({
+        ...item,
+        adjustedBy: item.adjustedBy || patch.generatedBy || "coach",
+        reason: item.reason || patch.reason || "",
+        updatedAt: now,
+        createdAt: item.createdAt || now
+      }),
+      { label: "planAdjustments" }
+    );
+    const totals = sumPatchCounts([planPreview, routinePreview, dailyPreviewCounts, adjustmentPreview]);
+    const previewRows = [
+      ...planPreview.rows,
+      ...routinePreview.rows,
+      ...dailyPreviewCounts.rows,
+      ...adjustmentPreview.rows
+    ];
+    previewRows.filter((row) => row.action === "无效" || row.action === "无效删除").forEach((row) => warnings.push(row.reason));
     return {
-      valid: !errors.length,
+      valid: !errors.length && totals.invalid === 0,
       warnings,
-      planTemplate,
-      planAction: existingPlan ? "更新" : "新增",
-      routineCount: Array.isArray(patch?.routineTemplates) ? patch.routineTemplates.length : 0,
-      newDailyCount: dailyPreview.filter((item) => item.action === "新增").length,
-      adjustedDailyCount,
-      skippedDailyCount: dailyPreview.filter((item) => item.skipped).length,
-      adjustmentCount: patchAdjustments.length + adjustedDailyCount,
-      skippedDates: dailyPreview.filter((item) => item.skipped).map((item) => item.date),
-      dailyPreview: dailyPreview.slice(0, 16)
+      planPreview,
+      routinePreview,
+      dailyPreviewCounts,
+      adjustmentPreview,
+      totals,
+      deleteCount: totals.delete,
+      newDailyCount: dailyPreviewCounts.add,
+      updatedDailyCount: dailyPreviewCounts.update,
+      skippedDailyCount: dailyPreviewCounts.skipped,
+      adjustmentCount: adjustmentPreview.add + adjustmentPreview.update + adjustmentPreview.delete,
+      skippedDates: dailyPreviewCounts.rows.filter((item) => item.action === "跳过").map((item) => item.id),
+      dailyPreview: dailyPreviewCounts.rows.slice(0, 16),
+      previewRows: previewRows.slice(0, 24)
     };
   }
 
@@ -3271,14 +3416,20 @@
     if (patch.schema !== "coach_plan_patch") errors.push("schema 必须是 coach_plan_patch。");
     if (!isIsoDate(patch.effectiveFrom)) errors.push("effectiveFrom 必须是 YYYY-MM-DD。");
     if (patch.effectiveTo && !isIsoDate(patch.effectiveTo)) errors.push("effectiveTo 必须是 YYYY-MM-DD。");
-    const hasPlan = patch.planTemplate && typeof patch.planTemplate === "object";
+    const hasPlan = getPatchPlanTemplates(patch).length > 0;
     const hasRoutines = Array.isArray(patch.routineTemplates) && patch.routineTemplates.length;
     const hasDaily = Array.isArray(patch.dailyPlanItems) && patch.dailyPlanItems.length;
     const hasAdjustments = Array.isArray(patch.planAdjustments) && patch.planAdjustments.length;
     if (!hasPlan && !hasRoutines && !hasDaily && !hasAdjustments) errors.push("草案没有可写入的计划内容。");
     if (hasDaily) {
       patch.dailyPlanItems.forEach((item, index) => {
-        if (!item || typeof item !== "object" || !isIsoDate(item.date)) errors.push(`dailyPlanItems[${index}] 缺少有效日期。`);
+        if (!item || typeof item !== "object") {
+          errors.push(`dailyPlanItems[${index}] 不是有效对象。`);
+        } else if (isPatchDeleteItem(item)) {
+          if (!getPatchItemId(item)) errors.push(`dailyPlanItems[${index}] 删除操作缺少 id。`);
+        } else if (!isIsoDate(item.date)) {
+          errors.push(`dailyPlanItems[${index}] 缺少有效日期。`);
+        }
       });
     }
     return errors;
@@ -3288,70 +3439,54 @@
     const preview = previewPlanPatch(patch);
     if (!preview.valid) throw new Error("计划草案未通过校验。");
     const now = new Date().toISOString();
-    let dailyWritten = 0;
-    let adjustmentsWritten = 0;
+    const counters = { added: 0, updated: 0, deleted: 0, skipped: 0 };
     let firstDate = null;
 
-    const planTemplate = patch.planTemplate ? normalizeLooseSharedData({
-      ...(patch.planTemplate || {}),
-      createdBy: patch.planTemplate?.createdBy || "coach",
-      generatedBy: patch.generatedBy || "codex",
-      effectiveFrom: patch.planTemplate?.effectiveFrom || patch.effectiveFrom,
-      effectiveTo: patch.planTemplate?.effectiveTo ?? patch.effectiveTo ?? null,
-      status: patch.planTemplate?.status || "active",
-      reason: patch.reason || patch.planTemplate?.reason || "",
-      updatedAt: now,
-      createdAt: patch.planTemplate?.createdAt || now
-    }, "plan") : null;
-    if (planTemplate) {
-      closeOtherActivePlanTemplates(planTemplate, now);
-      upsertSharedEnvelope(state.records, "plan_templates", planTemplate);
-    }
-
-    (Array.isArray(patch.routineTemplates) ? patch.routineTemplates : []).forEach((routine) => {
+    getPatchPlanTemplates(patch).forEach((item) => {
+      if (!getPatchItemId(item)) {
+        counters.skipped += 1;
+        return;
+      }
       const data = normalizeLooseSharedData({
+        ...item,
+        createdBy: item.createdBy || "coach",
+        generatedBy: patch.generatedBy || "codex",
+        effectiveFrom: item.effectiveFrom || patch.effectiveFrom,
+        effectiveTo: item.effectiveTo ?? patch.effectiveTo ?? null,
+        updatedAt: now,
+        createdAt: item.createdAt || now
+      }, "plan");
+      applyPatchEntityRecord("plan_templates", item, data, counters, now);
+    });
+
+    getPatchArray(patch, "routineTemplates").forEach((routine) => {
+      if (!getPatchItemId(routine)) {
+        counters.skipped += 1;
+        return;
+      }
+      const data = normalizeRoutineTemplateData({
         ...routine,
         updatedAt: now,
         createdAt: routine.createdAt || now
-      }, "routine");
-      if (data) upsertSharedEnvelope(state.records, "routine_templates", data);
+      });
+      applyPatchEntityRecord("routine_templates", routine, data, counters, now);
     });
 
-    (Array.isArray(patch.dailyPlanItems) ? patch.dailyPlanItems : []).forEach((item) => {
+    getPatchArray(patch, "dailyPlanItems").forEach((item) => {
       const data = normalizeDailyPlanItemData({
         ...item,
-        sourcePlanId: item.sourcePlanId || planTemplate?.id || null,
-        sourcePlanVersion: item.sourcePlanVersion || planTemplate?.version || null,
         updatedAt: now,
         createdAt: item.createdAt || now
       });
-      if (!data || data.date < todayISO() || getWorkoutsByDate(data.date).length) return;
-      firstDate = firstDate || data.date;
-      const existingDaily = findPlanItemForDate(data.date);
-      if (existingDaily) {
-        const adjustment = normalizePlanAdjustmentData({
-          id: `adjust_${data.date}_${safeIdPart(existingDaily.id)}_${safeIdPart(data.id)}`,
-          date: data.date,
-          targetDailyPlanItemId: existingDaily.data?.id || existingDaily.id,
-          adjustedAt: now,
-          adjustedBy: patch.generatedBy || "coach",
-          reason: patch.reason || "计划草案调整",
-          fromSnapshot: existingDaily.data || {},
-          toSnapshot: data,
-          createdAt: now,
-          updatedAt: now
-        });
-        if (adjustment) {
-          upsertSharedEnvelope(state.records, "plan_adjustments", adjustment);
-          adjustmentsWritten += 1;
-        }
-      } else {
-        upsertSharedEnvelope(state.records, "daily_plan_items", data);
-        dailyWritten += 1;
+      if (!isPatchDeleteItem(item) && (!data || data.date < todayISO() || getWorkoutsByDate(data.date).length)) {
+        counters.skipped += 1;
+        return;
       }
+      const result = applyPatchEntityRecord("daily_plan_items", item, data, counters, now);
+      if (result.applied && data?.date) firstDate = firstDate || data.date;
     });
 
-    (Array.isArray(patch.planAdjustments) ? patch.planAdjustments : []).forEach((adjustment) => {
+    getPatchArray(patch, "planAdjustments").forEach((adjustment) => {
       const data = normalizePlanAdjustmentData({
         ...adjustment,
         adjustedBy: adjustment.adjustedBy || patch.generatedBy || "coach",
@@ -3359,28 +3494,55 @@
         updatedAt: now,
         createdAt: adjustment.createdAt || now
       });
-      if (data) {
-        upsertSharedEnvelope(state.records, "plan_adjustments", data);
-        adjustmentsWritten += 1;
-        firstDate = firstDate || data.date;
-      }
+      const result = applyPatchEntityRecord("plan_adjustments", adjustment, data, counters, now);
+      if (result.applied && data?.date) firstDate = firstDate || data.date;
     });
 
-    return { dailyWritten, adjustmentsWritten, firstDate };
+    return { ...counters, firstDate };
   }
 
-  function closeOtherActivePlanTemplates(activePlan, now) {
-    if (activePlan.status !== "active") return;
-    (state.records.plan_templates || []).forEach((item) => {
-      const data = item.data || {};
-      if (item.deletedAt || data.id === activePlan.id || data.status !== "active") return;
-      upsertSharedEnvelope(state.records, "plan_templates", {
-        ...data,
-        status: "superseded",
-        effectiveTo: data.effectiveTo || previousDate(activePlan.effectiveFrom),
-        updatedAt: now
-      }, item);
-    });
+  function applyPatchEntityRecord(entity, rawItem, normalizedData, counters, now) {
+    if (isPatchDeleteItem(rawItem)) {
+      const deleted = markSharedRecordDeleted(entity, rawItem, now);
+      counters[deleted ? "deleted" : "skipped"] += 1;
+      return { applied: deleted, action: deleted ? "deleted" : "skipped" };
+    }
+    if (!normalizedData?.id) {
+      counters.skipped += 1;
+      return { applied: false, action: "skipped" };
+    }
+    const existing = findSharedRecordById(entity, normalizedData.id, true);
+    upsertSharedEnvelope(state.records, entity, normalizedData, existing);
+    const added = !existing || existing.deletedAt;
+    counters[added ? "added" : "updated"] += 1;
+    return { applied: true, action: added ? "added" : "updated" };
+  }
+
+  function markSharedRecordDeleted(entity, rawItem, now) {
+    const id = getPatchItemId(rawItem);
+    if (!id) return false;
+    const existing = findSharedRecordById(entity, id, true);
+    if (!existing || existing.deletedAt) return false;
+    const deletedAt = rawItem.deletedAt || rawItem.deleted_at || now;
+    const data = {
+      ...(existing.data || {}),
+      id,
+      updatedAt: now,
+      deletedAt
+    };
+    const envelope = {
+      ...existing,
+      data,
+      updatedAt: now,
+      deletedAt,
+      syncState: "dirty",
+      conflict: null
+    };
+    state.records[entity] = (state.records[entity] || [])
+      .filter((item) => item.id !== existing.id && item.data?.id !== id)
+      .concat(envelope)
+      .sort(compareSharedEnvelopes);
+    return true;
   }
 
   function previousDate(date) {

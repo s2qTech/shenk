@@ -180,6 +180,14 @@ Codex 根据摘要输出两部分：
 - 修改已有方案时保持相同 `id`，提高 `version`，只写需要替换的方案即可。
 - 新增方案时使用新的稳定 `id`，并在对应 `dailyPlanItems.routineId` 引用它。
 
+计划草案应用规则：
+- 默认是 merge/upsert 模式，绝不能把缺省字段或空数组解释为清空现有记录。
+- `routineTemplates: []`、`dailyPlanItems: []`、`planAdjustments: []`、`planTemplates: []` 都表示本次不处理该实体。
+- 只输出需要新增或修改的记录；相同 `id` 表示更新，不同 `id` 表示新增。
+- 删除必须逐条显式声明：`operation: "delete"` 或 `deletedAt`。没有这两个字段时不得删除。
+- 导入预览必须显示新增、更新、删除数量；删除数量非 0 时必须二次确认。
+- routine-only patch 不应影响 `plan_templates`、`daily_plan_items` 或 `plan_adjustments`。
+
 字段约定：
 - `id`：稳定 routineId，日计划通过 `routineId` 引用它。
 - `title`：用户侧显示名称，不要写内部版本号。
@@ -218,6 +226,8 @@ Codex 根据摘要输出两部分：
 8. scene 用 home / walk / recovery / travel；sortOrder 控制排序；isDefault 控制同组默认。
 9. trainingType 使用 strength / indoor_cardio / warmup / stretch / recovery / travel_strength / seat_recovery / easy_walk / quality_walk。
 10. daily_plan_items 只写未来日期；不要覆盖已有实际训练记录。
+11. 缺省字段和空数组都表示不处理该实体，绝不能表示清空。
+12. 删除必须逐条写 operation: "delete" 或 deletedAt；默认不要输出删除。
 
 请输出顶层 schema 为 coach_plan_patch 的 JSON：
 - schema

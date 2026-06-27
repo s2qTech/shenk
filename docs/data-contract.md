@@ -126,6 +126,18 @@ Rules:
 - If the cloud read fails, the timer uses the last successful local cache.
 - If there is no cloud data and no local cache, the timer may show a fallback/debug routine set with an explicit warning.
 
+## Coach Plan Patch Merge Rules
+
+`coach_plan_patch` is always merge/upsert by default.
+
+- Missing entity fields mean "do not process this entity".
+- Empty arrays mean "do not process this entity".
+- `routineTemplates`, `dailyPlanItems`, `planAdjustments`, and `planTemplates` are upserted by `id`.
+- A routine-only patch must not modify plan templates, daily plan items, or adjustments.
+- Existing records may be deleted only when the incoming record explicitly includes `operation: "delete"` or `deletedAt`.
+- `replaceMode` must not be used as an implicit permission to clear records unless deletion records are explicit and shown in preview.
+- The import preview must show add/update/delete counts. Any non-zero delete count requires a second confirmation.
+
 ### Completion Status
 
 ```ts
