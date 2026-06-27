@@ -275,6 +275,7 @@ async function upsertRecords(env, body, client) {
 }
 
 async function getSyncProfile(env, rawId) {
+  await ensureSyncProfilesTable(env);
   const id = normalizeSyncProfileId(rawId);
   const row = await env.DB.prepare(
     "SELECT id, revision, device_id, created_at, updated_at, profile_json FROM sync_profiles WHERE id = ?"
@@ -296,6 +297,7 @@ async function getSyncProfile(env, rawId) {
 }
 
 async function upsertSyncProfile(env, rawId, body, client) {
+  await ensureSyncProfilesTable(env);
   if (!["admin", "shenk"].includes(client.role)) {
     const error = new Error("forbidden_sync_profile_role");
     error.status = 403;
@@ -330,6 +332,22 @@ async function upsertSyncProfile(env, rawId, body, client) {
     JSON.stringify(profile)
   ).run();
   return { ok: true, id, revision: nextRevision, updatedAt: now };
+}
+
+async function ensureSyncProfilesTable(env) {
+  await env.DB.prepare(
+    `CREATE TABLE IF NOT EXISTS sync_profiles (
+      id TEXT PRIMARY KEY,
+      revision INTEGER NOT NULL DEFAULT 1,
+      device_id TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      profile_json TEXT NOT NULL DEFAULT '{}'
+    )`
+  ).run();
+  await env.DB.prepare(
+    "CREATE INDEX IF NOT EXISTS idx_sync_profiles_updated ON sync_profiles(updated_at)"
+  ).run();
 }
 
 function normalizeSyncProfileId(value) {
