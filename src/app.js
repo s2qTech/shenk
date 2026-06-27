@@ -57,6 +57,27 @@
     stretch: "recovery",
     rest: "rest"
   };
+  const TRAINING_TYPE_ALIASES = {
+    easy: "easy_walk",
+    walk: "easy_walk",
+    walking: "easy_walk",
+    easyWalk: "easy_walk",
+    easy_walking: "easy_walk",
+    normal_walk: "easy_walk",
+    brisk_walk: "quality_walk",
+    qualityWalk: "quality_walk",
+    quality: "quality_walk",
+    cardio: "indoor_cardio",
+    indoorCardio: "indoor_cardio",
+    indoor: "indoor_cardio",
+    travel: "travel_strength",
+    travelStrength: "travel_strength",
+    seatRecovery: "seat_recovery",
+    warm_up: "warmup",
+    walk_warmup: "warmup",
+    cool_down: "cooldown",
+    cooldown_stretch: "cooldown"
+  };
   const LEGACY_TO_SHARED_STATUS = {
     completed: "completed",
     short: "short_version",
@@ -530,10 +551,28 @@
       adjustedAt: data.adjustedAt || data.adjusted_at || new Date().toISOString(),
       adjustedBy: data.adjustedBy || data.adjusted_by || "coach",
       reason: data.reason || "",
-      fromSnapshot: data.fromSnapshot || data.from_snapshot || {},
-      toSnapshot: data.toSnapshot || data.to_snapshot || {},
+      fromSnapshot: normalizePlanSnapshotData(data.fromSnapshot || data.from_snapshot || {}, data.date),
+      toSnapshot: normalizePlanSnapshotData(data.toSnapshot || data.to_snapshot || {}, data.date),
       createdAt: data.createdAt || data.created_at || new Date().toISOString(),
       updatedAt: data.updatedAt || data.updated_at || new Date().toISOString()
+    };
+  }
+
+  function normalizePlanSnapshotData(snapshot, date) {
+    if (!snapshot || typeof snapshot !== "object") return {};
+    const trainingType = toSharedTrainingType(snapshot.trainingType || snapshot.training_type || snapshot.type);
+    return {
+      ...snapshot,
+      date: snapshot.date || date,
+      trainingType,
+      title: snapshot.title || TYPE_META[toLegacyTrainingType(trainingType)].label,
+      estimatedMinutes: toNullableNumber(snapshot.estimatedMinutes ?? snapshot.estimated_minutes),
+      needsTimer: Boolean(snapshot.needsTimer ?? snapshot.needs_timer),
+      routineId: snapshot.routineId || snapshot.routine_id || null,
+      routineVersion: snapshot.routineVersion || snapshot.routine_version || null,
+      timerOptions: snapshot.timerOptions || snapshot.timer_options || {},
+      notes: Array.isArray(snapshot.notes) ? snapshot.notes : [],
+      status: snapshot.status || "planned"
     };
   }
 
@@ -1755,8 +1794,9 @@
       type,
       icon: meta.icon,
       marker,
-      text: getPlanItemDisplayTitle(data) || meta.label,
-      className: meta.className
+      text: formatCalendarPlanText(data, meta),
+      className: meta.className,
+      statusClass: `status-${data.status || "planned"}`
     };
   }
 
@@ -1794,7 +1834,7 @@
       if (entry) classes.push(entry.className, `calendar-${entry.kind}`, entry.statusClass || "");
       if (date === todayISO()) classes.push("today");
       if (date === state.selectedDate) classes.push("selected");
-      const showIcon = entry && entry.kind === "actual";
+      const showIcon = entry && ["actual", "plan", "adjustment"].includes(entry.kind);
       cells.push(`
         <button type="button" class="${classes.join(" ")}" data-date="${date}">
           <span class="day-head">
@@ -2355,6 +2395,12 @@
     if (record.distanceKm) return `${meta.label} ${formatNumber(record.distanceKm, 1)}km`;
     if (record.durationSec) return `${meta.label} ${Math.round(record.durationSec / 60)}分`;
     return meta.label;
+  }
+
+  function formatCalendarPlanText(data, meta) {
+    const title = getPlanItemDisplayTitle(data) || meta.label;
+    const minutes = toNullableNumber(data.estimatedMinutes ?? data.estimated_minutes);
+    return minutes ? `${title} ${Math.round(minutes)}分` : title;
   }
 
   function isCompletedRecord(record) {
@@ -3609,6 +3655,7 @@
     if (planItem.date) params.set("date", planItem.date);
     if (planItem.dailyPlanItemId || planItem.id) params.set("dailyPlanItemId", planItem.dailyPlanItemId || planItem.id);
     if (planItem.planTemplateId || planItem.sourcePlanId) params.set("planTemplateId", planItem.planTemplateId || planItem.sourcePlanId);
+    if (state.syncConfig.apiBase) params.set("cloudApiBase", state.syncConfig.apiBase);
     params.set("source", "shenk");
     return url.toString();
   }
@@ -4539,14 +4586,19 @@
   }
 
   function toSharedTrainingType(type) {
-    if (LEGACY_TO_SHARED_TYPE[type]) return LEGACY_TO_SHARED_TYPE[type];
-    if (SHARED_TO_LEGACY_TYPE[type]) return type;
+    const value = String(type || "").trim();
+    const alias = TRAINING_TYPE_ALIASES[value] || TRAINING_TYPE_ALIASES[value.replace(/-/g, "_")];
+    if (alias) return alias;
+    if (LEGACY_TO_SHARED_TYPE[value]) return LEGACY_TO_SHARED_TYPE[value];
+    if (SHARED_TO_LEGACY_TYPE[value]) return value;
     return "easy_walk";
   }
 
   function normalizeTimerTrainingType(type) {
     const value = String(type || "").trim();
     if (!value) return "easy_walk";
+    const alias = TRAINING_TYPE_ALIASES[value] || TRAINING_TYPE_ALIASES[value.replace(/-/g, "_")];
+    if (alias) return alias;
     if (TIMER_TYPE_META[value]) return value;
     if (LEGACY_TO_SHARED_TYPE[value]) return LEGACY_TO_SHARED_TYPE[value];
     if (SHARED_TO_LEGACY_TYPE[value]) return value;
@@ -4559,8 +4611,10 @@
   }
 
   function toLegacyTrainingType(type) {
-    if (TYPE_META[type]) return type;
-    return SHARED_TO_LEGACY_TYPE[type] || "easyWalk";
+    const value = String(type || "").trim();
+    if (TYPE_META[value]) return value;
+    const alias = TRAINING_TYPE_ALIASES[value] || TRAINING_TYPE_ALIASES[value.replace(/-/g, "_")];
+    return SHARED_TO_LEGACY_TYPE[alias || value] || "easyWalk";
   }
 
   function toSharedCompletionStatus(status, sharedType) {

@@ -1830,8 +1830,15 @@ textarea {
 }
 
 .calendar-suggestion .day-type-icon,
+.calendar-plan .day-type-icon,
+.calendar-adjustment .day-type-icon,
 .calendar-forecast .day-type-icon {
   opacity: 0.74;
+}
+
+.calendar-plan .day-type-icon,
+.calendar-adjustment .day-type-icon {
+  opacity: 0.9;
 }
 
 .calendar-actual.type-strength,
