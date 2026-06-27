@@ -172,6 +172,14 @@ Codex 根据摘要输出两部分：
 
 `routineTemplates` 是计时器可执行流程。只要包含 `steps`，身刻导入时会自动补齐计时器可见标记；仍建议显式写 `timerVisible: true` 和 `needsTimer: true`，避免它被当成纯计划元数据。
 
+计时器方案的数据源规则：
+- Cloudflare D1 的 `routine_templates` 是计时器方案主源。
+- 计时器成功读取云端方案后，会缓存到本地；离线时使用最近一次缓存。
+- 程序内置流程只允许作为无云端、无缓存时的兜底，不作为正常方案来源。
+- 计划草案可以只修改一个 `routineTemplates` 条目，不要求提交完整计划。
+- 修改已有方案时保持相同 `id`，提高 `version`，只写需要替换的方案即可。
+- 新增方案时使用新的稳定 `id`，并在对应 `dailyPlanItems.routineId` 引用它。
+
 字段约定：
 - `id`：稳定 routineId，日计划通过 `routineId` 引用它。
 - `title`：用户侧显示名称，不要写内部版本号。
@@ -179,6 +187,9 @@ Codex 根据摘要输出两部分：
 - `trainingType`：`strength` / `indoor_cardio` / `warmup` / `stretch` / `recovery` / `travel_strength` / `seat_recovery`。
 - `estimatedMinutes`：预计分钟数。
 - `timerVisible`：是否进入计时器方案列表。
+- `scene`：计时器分组，建议 `home` / `walk` / `recovery` / `travel`。
+- `sortOrder`：同组排序，数字越小越靠前。
+- `isDefault`：是否作为同组首选流程。
 - `steps`：计时器动作数组。
 
 `steps` 每项建议字段：
@@ -188,6 +199,37 @@ Codex 根据摘要输出两部分：
 - `durationSeconds`：时长秒数。
 - `dose`：动作剂量或口令。
 - `cues` / `warnings`：可选提示。
+
+## 给健身计划对话的提示
+
+可以把下面这段发给健身计划制定对话，让它输出身刻可导入的方案：
+
+```text
+请输出一个可导入身刻的 coach_plan_patch JSON，不要写代码，不要包含 token。
+
+重要规则：
+1. 可以只修改某一个 routineTemplates，不要求输出完整计划。
+2. routine_templates 是计时器方案主源；计时器会从云端读取并缓存到本地。
+3. 如果是修改已有计时器方案，请保持相同 id，提高 version，只输出被修改的 routineTemplates 条目。
+4. 如果是新增方案，请给新的稳定 id，并在需要的 dailyPlanItems.routineId 中引用。
+5. 需要在计时器方案列表显示的 routine 必须写 timerVisible: true 和 needsTimer: true。
+6. routine title 使用用户侧中文名称，不要包含 routineId、英文下划线 ID、v1/v2/v3 版本号。
+7. routine 必须包含 steps；每个 step 至少包含 stepId 或 name、phase、durationSeconds、dose。
+8. scene 用 home / walk / recovery / travel；sortOrder 控制排序；isDefault 控制同组默认。
+9. trainingType 使用 strength / indoor_cardio / warmup / stretch / recovery / travel_strength / seat_recovery / easy_walk / quality_walk。
+10. daily_plan_items 只写未来日期；不要覆盖已有实际训练记录。
+
+请输出顶层 schema 为 coach_plan_patch 的 JSON：
+- schema
+- generatedAt
+- generatedBy
+- reason
+- effectiveFrom
+- effectiveTo 可选
+- routineTemplates 可选
+- dailyPlanItems 可选
+- planAdjustments 可选
+```
 
 ## dailyPlanItems 建议字段
 

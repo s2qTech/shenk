@@ -1,6 +1,6 @@
 # Shared Data Contract
 
-Last updated: 2026-06-19
+Last updated: 2026-06-27
 
 ## Purpose
 
@@ -18,6 +18,8 @@ Both sides may read all data. Write ownership is narrower:
 - `身刻` writes timer session handling records in `timer_session_links`; it does not modify `timer_sessions`.
 - Routine templates are modified only through explicit plan updates, not by timer execution.
 - Plans are modified only through explicit coach/user-confirmed updates, not automatically by the app.
+- `routine_templates` in Cloudflare D1 are the source of truth for timer-executable routines.
+- `home-training-timer` may cache `routine_templates` locally for offline execution, but cache is only a replica.
 
 ## Core Rules
 
@@ -29,6 +31,8 @@ Both sides may read all data. Write ownership is narrower:
 6. Timer sessions are raw execution records; `身刻` may summarize them into training logs.
 7. Local IndexedDB remains the first write target; cloud sync mirrors data.
 8. All records must be exportable as JSON.
+9. Timer routine selection is driven by `routine_templates.timerVisible === true`.
+10. Built-in timer routines are fallback/debug only; they must not be treated as the normal plan source.
 
 ## Naming
 
@@ -62,10 +66,65 @@ type TrainingType =
   | "easy_walk"
   | "quality_walk"
   | "indoor_cardio"
+  | "warmup"
+  | "cooldown"
   | "recovery"
+  | "travel_strength"
+  | "seat_recovery"
   | "stretch"
   | "rest";
 ```
+
+## Routine Template Source Rules
+
+`routine_templates` are the only normal source for executable timer routines.
+
+`身刻` writes or updates `routine_templates` through user-confirmed plan patches. `home-training-timer` reads them, caches them locally, and executes them. Timer execution must never mutate routine templates.
+
+Required / recommended fields for timer execution:
+
+```json
+{
+  "id": "routine_recovery_low_pressure_v2",
+  "title": "低压恢复",
+  "version": "2.0.0",
+  "trainingType": "recovery",
+  "scene": "recovery",
+  "estimatedMinutes": 18,
+  "sortOrder": 30,
+  "isDefault": false,
+  "timerVisible": true,
+  "needsTimer": true,
+  "defaultOptions": {
+    "voice": true,
+    "wakeLock": true,
+    "defaultRestSeconds": 20
+  },
+  "steps": [
+    {
+      "stepId": "breathingReset",
+      "name": "呼吸重置",
+      "phase": "恢复",
+      "durationSeconds": 90,
+      "dose": "鼻吸口呼，肩颈放松"
+    }
+  ]
+}
+```
+
+Rules:
+
+- `id` is the stable `routineId`; `daily_plan_items.routineId` references it.
+- `title` is user-facing. Do not put internal IDs or version text in the title.
+- `version` is kept for traceability but hidden from normal UI.
+- `timerVisible: true` means the routine appears in the timer's standalone selector.
+- A routine referenced by a daily plan may still be opened directly by `routineId` even if it is not visible in the standalone selector.
+- `scene` controls timer grouping. Recommended values: `home`, `walk`, `recovery`, `travel`.
+- `sortOrder` controls order inside a scene. Lower numbers appear first.
+- `isDefault` marks the first-choice routine for a scene.
+- `steps` are required for timer execution.
+- If the cloud read fails, the timer uses the last successful local cache.
+- If there is no cloud data and no local cache, the timer may show a fallback/debug routine set with an explicit warning.
 
 ### Completion Status
 

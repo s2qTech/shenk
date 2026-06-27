@@ -54,27 +54,28 @@ timer_sessions
   -> only user-confirmed main/recovery sessions become training_logs
 ```
 
-## Routine Extraction
+## Routine Source
 
-First extract timer data into a shared file:
+`routine_templates` in Cloudflare D1 are the normal source of executable routines.
 
-```text
-shared/routines.json
-```
+The timer startup order is:
 
-Initial routines:
+1. Read `routine_templates` from the cloud API.
+2. Normalize and display only routines with `timerVisible: true`.
+3. Save the normalized routine catalog to local browser storage.
+4. If cloud read fails, use the last successful local cache.
+5. If both cloud and cache are unavailable, show an explicit fallback/debug state. Built-in routines are not the normal source of truth.
 
-- `routine_home_strength_standard_v3_1`
-- `routine_home_strength_short_v3_1`
-- `routine_indoor_cardio_v2_9`
-- `routine_recovery_stretch_v1`
-- `routine_walk_warmup_v1`
-- `routine_walk_stretch_quick_v1`
-- `routine_walk_stretch_full_v1`
-- `routine_travel_hotel_v2_7`
-- `routine_seat_recovery_v1`
+When `身刻` opens the timer with a `routineId`, the timer should execute that routine from cloud/cache even if it is not visible in the standalone selector. If the routine is not found, the timer must show a clear error instead of silently falling back to an unrelated routine.
 
-The existing timer can still bundle this JSON inline for GitHub Pages, but code should treat it as data.
+Routine grouping and ordering:
+
+- `scene`: `home` / `walk` / `recovery` / `travel`.
+- `sortOrder`: lower values appear earlier.
+- `isDefault`: preferred routine for a scene.
+- `timerVisible`: whether the routine appears in the timer selector.
+
+`身刻` writes or updates routines only through user-confirmed `coach_plan_patch.routineTemplates`. Timer execution never mutates `routine_templates`.
 
 ## Timer URL Contract
 
