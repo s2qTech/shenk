@@ -1960,18 +1960,19 @@
     const timerSessions = getTimerSessionsForDate(date);
     const visibleTimerSessions = timerSessions.filter((session) => getTimerSessionHandling(session).action !== "converted");
     const sections = [];
+    const hasActualRecords = records.length > 0;
 
-    if (planItems.length) {
+    if (!hasActualRecords && planItems.length) {
       sections.push(renderLayerSection("计划", planItems.map(renderPlanItemCard).join("")));
-    } else if (date >= todayISO() && !record) {
+    } else if (!hasActualRecords && date >= todayISO()) {
       sections.push(renderLayerSection(date === todayISO() ? "今日建议" : "未来预测", renderAdviceCard(date, date === todayISO() ? "suggestion" : "forecast")));
     }
 
-    if (adjustments.length) {
+    if (!hasActualRecords && adjustments.length) {
       sections.push(renderLayerSection("调整", adjustments.map(renderPlanAdjustmentCard).join("")));
     }
 
-    if (records.length) {
+    if (hasActualRecords) {
       sections.push(renderLayerSection("正式训练记录", records.map(renderRecordCard).join("")));
     } else if (visibleTimerSessions.some((session) => getTimerSessionHandling(session).action === "pending")) {
       sections.push(renderLayerSection("正式训练记录", `<div class="empty-state compact">有计时器记录待处理，确认后才会进入正式训练记录。</div>`));
