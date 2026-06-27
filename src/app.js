@@ -1419,7 +1419,7 @@
               ${[7, 14, 30].map((days) => `<option value="${days}" ${state.feedbackDays === days ? "selected" : ""}>最近 ${days} 天</option>`).join("")}
             </select>
           </label>
-          <div class="button-row">
+          <div class="button-row settings-actions feedback-action-row">
             <button type="button" class="primary" data-action="generate-feedback">生成摘要</button>
             <button type="button" data-action="copy-feedback" ${output ? "" : "disabled"}>复制</button>
             <button type="button" data-action="download-feedback" ${output ? "" : "disabled"}>下载</button>
@@ -2310,12 +2310,14 @@
         <div class="metric"><strong>${state.bodyMetrics.length}</strong><span>身体记录</span></div>
         <div class="metric"><strong>${Math.ceil(snapshotSize / 1024)}</strong><span>KB 本地数据</span></div>
       </div>
-      <div class="button-row" style="margin-top: 14px;">
+      <div class="button-row settings-actions local-data-actions">
         <button type="button" class="primary" data-action="export">导出 JSON</button>
         <label class="file-button">
           导入 JSON
           <input type="file" accept="application/json,.json" data-action="import">
         </label>
+      </div>
+      <div class="settings-danger-zone">
         <button type="button" class="danger" data-action="restore-seed">恢复种子记录</button>
       </div>
     `;
@@ -2333,7 +2335,7 @@
           rows="7"
           placeholder="粘贴包含 coach_plan_patch 的 JSON 或 Codex 回复。"
         >${escapeHtml(state.planPatchText)}</textarea>
-        <div class="button-row">
+        <div class="button-row settings-actions plan-patch-actions">
           <button type="button" data-action="parse-plan-patch">校验预览</button>
           <button type="button" class="primary" data-action="apply-plan-patch" ${result && result.valid ? "" : "disabled"}>确认写入</button>
           <button type="button" data-action="clear-plan-patch" ${state.planPatchText || preview ? "" : "disabled"}>清空</button>
@@ -2517,56 +2519,80 @@
     const error = state.syncStatus.lastError;
     return `
       <form class="sync-form" id="sync-config-form">
-        <label>
-          <span>API 地址</span>
-          <input type="url" name="apiBase" placeholder="https://your-worker.workers.dev/api" value="${escapeHtml(apiBase)}">
-        </label>
-        <label>
-          <span>Timer 地址</span>
-          <input type="url" name="timerUrl" placeholder="https://s2qtech.github.io/home-training-timer/" value="${escapeHtml(timerUrl)}">
-        </label>
-        <label>
-          <span>身刻访问密钥</span>
-          <input type="password" name="token" autocomplete="off" placeholder="Worker SHENK_TOKEN 或 ADMIN_TOKEN" value="${escapeHtml(token)}">
-        </label>
-        <label>
-          <span>计时器访问密钥</span>
-          <input type="password" name="timerToken" autocomplete="off" placeholder="Worker TIMER_TOKEN，仅本地保存，不进 URL" value="${escapeHtml(timerToken)}">
-        </label>
-        <section class="sync-transfer" aria-label="多端配置">
-          <div>
-            <strong>多端配置</strong>
-            <p>把本机云数据库配置打包到剪贴板，新设备粘贴一次即可。配置包包含访问密钥，只给自己的设备使用。</p>
+        <section class="settings-block">
+          <div class="settings-block-head">
+            <strong>连接配置</strong>
+            <span>保存到当前浏览器，不写入代码或 URL。</span>
           </div>
-          <div class="button-row">
+          <div class="settings-form-grid">
+            <label>
+              <span>API 地址</span>
+              <input type="url" name="apiBase" placeholder="https://your-worker.workers.dev/api" value="${escapeHtml(apiBase)}">
+            </label>
+            <label>
+              <span>Timer 地址</span>
+              <input type="url" name="timerUrl" placeholder="https://s2qtech.github.io/home-training-timer/" value="${escapeHtml(timerUrl)}">
+            </label>
+            <label>
+              <span>身刻访问密钥</span>
+              <input type="password" name="token" autocomplete="off" placeholder="Worker SHENK_TOKEN 或 ADMIN_TOKEN" value="${escapeHtml(token)}">
+            </label>
+            <label>
+              <span>计时器访问密钥</span>
+              <input type="password" name="timerToken" autocomplete="off" placeholder="Worker TIMER_TOKEN，仅本地保存，不进 URL" value="${escapeHtml(timerToken)}">
+            </label>
+          </div>
+          <div class="button-row settings-actions">
+            <button type="submit" class="primary">保存配置</button>
+            <button type="button" data-action="sync-health">测试连接</button>
+          </div>
+        </section>
+
+        <section class="settings-block">
+          <div class="settings-block-head">
+            <strong>同步状态</strong>
+            <span>日常只需要使用云端同步。</span>
+          </div>
+          <div class="data-grid sync-metrics">
+            <div class="metric"><strong>${dirtyCount}</strong><span>待写入云端</span></div>
+            <div class="metric"><strong>${totalCount}</strong><span>共享记录</span></div>
+            <div class="metric"><strong>${conflictCount}</strong><span>冲突</span></div>
+            <div class="metric"><strong>${escapeHtml(lastSyncAt)}</strong><span>最近云端读写</span></div>
+          </div>
+          <div class="button-row settings-actions">
+            <button type="button" class="primary" data-action="sync-now">云端同步</button>
+          </div>
+          <details class="sync-advanced">
+            <summary>手动同步</summary>
+            <div class="button-row settings-actions secondary-actions">
+              <button type="button" data-action="sync-pull">只读取云端</button>
+              <button type="button" data-action="sync-push">只写入云端</button>
+            </div>
+          </details>
+          ${conflictCount ? `
+            <div class="button-row settings-actions conflict-actions">
+            <button type="button" data-action="resolve-conflicts-cloud">使用云端</button>
+            <button type="button" data-action="resolve-conflicts-local">使用本地覆盖</button>
+            </div>
+          ` : ""}
+          <p class="sync-status ${error ? "sync-error" : ""}">${escapeHtml(error || status)}</p>
+        </section>
+
+        <details class="settings-block sync-transfer">
+          <summary>
+            <strong>多端配置</strong>
+            <span>复制配置到自己的新设备</span>
+          </summary>
+          <p>配置包包含访问密钥，只给自己的设备使用。</p>
+          <div class="button-row settings-actions secondary-actions">
             <button type="button" data-action="copy-sync-config-package">复制配置包</button>
             <button type="button" data-action="paste-sync-config-package">从剪贴板导入</button>
           </div>
           <textarea id="sync-config-package" rows="3" placeholder="也可以把配置包粘贴到这里，然后点击导入。"></textarea>
-          <div class="button-row">
+          <div class="button-row settings-actions secondary-actions">
             <button type="button" data-action="import-sync-config-package">导入配置包</button>
           </div>
-        </section>
-        <div class="data-grid sync-metrics">
-          <div class="metric"><strong>${dirtyCount}</strong><span>待写入云端</span></div>
-          <div class="metric"><strong>${totalCount}</strong><span>共享记录</span></div>
-          <div class="metric"><strong>${conflictCount}</strong><span>冲突</span></div>
-          <div class="metric"><strong>${escapeHtml(lastSyncAt)}</strong><span>最近云端读写</span></div>
-        </div>
-        <div class="button-row">
-          <button type="submit" class="primary">保存配置</button>
-          <button type="button" data-action="sync-health">测试连接</button>
-          <button type="button" data-action="sync-pull">读取云端</button>
-          <button type="button" data-action="sync-push">写入云端</button>
-          <button type="button" class="primary" data-action="sync-now">云端读写</button>
-        </div>
-        ${conflictCount ? `
-          <div class="button-row">
-            <button type="button" data-action="resolve-conflicts-cloud">使用云端</button>
-            <button type="button" data-action="resolve-conflicts-local">使用本地覆盖</button>
-          </div>
-        ` : ""}
-        <p class="sync-status ${error ? "sync-error" : ""}">${escapeHtml(error || status)}</p>
+        </details>
       </form>
     `;
   }
