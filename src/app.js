@@ -1681,10 +1681,8 @@
       } else {
         const adjustment = getPlanAdjustmentsByDate(date).at(-1);
         const planItem = getPlanItemsByDate(date)[0];
-        const pendingTimers = getConfirmableTimerSessions(date);
         if (adjustment) entries.set(date, calendarEntryFromPlanAdjustment(adjustment));
         else if (planItem) entries.set(date, calendarEntryFromPlanItem(planItem));
-        else if (pendingTimers.length) entries.set(date, calendarEntryFromTimerSession(pendingTimers[0]));
       }
     }
 
@@ -1755,7 +1753,7 @@
       kind,
       type: recommendation.type,
       icon: meta.icon,
-      marker: kind === "suggestion" ? "建议" : "预测",
+      marker: "建议",
       text: meta.label,
       className: meta.className
     };
@@ -1783,7 +1781,7 @@
 
   function calendarEntryFromPlanAdjustment(envelope) {
     const data = envelope.data || {};
-    return calendarEntryFromPlanData(data.toSnapshot || data.to_snapshot || {}, "adjustment", "调整");
+    return calendarEntryFromPlanData(data.toSnapshot || data.to_snapshot || {}, "adjustment", "计划");
   }
 
   function calendarEntryFromPlanData(data, kind, marker) {
@@ -1870,10 +1868,7 @@
           <div class="calendar-legend">
             <span><i class="legend-dot legend-actual"></i>记录</span>
             <span><i class="legend-dot legend-plan"></i>计划</span>
-            <span><i class="legend-dot legend-adjustment"></i>调整</span>
-            <span><i class="legend-dot legend-timer"></i>计时器待确认</span>
-            <span><i class="legend-dot legend-suggestion"></i>今日建议</span>
-            <span><i class="legend-dot legend-forecast"></i>未来预测</span>
+            <span><i class="legend-dot legend-suggestion"></i>建议</span>
           </div>
         </div>
         <div class="calendar-grid weeks-${weekCount}">
