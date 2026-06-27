@@ -134,7 +134,31 @@ Codex 根据摘要输出两部分：
       "workloadCountsAsLoad": true
     }
   },
-  "routineTemplates": [],
+  "routineTemplates": [
+    {
+      "id": "routine_recovery_low_pressure_v2",
+      "title": "低压恢复",
+      "version": "2.0.0",
+      "trainingType": "recovery",
+      "estimatedMinutes": 18,
+      "timerVisible": true,
+      "needsTimer": true,
+      "defaultOptions": {
+        "voice": true,
+        "wakeLock": true,
+        "defaultRestSeconds": 20
+      },
+      "steps": [
+        {
+          "stepId": "breathingReset",
+          "name": "呼吸重置",
+          "phase": "恢复",
+          "durationSeconds": 90,
+          "dose": "鼻吸口呼，肩颈放松"
+        }
+      ]
+    }
+  ],
   "dailyPlanItems": [],
   "planAdjustments": [],
   "notes": [
@@ -143,6 +167,27 @@ Codex 根据摘要输出两部分：
   ]
 }
 ```
+
+## routineTemplates 建议字段
+
+`routineTemplates` 是计时器可执行流程。只要包含 `steps`，身刻导入时会自动补齐计时器可见标记；仍建议显式写 `timerVisible: true` 和 `needsTimer: true`，避免它被当成纯计划元数据。
+
+字段约定：
+- `id`：稳定 routineId，日计划通过 `routineId` 引用它。
+- `title`：用户侧显示名称，不要写内部版本号。
+- `version`：版本号，可写但 UI 默认不展示。
+- `trainingType`：`strength` / `indoor_cardio` / `warmup` / `stretch` / `recovery` / `travel_strength` / `seat_recovery`。
+- `estimatedMinutes`：预计分钟数。
+- `timerVisible`：是否进入计时器方案列表。
+- `steps`：计时器动作数组。
+
+`steps` 每项建议字段：
+- `stepId`：动作 ID，优先使用计时器已有动作 key；未知 key 也可以，但需要提供 `name`。
+- `name`：动作名称。
+- `phase`：热身 / 训练 / 恢复 / 拉伸 / 冷身。
+- `durationSeconds`：时长秒数。
+- `dose`：动作剂量或口令。
+- `cues` / `warnings`：可选提示。
 
 ## dailyPlanItems 建议字段
 

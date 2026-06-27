@@ -502,7 +502,7 @@
     if (entity === "body_metrics") return normalizeBodyMetricData(data);
     if (entity === "plan_adjustments") return normalizePlanAdjustmentData(data);
     if (entity === "plan_templates") return normalizeLooseSharedData(data, "plan");
-    if (entity === "routine_templates") return normalizeLooseSharedData(data, "routine");
+    if (entity === "routine_templates") return normalizeRoutineTemplateData(data);
     return normalizeLooseSharedData(data, entity);
   }
 
@@ -512,6 +512,77 @@
       ...data,
       id: data.id || `${prefix}_${makeId()}`
     };
+  }
+
+  function normalizeRoutineTemplateData(data) {
+    if (!data || typeof data !== "object") return null;
+    const id = data.id || data.routineId || data.routine_id || `routine_${makeId()}`;
+    const trainingType = normalizeTimerTrainingType(data.trainingType || data.training_type || data.type || inferTrainingTypeFromRoutineId(id));
+    const steps = Array.isArray(data.steps) ? data.steps : parseJsonArrayValue(data.stepsJson || data.steps_json);
+    const explicitVisible = parseOptionalBoolean(
+      data.timerVisible
+      ?? data.timer_visible
+      ?? data.visibleInTimer
+      ?? data.visible_in_timer
+      ?? data.showInTimer
+      ?? data.show_in_timer
+      ?? data.isTimerRoutine
+      ?? data.is_timer_routine
+    );
+    const timerVisible = explicitVisible ?? Boolean(data.needsTimer ?? data.needs_timer ?? steps.length);
+    const title = data.title || data.name || data.displayName || data.display_name || TYPE_META[toLegacyTrainingType(trainingType)]?.label || "训练方案";
+    const defaultOptions = data.defaultOptions || data.default_options || data.timerOptions || data.timer_options || {};
+    return {
+      ...data,
+      id,
+      routineId: id,
+      routineVersion: data.routineVersion || data.routine_version || data.version || null,
+      title,
+      name: data.name || title,
+      variant: data.variant || data.routineVariant || data.routine_variant || "",
+      trainingType,
+      estimatedMinutes: toNullableNumber(data.estimatedMinutes ?? data.estimated_minutes),
+      steps: steps.length ? steps : data.steps,
+      defaultOptions,
+      timerVisible,
+      needsTimer: Boolean(data.needsTimer ?? data.needs_timer ?? timerVisible),
+      source: data.source || "coach",
+      createdAt: data.createdAt || data.created_at || new Date().toISOString(),
+      updatedAt: data.updatedAt || data.updated_at || new Date().toISOString()
+    };
+  }
+
+  function parseJsonArrayValue(value) {
+    if (Array.isArray(value)) return value;
+    if (!value || typeof value !== "string") return [];
+    try {
+      const parsed = JSON.parse(value);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch (error) {
+      return [];
+    }
+  }
+
+  function parseOptionalBoolean(value) {
+    if (value === null || value === undefined || value === "") return null;
+    if (typeof value === "boolean") return value;
+    if (typeof value === "number") return value !== 0;
+    const text = String(value).trim().toLowerCase();
+    if (["1", "true", "yes", "on", "visible"].includes(text)) return true;
+    if (["0", "false", "no", "off", "hidden"].includes(text)) return false;
+    return null;
+  }
+
+  function inferTrainingTypeFromRoutineId(id) {
+    const text = String(id || "").toLowerCase();
+    if (text.includes("warmup")) return "warmup";
+    if (text.includes("stretch")) return "stretch";
+    if (text.includes("recovery")) return "recovery";
+    if (text.includes("indoor") || text.includes("cardio")) return "indoor_cardio";
+    if (text.includes("travel")) return "travel_strength";
+    if (text.includes("seat")) return "seat_recovery";
+    if (text.includes("strength")) return "strength";
+    return "easy_walk";
   }
 
   function normalizeDailyPlanItemData(data) {
