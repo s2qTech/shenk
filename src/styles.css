@@ -1827,8 +1827,7 @@ textarea {
   opacity: 0.74;
 }
 
-.calendar-actual.type-strength,
-.calendar-suggestion.type-strength {
+.calendar-actual.type-strength {
   --hover-border: rgba(43, 116, 65, 0.32);
   --hover-glow: rgba(57, 152, 82, 0.34);
   --hover-halo: rgba(57, 152, 82, 0.18);
@@ -1836,8 +1835,7 @@ textarea {
   color: #183c27;
 }
 
-.calendar-actual.type-easyWalk,
-.calendar-suggestion.type-easyWalk {
+.calendar-actual.type-easyWalk {
   --hover-border: rgba(54, 125, 153, 0.3);
   --hover-glow: rgba(69, 157, 189, 0.32);
   --hover-halo: rgba(69, 157, 189, 0.16);
@@ -1845,8 +1843,7 @@ textarea {
   color: #173f54;
 }
 
-.calendar-actual.type-qualityWalk,
-.calendar-suggestion.type-qualityWalk {
+.calendar-actual.type-qualityWalk {
   --hover-border: rgba(75, 101, 174, 0.34);
   --hover-glow: rgba(86, 123, 218, 0.34);
   --hover-halo: rgba(86, 123, 218, 0.16);
@@ -1854,8 +1851,7 @@ textarea {
   color: #243b72;
 }
 
-.calendar-actual.type-indoorCardio,
-.calendar-suggestion.type-indoorCardio {
+.calendar-actual.type-indoorCardio {
   --hover-border: rgba(44, 132, 120, 0.3);
   --hover-glow: rgba(54, 168, 151, 0.32);
   --hover-halo: rgba(54, 168, 151, 0.16);
@@ -1863,8 +1859,7 @@ textarea {
   color: #174b44;
 }
 
-.calendar-actual.type-recovery,
-.calendar-suggestion.type-recovery {
+.calendar-actual.type-recovery {
   --hover-border: rgba(163, 117, 28, 0.3);
   --hover-glow: rgba(210, 155, 42, 0.34);
   --hover-halo: rgba(210, 155, 42, 0.17);
@@ -1872,8 +1867,7 @@ textarea {
   color: #5b4517;
 }
 
-.calendar-actual.type-rest,
-.calendar-suggestion.type-rest {
+.calendar-actual.type-rest {
   --hover-border: rgba(118, 106, 83, 0.26);
   --hover-glow: rgba(156, 140, 108, 0.27);
   --hover-halo: rgba(156, 140, 108, 0.14);
@@ -1881,11 +1875,13 @@ textarea {
   color: #514a3e;
 }
 
+.calendar-suggestion,
 .calendar-plan,
 .calendar-adjustment {
   box-shadow: inset 0 0 0 1px rgba(60, 88, 70, 0.13);
 }
 
+.calendar-suggestion .day-content,
 .calendar-plan .day-content,
 .calendar-adjustment .day-content {
   opacity: 0.88;
@@ -1898,57 +1894,111 @@ textarea {
   transform: scale(0.86);
 }
 
+.calendar-suggestion.type-strength,
 .calendar-plan.type-strength,
 .calendar-adjustment.type-strength {
   --hover-border: rgba(43, 116, 65, 0.24);
   --hover-glow: rgba(57, 152, 82, 0.22);
   --hover-halo: rgba(57, 152, 82, 0.11);
-  background: #f1f8f2;
+  background:
+    repeating-linear-gradient(
+      135deg,
+      rgba(57, 152, 82, 0.11) 0,
+      rgba(57, 152, 82, 0.11) 8px,
+      rgba(255, 255, 255, 0.2) 8px,
+      rgba(255, 255, 255, 0.2) 18px
+    ),
+    #f1f8f2;
   color: #355740;
 }
 
+.calendar-suggestion.type-easyWalk,
 .calendar-plan.type-easyWalk,
 .calendar-adjustment.type-easyWalk {
   --hover-border: rgba(54, 125, 153, 0.23);
   --hover-glow: rgba(69, 157, 189, 0.2);
   --hover-halo: rgba(69, 157, 189, 0.1);
-  background: #eef8fc;
+  background:
+    repeating-linear-gradient(
+      135deg,
+      rgba(69, 157, 189, 0.11) 0,
+      rgba(69, 157, 189, 0.11) 8px,
+      rgba(255, 255, 255, 0.2) 8px,
+      rgba(255, 255, 255, 0.2) 18px
+    ),
+    #eef8fc;
   color: #335b6c;
 }
 
+.calendar-suggestion.type-qualityWalk,
 .calendar-plan.type-qualityWalk,
 .calendar-adjustment.type-qualityWalk {
   --hover-border: rgba(75, 101, 174, 0.25);
   --hover-glow: rgba(86, 123, 218, 0.21);
   --hover-halo: rgba(86, 123, 218, 0.1);
-  background: #f0f4ff;
+  background:
+    repeating-linear-gradient(
+      135deg,
+      rgba(86, 123, 218, 0.11) 0,
+      rgba(86, 123, 218, 0.11) 8px,
+      rgba(255, 255, 255, 0.2) 8px,
+      rgba(255, 255, 255, 0.2) 18px
+    ),
+    #f0f4ff;
   color: #3c4f83;
 }
 
+.calendar-suggestion.type-indoorCardio,
 .calendar-plan.type-indoorCardio,
 .calendar-adjustment.type-indoorCardio {
   --hover-border: rgba(44, 132, 120, 0.23);
   --hover-glow: rgba(54, 168, 151, 0.2);
   --hover-halo: rgba(54, 168, 151, 0.1);
-  background: #edf8f5;
+  background:
+    repeating-linear-gradient(
+      135deg,
+      rgba(54, 168, 151, 0.11) 0,
+      rgba(54, 168, 151, 0.11) 8px,
+      rgba(255, 255, 255, 0.2) 8px,
+      rgba(255, 255, 255, 0.2) 18px
+    ),
+    #edf8f5;
   color: #345f58;
 }
 
+.calendar-suggestion.type-recovery,
 .calendar-plan.type-recovery,
 .calendar-adjustment.type-recovery {
   --hover-border: rgba(163, 117, 28, 0.23);
   --hover-glow: rgba(210, 155, 42, 0.21);
   --hover-halo: rgba(210, 155, 42, 0.1);
-  background: #fbf3dc;
+  background:
+    repeating-linear-gradient(
+      135deg,
+      rgba(210, 155, 42, 0.13) 0,
+      rgba(210, 155, 42, 0.13) 8px,
+      rgba(255, 255, 255, 0.2) 8px,
+      rgba(255, 255, 255, 0.2) 18px
+    ),
+    #fbf3dc;
   color: #705723;
 }
 
+.calendar-suggestion.type-rest,
 .calendar-plan.type-rest,
 .calendar-adjustment.type-rest {
   --hover-border: rgba(118, 106, 83, 0.2);
   --hover-glow: rgba(156, 140, 108, 0.18);
   --hover-halo: rgba(156, 140, 108, 0.09);
-  background: #f5f1e8;
+  background:
+    repeating-linear-gradient(
+      135deg,
+      rgba(156, 140, 108, 0.12) 0,
+      rgba(156, 140, 108, 0.12) 8px,
+      rgba(255, 255, 255, 0.2) 8px,
+      rgba(255, 255, 255, 0.2) 18px
+    ),
+    #f5f1e8;
   color: #665e50;
 }
 
