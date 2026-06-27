@@ -1620,7 +1620,7 @@ textarea {
 }
 
 .marker-adjustment {
-  color: #7b5720;
+  color: currentColor;
   font-weight: 700;
 }
 
@@ -1795,16 +1795,7 @@ textarea {
 }
 
 .calendar-adjustment {
-  background:
-    repeating-linear-gradient(
-      135deg,
-      rgba(188, 129, 31, 0.12) 0,
-      rgba(188, 129, 31, 0.12) 8px,
-      rgba(255, 255, 255, 0.18) 8px,
-      rgba(255, 255, 255, 0.18) 18px
-    ),
-    #f0dfb8;
-  color: #6a4c19;
+  color: #405b48;
 }
 
 .calendar-forecast {
@@ -1843,7 +1834,8 @@ textarea {
 
 .calendar-actual.type-strength,
 .calendar-suggestion.type-strength,
-.calendar-plan.type-strength {
+.calendar-plan.type-strength,
+.calendar-adjustment.type-strength {
   --hover-border: rgba(43, 116, 65, 0.32);
   --hover-glow: rgba(57, 152, 82, 0.34);
   --hover-halo: rgba(57, 152, 82, 0.18);
@@ -1853,7 +1845,8 @@ textarea {
 
 .calendar-actual.type-easyWalk,
 .calendar-suggestion.type-easyWalk,
-.calendar-plan.type-easyWalk {
+.calendar-plan.type-easyWalk,
+.calendar-adjustment.type-easyWalk {
   --hover-border: rgba(54, 125, 153, 0.3);
   --hover-glow: rgba(69, 157, 189, 0.32);
   --hover-halo: rgba(69, 157, 189, 0.16);
@@ -1863,7 +1856,8 @@ textarea {
 
 .calendar-actual.type-qualityWalk,
 .calendar-suggestion.type-qualityWalk,
-.calendar-plan.type-qualityWalk {
+.calendar-plan.type-qualityWalk,
+.calendar-adjustment.type-qualityWalk {
   --hover-border: rgba(75, 101, 174, 0.34);
   --hover-glow: rgba(86, 123, 218, 0.34);
   --hover-halo: rgba(86, 123, 218, 0.16);
@@ -1873,7 +1867,8 @@ textarea {
 
 .calendar-actual.type-indoorCardio,
 .calendar-suggestion.type-indoorCardio,
-.calendar-plan.type-indoorCardio {
+.calendar-plan.type-indoorCardio,
+.calendar-adjustment.type-indoorCardio {
   --hover-border: rgba(44, 132, 120, 0.3);
   --hover-glow: rgba(54, 168, 151, 0.32);
   --hover-halo: rgba(54, 168, 151, 0.16);
@@ -1883,7 +1878,8 @@ textarea {
 
 .calendar-actual.type-recovery,
 .calendar-suggestion.type-recovery,
-.calendar-plan.type-recovery {
+.calendar-plan.type-recovery,
+.calendar-adjustment.type-recovery {
   --hover-border: rgba(163, 117, 28, 0.3);
   --hover-glow: rgba(210, 155, 42, 0.34);
   --hover-halo: rgba(210, 155, 42, 0.17);
@@ -1893,7 +1889,8 @@ textarea {
 
 .calendar-actual.type-rest,
 .calendar-suggestion.type-rest,
-.calendar-plan.type-rest {
+.calendar-plan.type-rest,
+.calendar-adjustment.type-rest {
   --hover-border: rgba(118, 106, 83, 0.26);
   --hover-glow: rgba(156, 140, 108, 0.27);
   --hover-halo: rgba(156, 140, 108, 0.14);
@@ -1904,22 +1901,27 @@ textarea {
 .calendar-actual.type-strength .day-kind,
 .calendar-suggestion.type-strength .day-kind,
 .calendar-plan.type-strength .day-kind,
+.calendar-adjustment.type-strength .day-kind,
 .calendar-actual.type-easyWalk .day-kind,
 .calendar-suggestion.type-easyWalk .day-kind,
 .calendar-plan.type-easyWalk .day-kind,
+.calendar-adjustment.type-easyWalk .day-kind,
 .calendar-actual.type-qualityWalk .day-kind,
 .calendar-suggestion.type-qualityWalk .day-kind,
 .calendar-plan.type-qualityWalk .day-kind,
+.calendar-adjustment.type-qualityWalk .day-kind,
 .calendar-actual.type-indoorCardio .day-kind,
 .calendar-suggestion.type-indoorCardio .day-kind,
 .calendar-plan.type-indoorCardio .day-kind,
+.calendar-adjustment.type-indoorCardio .day-kind,
 .calendar-actual.type-recovery .day-kind,
 .calendar-suggestion.type-recovery .day-kind,
 .calendar-plan.type-recovery .day-kind,
+.calendar-adjustment.type-recovery .day-kind,
 .calendar-actual.type-rest .day-kind,
 .calendar-suggestion.type-rest .day-kind,
 .calendar-plan.type-rest .day-kind,
-.calendar-adjustment .day-kind {
+.calendar-adjustment.type-rest .day-kind {
   color: currentColor;
 }
 
