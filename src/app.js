@@ -123,6 +123,13 @@
     settings: { label: "设置", asset: "assets/app/setting.png" }
   };
 
+  const SETTINGS_SECTION_META = {
+    cloud: { label: "云端", hint: "同步配置", title: "云数据库", subtitle: "Cloudflare Worker + D1，同一份云端数据，按角色读写" },
+    plan: { label: "计划", hint: "草案导入", title: "计划草案", subtitle: "粘贴 Codex 输出，预览后再写入日历计划" },
+    feedback: { label: "反馈", hint: "摘要导出", title: "Codex 反馈", subtitle: "导出训练、状态和计时器摘要" },
+    local: { label: "本地", hint: "导入导出", title: "本地数据", subtitle: "导入、导出和种子记录" }
+  };
+
   const TIMER_TYPE_META = {
     warmup: { label: "热身", legacyType: "recovery", defaultRole: "warmup", canConvert: false },
     stretch: { label: "拉伸", legacyType: "recovery", defaultRole: "stretch", canConvert: false },
@@ -270,6 +277,7 @@
     },
     timerFrameUrl: "",
     dataView: "summary",
+    settingsSection: "cloud",
     feedbackDays: 14,
     feedbackExport: null,
     planPatchText: "",
@@ -1164,16 +1172,7 @@
     }
 
     if (state.activeTab === "settings") {
-      return `
-        <section class="content-page settings-page">
-          ${renderPageHead("设置")}
-          <div class="data-grid-layout">
-            ${panel("云数据库", "Cloudflare Worker + D1，同一份云端数据，按角色读写", renderSyncPanel())}
-            ${panel("计划草案", "粘贴 Codex 输出，预览后再写入日历计划", renderPlanPatchPanel())}
-            ${panel("本地数据", "导入、导出和种子记录", renderDataPanel())}
-          </div>
-        </section>
-      `;
+      return renderSettingsPage();
     }
 
     return `
@@ -1210,6 +1209,36 @@
     `;
   }
 
+  function renderSettingsPage() {
+    const section = SETTINGS_SECTION_META[state.settingsSection] ? state.settingsSection : "cloud";
+    const current = SETTINGS_SECTION_META[section];
+    return `
+      <section class="content-page settings-page">
+        ${renderPageHead("设置")}
+        <div class="settings-shell">
+          <nav class="settings-section-tabs" aria-label="设置分类">
+            ${Object.entries(SETTINGS_SECTION_META).map(([id, item]) => `
+              <button type="button" class="settings-section-tab ${section === id ? "active" : ""}" data-settings-section="${id}">
+                <strong>${escapeHtml(item.label)}</strong>
+                <span>${escapeHtml(item.hint)}</span>
+              </button>
+            `).join("")}
+          </nav>
+          <div class="settings-content">
+            ${panel(current.title, current.subtitle, renderSettingsSection(section))}
+          </div>
+        </div>
+      </section>
+    `;
+  }
+
+  function renderSettingsSection(section) {
+    if (section === "plan") return renderPlanPatchPanel();
+    if (section === "feedback") return renderFeedbackExportPanel();
+    if (section === "local") return renderDataPanel();
+    return renderSyncPanel();
+  }
+
   function renderDataSummaryPage() {
     return `
       <section class="content-page data-page">
@@ -1221,7 +1250,6 @@
           </div>
           <div class="data-column">
             ${panel("记录概览", "最近训练节奏", renderOverview())}
-            ${panel("Codex 反馈", "导出训练、状态和计时器摘要", renderFeedbackExportPanel())}
             ${panel(
               "最近记录",
               "只显示最近 8 条",
@@ -2549,10 +2577,18 @@
         state.activeTab = button.dataset.tab;
         if (state.activeTab === "data") state.dataView = "summary";
         if (state.activeTab === "timer") state.timerFrameUrl = "";
+        if (state.activeTab === "settings" && !SETTINGS_SECTION_META[state.settingsSection]) state.settingsSection = "cloud";
         state.detailOpen = false;
         state.editMode = false;
         clearEditorDrafts();
         state.message = "";
+        render();
+      });
+    });
+
+    app.querySelectorAll("[data-settings-section]").forEach((button) => {
+      button.addEventListener("click", () => {
+        state.settingsSection = SETTINGS_SECTION_META[button.dataset.settingsSection] ? button.dataset.settingsSection : "cloud";
         render();
       });
     });
