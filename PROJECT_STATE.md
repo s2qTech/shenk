@@ -44,6 +44,7 @@ Phase 1 stores these entities as JSON envelopes in D1 table `cloud_records`. Ent
 - Cloud sync reads all shared entities and writes only 身刻-owned entities; `timer_sessions` is read-only in 身刻.
 - `routine_templates` are the timer routine source of truth; 身刻 writes them through confirmed plan patches, and `home-training-timer` reads cloud records then caches them locally for offline execution.
 - `coach_plan_patch` import is merge/upsert by default. Missing fields and empty arrays are no-op; deletion requires explicit `operation: "delete"` or `deletedAt`.
+- `tests/coach-plan-patch.test.js` locks the merge/upsert import rules: empty arrays are no-op, replaceMode does not clear records, explicit deletes create tombstones, and days with actual workouts are skipped.
 - Timer session handling is stored separately in `timer_session_links`; `timer_sessions` are never mutated by 身刻.
 - Dedicated "计时器记录" page shows recent timer sessions with date/type/status filters, details, and actions.
 - Day detail is layered as plan, adjustment, formal training logs, timer sessions, and body metrics.
