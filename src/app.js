@@ -171,7 +171,7 @@
   const TIMER_LINK_ACTION_META = {
     pending: "未处理",
     linked: "已关联",
-    converted: "已转日志",
+    converted: "已入记录",
     ignored: "已忽略"
   };
 
@@ -574,6 +574,17 @@
       return Array.isArray(parsed) ? parsed : [];
     } catch (error) {
       return [];
+    }
+  }
+
+  function parseJsonObjectValue(value) {
+    if (value && typeof value === "object" && !Array.isArray(value)) return value;
+    if (!value || typeof value !== "string") return {};
+    try {
+      const parsed = JSON.parse(value);
+      return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
+    } catch (error) {
+      return {};
     }
   }
 
@@ -1585,6 +1596,12 @@
     const distanceKm = draftValue(trainingDraft, "distanceKm", record && record.distanceKm ? record.distanceKm : "");
     const avgHeartRate = draftValue(trainingDraft, "avgHeartRate", record && record.avgHeartRate ? record.avgHeartRate : "");
     const trainingNotes = draftValue(trainingDraft, "trainingNotes", record ? record.notes : "");
+    const trainingLogId = draftValue(trainingDraft, "trainingLogId", record ? record.trainingLogId : "");
+    const dailyPlanItemId = draftValue(trainingDraft, "dailyPlanItemId", record ? record.dailyPlanItemId : "");
+    const timerSessionId = draftValue(trainingDraft, "timerSessionId", record ? record.timerSessionId : "");
+    const timerSessionIds = draftValue(trainingDraft, "timerSessionIds", record ? record.timerSessionIds : []);
+    const trainingSource = draftValue(trainingDraft, "source", record ? record.source : "");
+    const timerSessionJson = draftValue(trainingDraft, "timerSessionJson", record?.rawJson?.timerSession || "");
     const pain = metric ? metric.pain : record ? record.pain : { calf: 0, back: 0, wrist: 0, outerThigh: 0 };
     const fatigue = metric ? metric.fatigue : record ? record.fatigue : "normal";
     const weightKg = draftValue(statusDraft, "weightKg", metric && metric.weightKg !== null ? metric.weightKg : "");
@@ -1599,11 +1616,19 @@
     const painWrist = draftValue(statusDraft, "painWrist", pain.wrist);
     const painOuterThigh = draftValue(statusDraft, "painOuterThigh", pain.outerThigh);
     const statusNotes = draftValue(statusDraft, "statusNotes", metric ? metric.notes : "");
-    const hasRecord = Boolean(record);
+    const hasRecord = Boolean(record && (!trainingLogId || record.trainingLogId === trainingLogId || record.timerSessionId === timerSessionId));
     const visibleSections = getEditorSections();
 
     return `
       ${visibleSections.training ? `<form class="editor-form" id="training-form">
+        ${renderTrainingHiddenFields({
+          trainingLogId,
+          dailyPlanItemId,
+          timerSessionId,
+          timerSessionIds,
+          source: trainingSource,
+          timerSessionJson
+        })}
         ${formSection("训练记录", "实际做了什么，只填已经发生的训练数据。", `
           <div class="form-grid">
             ${field("日期", `<input name="date" type="date" value="${escapeHtml(trainingDate)}">`)}
@@ -1651,6 +1676,18 @@
         </div>
       </form>` : ""}
     `;
+  }
+
+  function renderTrainingHiddenFields(values) {
+    return Object.entries(values)
+      .filter(([, value]) => value !== null && value !== undefined && value !== "")
+      .map(([name, value]) => `<input name="${name}" type="hidden" value="${escapeHtml(serializeHiddenValue(value))}">`)
+      .join("");
+  }
+
+  function serializeHiddenValue(value) {
+    if (Array.isArray(value) || (value && typeof value === "object")) return JSON.stringify(value);
+    return String(value);
   }
 
   function formSection(title, description, body) {
@@ -2178,7 +2215,7 @@
             <div class="panel-header">
               <div>
                 <h2 class="panel-title">记录详情</h2>
-                <p class="panel-subtitle">只处理关联关系，不改写 timer_sessions</p>
+                <p class="panel-subtitle">补全训练、标记辅助流程，不改写 timer_sessions</p>
               </div>
             </div>
             <div class="panel-body">${renderTimerSessionDetail(selected)}</div>
@@ -2199,7 +2236,7 @@
       <div class="timer-stat-grid">
         <div class="metric"><strong>${todayPending}</strong><span>今日未处理</span></div>
         <div class="metric"><strong>${recent7}</strong><span>最近 7 天</span></div>
-        <div class="metric"><strong>${linked}</strong><span>已关联/转日志</span></div>
+        <div class="metric"><strong>${linked}</strong><span>已处理</span></div>
         <div class="metric"><strong>${short}</strong><span>过短/测试</span></div>
       </div>
     `;
@@ -2263,7 +2300,7 @@
     const typeMeta = getTimerTypeMeta(data.trainingType);
     const handling = getTimerSessionHandling(envelope);
     const selected = state.timerFilters.selectedSessionId === data.id;
-    const canConvert = canConvertTimerSession(data) && handling.action === "pending";
+    const canDraft = canDraftTimerSessionTraining(data) && handling.action === "pending";
     return `
       <article class="timer-table-row ${selected ? "selected" : ""}" data-session-id="${escapeHtml(data.id)}">
         <button type="button" class="timer-row-main" data-action="select-timer-session" data-session-id="${escapeHtml(data.id)}">
@@ -2276,7 +2313,7 @@
           <span><i class="timer-status-dot status-${handling.action}"></i>${escapeHtml(handling.label)}</span>
         </button>
         <div class="timer-row-actions">
-          ${canConvert ? `<button type="button" data-action="convert-timer-session" data-session-id="${escapeHtml(data.id)}">转日志</button>` : ""}
+          ${canDraft ? `<button type="button" data-action="draft-timer-session-training" data-session-id="${escapeHtml(data.id)}">补全</button>` : ""}
           ${handling.action === "pending" ? `<button type="button" data-action="ignore-timer-session" data-session-id="${escapeHtml(data.id)}">忽略</button>` : ""}
         </div>
       </article>
@@ -2325,16 +2362,15 @@
     if (handling.action !== "pending") {
       return `<p class="timer-note">这条记录已经处理。如需修改，后续可在关联记录里增加编辑入口。</p>`;
     }
-    const canConvert = canConvertTimerSession(data);
+    const canDraft = canDraftTimerSessionTraining(data);
     return `
       <div class="button-row timer-action-row">
-        ${canConvert ? `<button type="button" class="primary" data-action="convert-timer-session" data-session-id="${escapeHtml(data.id)}">转为训练日志</button>` : ""}
-        <button type="button" data-action="link-timer-session" data-session-id="${escapeHtml(data.id)}">关联到已有训练日志</button>
+        ${canDraft ? `<button type="button" class="primary" data-action="draft-timer-session-training" data-session-id="${escapeHtml(data.id)}">补全训练记录</button>` : ""}
         <button type="button" data-action="mark-timer-session-role" data-role="warmup" data-session-id="${escapeHtml(data.id)}">标记为热身</button>
         <button type="button" data-action="mark-timer-session-role" data-role="stretch" data-session-id="${escapeHtml(data.id)}">标记为拉伸/冷身</button>
         <button type="button" data-action="ignore-timer-session" data-session-id="${escapeHtml(data.id)}">忽略</button>
       </div>
-      ${!canConvert ? `<p class="timer-note">这条记录更像辅助流程或测试记录，默认不建议转成正式训练日志。</p>` : ""}
+      ${!canDraft ? `<p class="timer-note">这条记录更像辅助流程或测试记录，默认不建议进入正式训练记录。</p>` : ""}
     `;
   }
 
@@ -2828,6 +2864,7 @@
     bindAction("restore-seed", restoreSeed);
     bindAction("confirm-timer-session", confirmTimerSession);
     bindAction("select-timer-session", selectTimerSession);
+    bindAction("draft-timer-session-training", openTimerSessionTrainingDraft);
     bindAction("convert-timer-session", convertTimerSession);
     bindAction("link-timer-session", linkTimerSessionToExistingLog);
     bindAction("mark-timer-session-role", markTimerSessionRole);
@@ -3205,7 +3242,7 @@
     const recentPain = metrics.filter((item) => formatPainSummary(item.pain)).slice(-3);
     if (recentPain.length) questions.push("近期仍有疼痛记录，是否需要继续降低提高走或力量密度？");
     if (workouts.some((item) => item.status === "skipped" || item.status === "short")) questions.push("最近存在跳过或缩短训练，是否需要调整下一阶段计划容量？");
-    if (timerSessions.some((item) => getTimerSessionHandling(item).action === "pending")) questions.push("仍有计时器记录未确认，是否先补齐正式训练日志再改计划？");
+    if (timerSessions.some((item) => getTimerSessionHandling(item).action === "pending")) questions.push("仍有计时器记录未确认，是否先补齐正式训练记录再改计划？");
     return questions;
   }
 
@@ -3729,28 +3766,44 @@
 
   async function handleTrainingSubmit(event) {
     event.preventDefault();
+    const previousTrainingDraft = state.editorDrafts?.training || {};
     captureEditorDrafts();
     const data = new FormData(event.currentTarget);
     const date = String(data.get("date"));
     if (!isIsoDate(date)) return;
-    const existing = getWorkoutByDate(date);
+    const requestedTrainingLogId = optionalString(data.get("trainingLogId") || previousTrainingDraft.trainingLogId);
+    const requestedTimerSessionId = optionalString(data.get("timerSessionId") || previousTrainingDraft.timerSessionId);
+    const existing = findWorkoutForTrainingSubmit(date, requestedTrainingLogId, requestedTimerSessionId);
     const now = new Date().toISOString();
     const durationMin = toNullableNumber(data.get("durationMin"));
     const workoutType = TYPE_META[String(data.get("type"))] ? String(data.get("type")) : "easyWalk";
     const workoutStatus = getStatusForType(workoutType, String(data.get("status")));
     const isRest = workoutType === "rest";
+    const timerSessionIds = collectTimerSessionIds(
+      data.get("timerSessionIds") || previousTrainingDraft.timerSessionIds,
+      requestedTimerSessionId,
+      existing?.timerSessionIds
+    );
+    const dailyPlanItemId = optionalString(data.get("dailyPlanItemId") || previousTrainingDraft.dailyPlanItemId || existing?.dailyPlanItemId);
+    const source = optionalString(data.get("source") || previousTrainingDraft.source || existing?.source) || (requestedTimerSessionId ? "timer" : "manual");
+    const rawJson = mergeTrainingRawJson(existing?.rawJson, data.get("timerSessionJson") || previousTrainingDraft.timerSessionJson);
     const workout = normalizeWorkout({
       id: existing ? existing.id : makeId(),
+      trainingLogId: requestedTrainingLogId || existing?.trainingLogId || (requestedTimerSessionId ? `log_${date}_${safeIdPart(requestedTimerSessionId)}` : null),
+      dailyPlanItemId,
+      timerSessionId: requestedTimerSessionId || existing?.timerSessionId || null,
+      timerSessionIds,
       date,
       type: workoutType,
       status: workoutStatus,
-      source: existing ? existing.source : "manual",
+      source,
       durationSec: isRest || durationMin === null ? null : Math.round(durationMin * 60),
       distanceKm: isRest ? null : toNullableNumber(data.get("distanceKm")),
       avgHeartRate: isRest ? null : toNullableNumber(data.get("avgHeartRate")),
       fatigue: existing ? existing.fatigue : "normal",
       pain: existing ? existing.pain : { calf: 0, back: 0, wrist: 0, outerThigh: 0 },
       notes: String(data.get("trainingNotes") || "").trim(),
+      rawJson,
       createdAt: existing ? existing.createdAt : now,
       updatedAt: now
     });
@@ -3812,8 +3865,46 @@
     render();
   }
 
+  function findWorkoutForTrainingSubmit(date, trainingLogId, timerSessionId) {
+    const workouts = getWorkoutsByDate(date);
+    if (trainingLogId) {
+      const byTrainingLogId = workouts.find((item) => item.trainingLogId === trainingLogId);
+      if (byTrainingLogId) return byTrainingLogId;
+    }
+    if (timerSessionId) {
+      const byTimerSessionId = workouts.find((item) => (
+        item.timerSessionId === timerSessionId ||
+        (Array.isArray(item.timerSessionIds) && item.timerSessionIds.includes(timerSessionId))
+      ));
+      if (byTimerSessionId) return byTimerSessionId;
+      return null;
+    }
+    return workouts[0] || null;
+  }
+
+  function optionalString(value) {
+    const text = String(value || "").trim();
+    return text || null;
+  }
+
+  function collectTimerSessionIds(rawValue, primaryId, existingIds = []) {
+    const ids = new Set(Array.isArray(existingIds) ? existingIds.filter(Boolean) : []);
+    parseJsonArrayValue(rawValue).forEach((id) => {
+      if (id) ids.add(String(id));
+    });
+    if (primaryId) ids.add(primaryId);
+    return Array.from(ids);
+  }
+
+  function mergeTrainingRawJson(existingRawJson, timerSessionValue) {
+    const rawJson = { ...(existingRawJson || {}) };
+    const timerSession = parseJsonObjectValue(timerSessionValue);
+    if (Object.keys(timerSession).length) rawJson.timerSession = timerSession;
+    return rawJson;
+  }
+
   async function confirmTimerSession(element) {
-    await convertTimerSession(element);
+    openTimerSessionTrainingDraft(element);
   }
 
   function selectTimerSession(element) {
@@ -3821,7 +3912,11 @@
     render();
   }
 
-  async function convertTimerSession(element) {
+  function convertTimerSession(element) {
+    openTimerSessionTrainingDraft(element);
+  }
+
+  function openTimerSessionTrainingDraft(element) {
     const envelope = findTimerSessionById(element.dataset.sessionId);
     if (!envelope) return;
     const session = envelope.data;
@@ -3832,35 +3927,28 @@
       return;
     }
     if (getTrainingLogForTimerSession(session.id)) {
-      upsertTimerSessionLink(createTimerSessionLinkData(session, "converted", "main", getExistingTrainingLogIdForSession(session.id), "已存在正式训练记录"));
-      await refreshAfterTimerSessionAction(session, "已补充计时器处理状态");
+      state.message = "这条运动记录已进入正式训练记录";
+      render();
       return;
     }
-    if (!canConvertTimerSession(session)) {
-      const seconds = toNullableNumber(session.actualSeconds) || 0;
-      const reason = seconds < 60 ? "这条记录少于 60 秒，更像测试记录。" : seconds < 300 ? "这条记录不足 5 分钟，更适合作为辅助流程。" : "这个类型默认不转正式训练日志。";
-      if (!window.confirm(`${reason} 仍要创建正式训练日志吗？`)) return;
-    }
-
-    const sameDayWorkouts = getWorkoutsByDate(session.date);
-    if (sameDayWorkouts.length) {
-      const choice = window.prompt("这一天已有正式训练记录：输入 1 关联到已有记录，输入 2 创建新训练日志，输入 3 忽略本次运动记录。", "2");
-      if (choice === "1") {
-        await linkTimerSessionToExistingLog(element);
-        return;
-      }
-      if (choice === "3") {
-        await ignoreTimerSession(element);
-        return;
-      }
-      if (choice !== "2") return;
-    }
+    if (!canDraftTimerSessionTraining(session)) return;
 
     const workout = timerSessionToWorkout(session);
     if (!workout) return;
-    upsertWorkout(workout);
-    upsertTimerSessionLink(createTimerSessionLinkData(session, "converted", defaultTimerLinkRole(session.trainingType), workout.trainingLogId, "由计时器记录转为正式训练日志"));
-    await refreshAfterTimerSessionAction(session, `已转为训练日志 ${session.date}`);
+    state.selectedDate = session.date;
+    state.visibleMonth = session.date.slice(0, 7);
+    state.activeTab = "calendar";
+    state.detailOpen = true;
+    state.editMode = true;
+    state.timerFilters.selectedSessionId = session.id;
+    openEditorSection("training");
+    state.editorDrafts = {
+      date: session.date,
+      training: workoutToEditorTrainingDraft(workout),
+      status: {}
+    };
+    state.message = "已带入计时器数据，请补完心率、距离或备注后保存训练";
+    render();
   }
 
   async function linkTimerSessionToExistingLog(element) {
@@ -3879,7 +3967,7 @@
       return;
     }
     upsertTimerSessionLink(createTimerSessionLinkData(session, "linked", defaultTimerLinkRole(session.trainingType), getTrainingLogIdForWorkout(target), "关联到已有正式训练记录"));
-    await refreshAfterTimerSessionAction(session, "已关联到已有训练日志");
+    await refreshAfterTimerSessionAction(session, "已关联到已有训练记录");
   }
 
   async function markTimerSessionRole(element) {
@@ -3989,6 +4077,24 @@
       createdAt: now,
       updatedAt: now
     });
+  }
+
+  function workoutToEditorTrainingDraft(workout) {
+    return {
+      date: workout.date,
+      type: workout.type,
+      status: workout.status,
+      durationMin: workout.durationSec ? String(Math.round(workout.durationSec / 60)) : "",
+      distanceKm: workout.distanceKm ?? "",
+      avgHeartRate: workout.avgHeartRate ?? "",
+      trainingNotes: workout.notes || "",
+      trainingLogId: workout.trainingLogId || "",
+      dailyPlanItemId: workout.dailyPlanItemId || "",
+      timerSessionId: workout.timerSessionId || "",
+      timerSessionIds: workout.timerSessionIds || [],
+      source: workout.source || "",
+      timerSessionJson: workout.rawJson?.timerSession || ""
+    };
   }
 
   function timerCompletionToLegacyStatus(session) {
@@ -5113,6 +5219,10 @@
     const meta = getTimerTypeMeta(session.trainingType);
     if (seconds < 300) return false;
     return Boolean(meta.canConvert);
+  }
+
+  function canDraftTimerSessionTraining(session) {
+    return canConvertTimerSession(session);
   }
 
   function dateWithinDays(date, endDate, days) {

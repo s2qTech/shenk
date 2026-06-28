@@ -15,6 +15,7 @@ function loadAppTestApi() {
     upsertSharedEnvelope,
     applyCoachPlanPatch,
     buildTimerUrl,
+    openTimerSessionTrainingDraft,
     timerSessionToWorkout,
     workoutToTrainingLogData,
     getTimerSessionHandling,
@@ -174,6 +175,36 @@ function upsert(api, entity, data) {
   const summary = api.renderSelectedSummary();
   assert.match(summary, /Actual Walk/);
   assert.doesNotMatch(summary, /Planned Walk/);
+}
+
+{
+  const api = loadAppTestApi();
+  reset(api);
+  const session = {
+    id: "session_strength_draft",
+    date: "2099-06-04",
+    dailyPlanItemId: "daily_strength_draft",
+    routineId: "routine_strength_001",
+    routineTitle: "Strength",
+    trainingType: "strength",
+    completion: "completed",
+    actualSeconds: 2760,
+    startedAt: "2099-06-04T10:00:00.000Z"
+  };
+  upsert(api, "timer_sessions", session);
+
+  api.openTimerSessionTrainingDraft({ dataset: { sessionId: "session_strength_draft" } });
+
+  assert.equal(api.state.records.training_logs.length, 0);
+  assert.equal(api.state.activeTab, "calendar");
+  assert.equal(api.state.detailOpen, true);
+  assert.equal(api.state.editMode, true);
+  assert.equal(api.state.editorDrafts.date, "2099-06-04");
+  assert.equal(api.state.editorDrafts.training.timerSessionId, "session_strength_draft");
+  assert.equal(api.state.editorDrafts.training.dailyPlanItemId, "daily_strength_draft");
+  assert.equal(api.state.editorDrafts.training.source, "timer");
+  assert.equal(api.state.editorSections.training, true);
+  assert.equal(api.state.editorSections.status, false);
 }
 
 {
