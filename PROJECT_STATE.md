@@ -39,7 +39,7 @@ Phase 1 stores these entities as JSON envelopes in D1 table `cloud_records`. Ent
 - Static Web MVP for 身刻.
 - IndexedDB/localStorage persistence.
 - Calendar and day-detail recording UI.
-- Compatibility mapper from legacy `workouts` and `bodyMetrics` to shared `training_logs` and `body_metrics`.
+- Shared records are the canonical local data source. Legacy `workouts` and `bodyMetrics` are import/export compatibility and in-memory UI caches derived from `training_logs` and `body_metrics`.
 - Cloud database settings panel in `src/app.js`.
 - Cloud sync reads all shared entities and writes only 身刻-owned entities; `timer_sessions` is read-only in 身刻.
 - `routine_templates` are the timer routine source of truth; 身刻 writes them through confirmed plan patches, and `home-training-timer` reads cloud records then caches them locally for offline execution.

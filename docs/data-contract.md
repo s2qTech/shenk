@@ -35,6 +35,7 @@ Both sides may read all data. Write ownership is narrower:
 10. Built-in timer routines are fallback/debug only; they must not be treated as the normal plan source.
 11. Web, Android, and timer clients share the same business records; UI layout, colors, icons, and navigation state stay outside the shared data model.
 12. Tokens and API keys are local configuration, not shared business records. Multi-device setup uses encrypted sync profiles, not plaintext records.
+13. In 身刻, `cloud_records` envelopes are the canonical local model. Legacy `workouts` and `bodyMetrics` arrays are compatibility input/output and may be used as derived UI caches only.
 
 ## Platform Boundary
 

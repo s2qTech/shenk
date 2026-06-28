@@ -303,11 +303,15 @@
     render();
     registerOfflineSupport();
     const snapshot = normalizeSnapshot(await loadSnapshot());
-    state.workouts = normalizeWorkouts(snapshot.workouts);
-    state.bodyMetrics = normalizeBodyMetrics(snapshot.bodyMetrics);
     state.records = normalizeSharedRecords(snapshot.records);
+    refreshLegacyCachesFromSharedRecords();
     if (!state.workouts.length) {
-      state.workouts = seedWorkouts();
+      seedWorkouts().forEach((workout) => upsertSharedEnvelope(
+        state.records,
+        "training_logs",
+        workoutToTrainingLogData(workout, { compatSource: "seed" })
+      ));
+      refreshLegacyCachesFromSharedRecords();
       await saveSnapshot("已载入历史种子记录");
     }
     state.ready = true;
@@ -410,38 +414,38 @@
     }
   }
 
-  function buildSnapshot() {
-    syncSharedRecordsFromLegacy();
+  function buildSnapshot(options = {}) {
+    const records = normalizeSharedRecords(state.records);
+    const includeLegacy = options.includeLegacy === true;
     return {
       schemaVersion: SHARED_SCHEMA_VERSION,
-      legacySchemaVersion: 1,
+      dataSource: "shared_records",
+      legacySchemaVersion: includeLegacy ? 1 : 2,
       updatedAt: new Date().toISOString(),
-      workouts: state.workouts,
-      bodyMetrics: state.bodyMetrics,
-      records: cloneJson(state.records)
+      workouts: includeLegacy ? deriveLegacyWorkoutsFromSharedRecords(records) : [],
+      bodyMetrics: includeLegacy ? deriveLegacyMetricsFromSharedRecords(records) : [],
+      records: cloneJson(records)
     };
   }
 
   function normalizeSnapshot(payload) {
     const source = payload && typeof payload === "object" ? payload : {};
     const records = normalizeSharedRecords(collectSharedRecordSource(source));
-    let workouts = normalizeWorkouts(source.workouts);
-    let bodyMetrics = normalizeBodyMetrics(source.bodyMetrics);
+    const workouts = normalizeWorkouts(source.workouts);
+    const bodyMetrics = normalizeBodyMetrics(source.bodyMetrics);
 
-    if (!workouts.length && records.training_logs.length) {
-      workouts = normalizeWorkouts(records.training_logs.map(trainingLogEnvelopeToWorkout).filter(Boolean));
-    }
-    if (!bodyMetrics.length && records.body_metrics.length) {
-      bodyMetrics = normalizeBodyMetrics(records.body_metrics.map(bodyMetricEnvelopeToLegacy).filter(Boolean));
-    }
     if (!records.training_logs.length && workouts.length) {
-      records.training_logs = workouts.map((item) => workoutToTrainingLogEnvelope(item)).filter(Boolean);
+      records.training_logs = workouts.map((item) => workoutToTrainingLogEnvelope(item, { compatSource: "workouts" })).filter(Boolean);
     }
     if (!records.body_metrics.length && bodyMetrics.length) {
-      records.body_metrics = bodyMetrics.map((item) => bodyMetricToSharedEnvelope(item)).filter(Boolean);
+      records.body_metrics = bodyMetrics.map((item) => bodyMetricToSharedEnvelope(item, { compatSource: "bodyMetrics" })).filter(Boolean);
     }
 
-    return { workouts, bodyMetrics, records };
+    return {
+      workouts: deriveLegacyWorkoutsFromSharedRecords(records),
+      bodyMetrics: deriveLegacyMetricsFromSharedRecords(records),
+      records
+    };
   }
 
   function createEmptySharedRecords() {
@@ -769,23 +773,6 @@
     };
   }
 
-  function syncSharedRecordsFromLegacy() {
-    const records = normalizeSharedRecords(state.records);
-    const existingTrainingLogs = new Map(records.training_logs.map((item) => [item.id, item]));
-    const existingBodyMetrics = new Map(records.body_metrics.map((item) => [item.id, item]));
-    records.training_logs = records.training_logs.filter((item) => item.data?.rawJson?.compatSource !== "workouts");
-    records.body_metrics = records.body_metrics.filter((item) => item.data?.rawJson?.compatSource !== "bodyMetrics");
-    state.workouts.forEach((workout) => {
-      const data = workoutToTrainingLogData(workout);
-      if (data) upsertSharedEnvelope(records, "training_logs", data, existingTrainingLogs.get(data.id));
-    });
-    state.bodyMetrics.forEach((metric) => {
-      const data = bodyMetricToSharedData(metric);
-      if (data) upsertSharedEnvelope(records, "body_metrics", data, existingBodyMetrics.get(data.id));
-    });
-    state.records = records;
-  }
-
   function upsertSharedEnvelope(records, entity, data, existingOverride = null) {
     const existing = existingOverride || records[entity].find((item) => item.id === data.id) || null;
     const envelope = makeSharedEnvelope(entity, data, existing);
@@ -793,10 +780,25 @@
     records[entity] = records[entity].filter((item) => item.id !== envelope.id).concat(envelope).sort(compareSharedEnvelopes);
   }
 
-  function removeSharedRecordsByDate(entities, date) {
+  function markSharedRecordsDeletedByDate(entities, date) {
+    const now = new Date().toISOString();
     entities.forEach((entity) => {
       if (!Array.isArray(state.records[entity])) return;
-      state.records[entity] = state.records[entity].filter((item) => item.data?.date !== date);
+      state.records[entity] = state.records[entity].map((item) => {
+        if (item.deletedAt || item.data?.date !== date) return item;
+        return {
+          ...item,
+          data: {
+            ...(item.data || {}),
+            updatedAt: now,
+            deletedAt: now
+          },
+          updatedAt: now,
+          deletedAt: now,
+          syncState: "dirty",
+          conflict: null
+        };
+      });
     });
   }
 
@@ -822,14 +824,19 @@
     };
   }
 
-  function workoutToTrainingLogEnvelope(workout) {
-    const data = workoutToTrainingLogData(workout);
+  function workoutToTrainingLogEnvelope(workout, options = {}) {
+    const data = workoutToTrainingLogData(workout, options);
     return data ? makeSharedEnvelope("training_logs", data) : null;
   }
 
-  function workoutToTrainingLogData(workout) {
+  function workoutToTrainingLogData(workout, options = {}) {
     if (!workout || !isIsoDate(workout.date)) return null;
     const type = toSharedTrainingType(workout.type);
+    const rawJson = { ...(workout.rawJson || {}) };
+    if (options.compatSource) {
+      rawJson.compatSource = options.compatSource;
+      rawJson.legacyWorkoutId = workout.id;
+    }
     return {
       id: workout.trainingLogId || `log_${workout.date}_001`,
       date: workout.date,
@@ -853,7 +860,7 @@
       trainingLoad: toNullableNumber(workout.trainingLoad),
       recoveryHours: toNullableNumber(workout.recoveryHours),
       notes: workout.notes || "",
-      rawJson: { ...(workout.rawJson || {}), compatSource: "workouts", legacyWorkoutId: workout.id },
+      rawJson,
       createdAt: workout.createdAt || new Date().toISOString(),
       updatedAt: workout.updatedAt || new Date().toISOString()
     };
@@ -896,14 +903,19 @@
     };
   }
 
-  function bodyMetricToSharedEnvelope(metric) {
-    const data = bodyMetricToSharedData(metric);
+  function bodyMetricToSharedEnvelope(metric, options = {}) {
+    const data = bodyMetricToSharedData(metric, options);
     return data ? makeSharedEnvelope("body_metrics", data) : null;
   }
 
-  function bodyMetricToSharedData(metric) {
+  function bodyMetricToSharedData(metric, options = {}) {
     if (!metric || !isIsoDate(metric.date)) return null;
     const pain = metric.pain || {};
+    const rawJson = { ...(metric.rawJson || {}) };
+    if (options.compatSource) {
+      rawJson.compatSource = options.compatSource;
+      rawJson.legacyMetricId = metric.id;
+    }
     return {
       id: metric.bodyMetricId || `metric_${metric.date}`,
       date: metric.date,
@@ -924,7 +936,7 @@
         hipRightOuter: clampPain(pain.outerThigh)
       },
       notes: metric.notes || "",
-      rawJson: { compatSource: "bodyMetrics", legacyMetricId: metric.id },
+      rawJson,
       createdAt: metric.createdAt || new Date().toISOString(),
       updatedAt: metric.updatedAt || new Date().toISOString()
     };
@@ -2302,8 +2314,6 @@
 
   function renderDataPanel() {
     const snapshotSize = JSON.stringify({
-      workouts: state.workouts,
-      bodyMetrics: state.bodyMetrics,
       records: state.records
     }).length;
     return `
@@ -3986,14 +3996,16 @@
   }
 
   function upsertMetric(metric) {
-    state.bodyMetrics = state.bodyMetrics.filter((item) => item.date !== metric.date).concat(metric).sort((a, b) => a.date.localeCompare(b.date));
+    const data = bodyMetricToSharedData(metric);
+    if (!data) return;
+    upsertSharedEnvelope(state.records, "body_metrics", data);
+    refreshLegacyCachesFromSharedRecords();
   }
 
   async function deleteSelectedDate() {
     if (!window.confirm(`删除 ${state.selectedDate} 的训练和身体记录？`)) return;
-    state.workouts = state.workouts.filter((item) => item.date !== state.selectedDate);
-    state.bodyMetrics = state.bodyMetrics.filter((item) => item.date !== state.selectedDate);
-    removeSharedRecordsByDate(["training_logs", "body_metrics"], state.selectedDate);
+    markSharedRecordsDeletedByDate(["training_logs", "body_metrics"], state.selectedDate);
+    refreshLegacyCachesFromSharedRecords();
     state.editMode = false;
     clearEditorDrafts();
     await saveSnapshot(`已删除 ${state.selectedDate}`);
@@ -4002,9 +4014,13 @@
 
   async function restoreSeed() {
     if (!window.confirm("恢复种子记录会替换当前本地数据。继续？")) return;
-    state.workouts = seedWorkouts();
-    state.bodyMetrics = [];
     state.records = createEmptySharedRecords();
+    seedWorkouts().forEach((workout) => upsertSharedEnvelope(
+      state.records,
+      "training_logs",
+      workoutToTrainingLogData(workout, { compatSource: "seed" })
+    ));
+    refreshLegacyCachesFromSharedRecords();
     state.selectedDate = todayISO();
     state.visibleMonth = state.selectedDate.slice(0, 7);
     state.detailOpen = false;
@@ -4015,11 +4031,10 @@
   }
 
   function upsertWorkout(workout) {
-    const key = workoutKey(workout);
-    state.workouts = state.workouts
-      .filter((item) => workoutKey(item) !== key)
-      .concat(workout)
-      .sort((a, b) => a.date.localeCompare(b.date) || workoutKey(a).localeCompare(workoutKey(b)));
+    const data = workoutToTrainingLogData(workout);
+    if (!data) return;
+    upsertSharedEnvelope(state.records, "training_logs", data);
+    refreshLegacyCachesFromSharedRecords();
   }
 
   function workoutKey(workout) {
@@ -4063,7 +4078,7 @@
 
   function exportJson() {
     const payload = {
-      ...buildSnapshot(),
+      ...buildSnapshot({ includeLegacy: true }),
       exportedAt: new Date().toISOString()
     };
     const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
@@ -4091,17 +4106,8 @@
           return;
         }
         const snapshot = normalizeSnapshot(payload);
-        if (Array.isArray(payload.workouts)) {
-          state.workouts = snapshot.workouts;
-        } else if (snapshot.workouts.length) {
-          state.workouts = mergeWorkoutsByDate(state.workouts, snapshot.workouts);
-        }
-        if (Array.isArray(payload.bodyMetrics)) {
-          state.bodyMetrics = snapshot.bodyMetrics;
-        } else if (snapshot.bodyMetrics.length) {
-          state.bodyMetrics = mergeBodyMetricsByDate(state.bodyMetrics, snapshot.bodyMetrics);
-        }
-        state.records = hasSharedPayload ? mergeSharedRecords(state.records, snapshot.records) : snapshot.records;
+        state.records = mergeSharedRecords(state.records, snapshot.records);
+        refreshLegacyCachesFromSharedRecords();
         const message = "JSON 已导入";
         await saveSnapshot(message);
         await autoPushDirtyRecords(message);
@@ -4611,7 +4617,7 @@
     const records = Array.isArray(result.records) ? result.records : [];
     if (records.length) {
       state.records = mergeSharedRecords(state.records, recordsArrayToBucket(records));
-      syncLegacyFromSharedRecords();
+      refreshLegacyCachesFromSharedRecords();
     }
     const now = result.serverTime || new Date().toISOString();
     saveSyncConfig({ lastPullAt: now, lastSyncAt: now });
@@ -4622,7 +4628,7 @@
   }
 
   async function doPushDirtyRecords() {
-    syncSharedRecordsFromLegacy();
+    state.records = normalizeSharedRecords(state.records);
     const records = getDirtySharedRecords();
     if (!records.length) {
       const now = new Date().toISOString();
@@ -4650,6 +4656,7 @@
     });
     markAcceptedRecords(result.accepted || []);
     markConflictRecords(result.conflicts || []);
+    refreshLegacyCachesFromSharedRecords();
     const now = result.serverTime || new Date().toISOString();
     saveSyncConfig({ lastPushAt: now, lastSyncAt: now });
     state.syncStatus.lastResult = `已写入 ${result.accepted?.length || 0} 条，冲突 ${result.conflicts?.length || 0} 条`;
@@ -4760,7 +4767,7 @@
         .concat(normalized)
         .sort(compareSharedEnvelopes);
     });
-    syncLegacyFromSharedRecords();
+    refreshLegacyCachesFromSharedRecords();
     state.syncStatus.lastResult = "已使用云端版本处理冲突";
     state.syncStatus.lastError = "";
     await saveSnapshot();
@@ -4786,11 +4793,19 @@
     render();
   }
 
-  function syncLegacyFromSharedRecords() {
-    const cloudWorkouts = normalizeWorkouts(state.records.training_logs.map(trainingLogEnvelopeToWorkout).filter(Boolean));
-    const cloudMetrics = normalizeBodyMetrics(state.records.body_metrics.map(bodyMetricEnvelopeToLegacy).filter(Boolean));
-    if (cloudWorkouts.length) state.workouts = mergeWorkoutsByDate(state.workouts, cloudWorkouts);
-    if (cloudMetrics.length) state.bodyMetrics = mergeBodyMetricsByDate(state.bodyMetrics, cloudMetrics);
+  function refreshLegacyCachesFromSharedRecords() {
+    state.workouts = deriveLegacyWorkoutsFromSharedRecords(state.records);
+    state.bodyMetrics = deriveLegacyMetricsFromSharedRecords(state.records);
+  }
+
+  function deriveLegacyWorkoutsFromSharedRecords(records) {
+    const source = normalizeSharedRecords(records);
+    return normalizeWorkouts(source.training_logs.map(trainingLogEnvelopeToWorkout).filter(Boolean));
+  }
+
+  function deriveLegacyMetricsFromSharedRecords(records) {
+    const source = normalizeSharedRecords(records);
+    return normalizeBodyMetrics(source.body_metrics.map(bodyMetricEnvelopeToLegacy).filter(Boolean));
   }
 
   function formatLocalDateTime(value) {
