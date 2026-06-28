@@ -293,7 +293,7 @@ textarea {
 .data-grid-layout {
   display: grid;
   align-items: start;
-  grid-template-columns: minmax(420px, 1fr) minmax(380px, 0.9fr);
+  grid-template-columns: minmax(560px, 1.22fr) minmax(360px, 0.78fr);
   gap: 16px;
 }
 
@@ -321,23 +321,24 @@ textarea {
   min-height: 0;
 }
 
-.data-page .data-column:first-child {
+.data-page .data-trend-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   grid-template-rows: repeat(2, minmax(0, 1fr));
 }
 
-.data-page .data-column:last-child {
-  grid-template-rows: auto auto minmax(0, 1fr);
+.data-page .data-side-stack {
+  grid-template-rows: auto minmax(0, 1fr);
 }
 
-.data-page .data-column:first-child .panel,
-.data-page .data-column:last-child .panel:last-child {
+.data-page .data-trend-grid .panel,
+.data-page .data-side-stack .panel:last-child {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
   min-height: 0;
 }
 
-.data-page .data-column:first-child .panel-body,
-.data-page .data-column:last-child .panel:last-child .panel-body {
+.data-page .data-trend-grid .panel-body,
+.data-page .data-side-stack .panel:last-child .panel-body {
   display: grid;
   grid-template-rows: minmax(0, 1fr);
   min-height: 0;
@@ -361,6 +362,14 @@ textarea {
 .data-page .trend-stat {
   min-height: 58px;
   padding: 8px 10px;
+}
+
+.data-page .trend-summary {
+  gap: 7px;
+}
+
+.data-page .trend-stat strong {
+  font-size: 17px;
 }
 
 .data-page .trend-chart {
@@ -611,6 +620,7 @@ textarea {
 .settings-content .panel {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
+  height: 100%;
   min-height: min(620px, calc(100vh - 96px));
 }
 
@@ -1142,6 +1152,40 @@ textarea {
   stroke: #fff;
 }
 
+.body-fat-trend-chart .primary-stat strong {
+  color: #9b6848;
+}
+
+.body-fat-trend-chart .trend-line {
+  stroke: #9b6848;
+}
+
+.body-fat-trend-chart .trend-dot {
+  fill: #9b6848;
+}
+
+.body-fat-trend-chart .latest-dot {
+  fill: #c94f45;
+  stroke: #fff;
+}
+
+.muscle-trend-chart .primary-stat strong {
+  color: #496196;
+}
+
+.muscle-trend-chart .trend-line {
+  stroke: #496196;
+}
+
+.muscle-trend-chart .trend-dot {
+  fill: #496196;
+}
+
+.muscle-trend-chart .latest-dot {
+  fill: #c94f45;
+  stroke: #fff;
+}
+
 .trend-y-label,
 .trend-x-label {
   fill: var(--muted);
@@ -1414,9 +1458,10 @@ textarea {
 
 .settings-actions > button,
 .settings-actions > .file-button {
-  flex: 0 0 150px;
-  width: 150px;
+  flex: 0 1 156px;
+  width: 156px;
   min-width: 0;
+  min-height: 40px;
 }
 
 .settings-danger-zone {
@@ -1476,6 +1521,37 @@ textarea {
 
 .sync-metrics {
   grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.settings-section-cloud .sync-form {
+  grid-template-columns: minmax(0, 1fr) minmax(340px, 0.82fr);
+  align-items: start;
+}
+
+.settings-section-cloud .sync-config-block,
+.settings-section-cloud .sync-profile-block {
+  grid-column: 1;
+}
+
+.settings-section-cloud .sync-status-block {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  position: sticky;
+  top: 0;
+}
+
+.settings-section-cloud .sync-status-block .settings-actions > button {
+  flex: 1 1 100%;
+  width: 100%;
+}
+
+.settings-section-cloud .sync-metrics {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.settings-section-cloud .sync-status {
+  border-top: 1px solid var(--line);
+  padding-top: 10px;
 }
 
 .sync-status {
@@ -2246,6 +2322,10 @@ textarea {
   overflow: hidden;
 }
 
+.data-page .recent-record-list {
+  overflow: auto;
+}
+
 .recent-record-list .record-card {
   padding: 7px 10px;
 }
@@ -2659,6 +2739,21 @@ textarea {
     grid-template-columns: 1fr;
   }
 
+  .settings-section-cloud .sync-form {
+    grid-template-columns: 1fr;
+  }
+
+  .settings-section-cloud .sync-config-block,
+  .settings-section-cloud .sync-profile-block,
+  .settings-section-cloud .sync-status-block {
+    grid-column: auto;
+    grid-row: auto;
+  }
+
+  .settings-section-cloud .sync-status-block {
+    position: static;
+  }
+
   .settings-section-tabs {
     grid-template-columns: repeat(4, minmax(0, 1fr));
   }
@@ -2682,6 +2777,11 @@ textarea {
 
   .data-page .data-grid-layout {
     height: auto;
+  }
+
+  .data-page .data-trend-grid {
+    grid-template-columns: 1fr;
+    grid-template-rows: none;
   }
 
   .data-page .weight-trend {

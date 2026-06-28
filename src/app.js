@@ -121,7 +121,7 @@
     calendar: { label: "日历", asset: "assets/app/calendar.png" },
     timer: { label: "计时", asset: "assets/app/timer.png" },
     records: { label: "记录", asset: "assets/app/list.png" },
-    data: { label: "洞察", asset: "assets/app/notebook.png" },
+    data: { label: "数据", asset: "assets/app/notebook.png" },
     settings: { label: "设置", asset: "assets/app/setting.png" }
   };
 
@@ -1238,7 +1238,7 @@
               </button>
             `).join("")}
           </nav>
-          <div class="settings-content">
+          <div class="settings-content settings-section-${escapeHtml(section)}">
             ${panel(current.title, current.subtitle, renderSettingsSection(section))}
           </div>
         </div>
@@ -1256,18 +1256,20 @@
   function renderDataSummaryPage() {
     return `
       <section class="content-page data-page">
-        ${renderPageHead("洞察")}
+        ${renderPageHead("数据")}
         <div class="data-grid-layout">
-          <div class="data-column">
+          <div class="data-column data-trend-grid">
             ${panel("体重趋势", "最近体重记录", renderWeightTrend())}
             ${panel("腰围趋势", "最近腰围记录", renderWaistTrend())}
+            ${panel("体脂率趋势", "最近体脂记录", renderBodyFatTrend())}
+            ${panel("肌肉量趋势", "最近肌肉量记录", renderMuscleTrend())}
           </div>
-          <div class="data-column">
+          <div class="data-column data-side-stack">
             ${panel("记录概览", "最近训练节奏", renderOverview())}
             ${panel(
               "最近记录",
-              "只显示最近 8 条",
-              renderRecordList(recentWorkouts(8), "recent-record-list"),
+              "只显示最近 10 条",
+              renderRecordList(recentWorkouts(10), "recent-record-list"),
               `<button type="button" class="subtle panel-action" data-action="open-all-records">全部记录</button>`
             )}
           </div>
@@ -1469,6 +1471,30 @@
     });
   }
 
+  function renderBodyFatTrend() {
+    return renderBodyTrend({
+      key: "bodyFatPct",
+      title: "体脂率趋势",
+      unit: "%",
+      emptyText: "还没有体脂率记录。编辑状态记录时填写体脂率后，这里会显示趋势。",
+      rangeFloor: 0.8,
+      deltaThreshold: 0.1,
+      className: "body-fat-trend-chart"
+    });
+  }
+
+  function renderMuscleTrend() {
+    return renderBodyTrend({
+      key: "muscleKg",
+      title: "肌肉量趋势",
+      unit: "kg",
+      emptyText: "还没有肌肉量记录。编辑状态记录时填写肌肉量后，这里会显示趋势。",
+      rangeFloor: 0.8,
+      deltaThreshold: 0.05,
+      className: "muscle-trend-chart"
+    });
+  }
+
   function renderBodyTrend({ key, title, unit, emptyText, rangeFloor, deltaThreshold, className }) {
     const records = state.bodyMetrics
       .filter((item) => item[key] !== null && item[key] !== undefined)
@@ -1509,7 +1535,7 @@
     const latestPoint = points[points.length - 1];
 
     return `
-      <div class="weight-trend ${className}">
+      <div class="weight-trend body-trend ${className}">
         <div class="trend-summary">
           <div class="trend-stat primary-stat">
             <span>最新</span>
@@ -2532,7 +2558,7 @@
     const error = state.syncStatus.lastError;
     return `
       <form class="sync-form" id="sync-config-form">
-        <section class="settings-block">
+        <section class="settings-block sync-config-block">
           <div class="settings-block-head">
             <strong>连接配置</strong>
             <span>保存到当前浏览器，不写入代码或 URL。</span>
@@ -2561,7 +2587,7 @@
           </div>
         </section>
 
-        <section class="settings-block">
+        <section class="settings-block sync-status-block">
           <div class="settings-block-head">
             <strong>同步状态</strong>
             <span>日常只需要使用云端同步。</span>
@@ -2591,7 +2617,7 @@
           <p class="sync-status ${error ? "sync-error" : ""}">${escapeHtml(error || status)}</p>
         </section>
 
-        <details class="settings-block sync-transfer" open>
+        <details class="settings-block sync-transfer sync-profile-block" open>
           <summary>
             <strong>多端配置</strong>
             <span>用一个加密档案连接自己的新设备</span>
