@@ -2198,14 +2198,14 @@
     const selected = getSelectedTimerSession(sessions);
     return `
       <section class="content-page records-log-page">
-        ${renderPageHead("记录")}
+        ${renderPageHead("计时记录")}
         ${renderTimerStats()}
         <div class="timer-workspace">
           <section class="panel timer-list-panel">
             <div class="panel-header timer-panel-header">
               <div>
-                <h2 class="panel-title">最近运动记录</h2>
-                <p class="panel-subtitle">来自 home-training-timer 的事实记录</p>
+                <h2 class="panel-title">最近计时</h2>
+                <p class="panel-subtitle">来自计时器的执行事实，不在这里手动补训练数据</p>
               </div>
               ${renderTimerFilters()}
             </div>
@@ -2214,7 +2214,7 @@
           <section class="panel timer-detail-panel">
             <div class="panel-header">
               <div>
-                <h2 class="panel-title">记录详情</h2>
+                <h2 class="panel-title">计时详情</h2>
                 <p class="panel-subtitle">补全训练、标记辅助流程，不改写 timer_sessions</p>
               </div>
             </div>
@@ -2866,7 +2866,6 @@
     bindAction("select-timer-session", selectTimerSession);
     bindAction("draft-timer-session-training", openTimerSessionTrainingDraft);
     bindAction("convert-timer-session", convertTimerSession);
-    bindAction("link-timer-session", linkTimerSessionToExistingLog);
     bindAction("mark-timer-session-role", markTimerSessionRole);
     bindAction("ignore-timer-session", ignoreTimerSession);
     bindAction("open-timer-plan", openTimerFromPlan);
@@ -3951,25 +3950,6 @@
     render();
   }
 
-  async function linkTimerSessionToExistingLog(element) {
-    const envelope = findTimerSessionById(element.dataset.sessionId);
-    if (!envelope) return;
-    const session = envelope.data;
-    if (getTimerSessionLink(session.id)) {
-      state.message = "这条运动记录已经处理过";
-      render();
-      return;
-    }
-    const target = chooseExistingWorkoutForTimerSession(session);
-    if (!target) {
-      state.message = "这一天还没有可关联的正式训练记录";
-      render();
-      return;
-    }
-    upsertTimerSessionLink(createTimerSessionLinkData(session, "linked", defaultTimerLinkRole(session.trainingType), getTrainingLogIdForWorkout(target), "关联到已有正式训练记录"));
-    await refreshAfterTimerSessionAction(session, "已关联到已有训练记录");
-  }
-
   async function markTimerSessionRole(element) {
     const envelope = findTimerSessionById(element.dataset.sessionId);
     if (!envelope) return;
@@ -3998,16 +3978,6 @@
     await refreshAfterTimerSessionAction(session, "已忽略运动记录");
   }
 
-  function chooseExistingWorkoutForTimerSession(session) {
-    const workouts = getWorkoutsByDate(session.date);
-    if (!workouts.length) return null;
-    if (workouts.length === 1) return workouts[0];
-    const options = workouts.map((item, index) => `${index + 1}. ${TYPE_META[item.type]?.label || item.type} ${formatDuration(item.durationSec) || ""} ${getStatusLabel(item.status, item.type)}`).join("\n");
-    const answer = window.prompt(`选择要关联的正式训练记录：\n${options}`, "1");
-    const index = Number(answer) - 1;
-    return workouts[index] || null;
-  }
-
   function findDefaultWorkoutForTimerSession(session) {
     const workouts = getWorkoutsByDate(session.date).filter((item) => item.type !== "rest");
     return workouts[0] || null;
@@ -4015,12 +3985,6 @@
 
   function getTrainingLogIdForWorkout(workout) {
     return workout?.trainingLogId || workoutToTrainingLogData(workout)?.id || null;
-  }
-
-  function getExistingTrainingLogIdForSession(sessionId) {
-    const existing = getTrainingLogForTimerSession(sessionId);
-    if (!existing) return null;
-    return existing.data?.id || getTrainingLogIdForWorkout(existing);
   }
 
   function createTimerSessionLinkData(session, action, role, targetTrainingLogId = null, note = "") {
