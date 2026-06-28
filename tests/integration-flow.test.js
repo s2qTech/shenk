@@ -16,6 +16,7 @@ function loadAppTestApi() {
     applyCoachPlanPatch,
     buildTimerUrl,
     openTimerSessionTrainingDraft,
+    getDirtySharedRecords,
     timerSessionToWorkout,
     workoutToTrainingLogData,
     getTimerSessionHandling,
@@ -175,6 +176,31 @@ function upsert(api, entity, data) {
   const summary = api.renderSelectedSummary();
   assert.match(summary, /Actual Walk/);
   assert.doesNotMatch(summary, /Planned Walk/);
+}
+
+{
+  const api = loadAppTestApi();
+  reset(api);
+  upsert(api, "timer_sessions", {
+    id: "session_shenk_must_not_push",
+    date: "2099-06-05",
+    routineTitle: "Strength",
+    trainingType: "strength",
+    completion: "completed",
+    actualSeconds: 1800,
+    startedAt: "2099-06-05T10:00:00.000Z"
+  });
+  upsert(api, "training_logs", {
+    id: "log_shenk_can_push",
+    date: "2099-06-05",
+    type: "strength",
+    status: "completed",
+    source: "manual",
+    durationSec: 1800
+  });
+  const dirty = api.getDirtySharedRecords();
+  assert.equal(dirty.some((item) => item.entity === "timer_sessions"), false);
+  assert.equal(dirty.some((item) => item.entity === "training_logs" && item.id === "log_shenk_can_push"), true);
 }
 
 {
