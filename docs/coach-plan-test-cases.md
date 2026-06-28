@@ -23,15 +23,12 @@
   "schema": "coach_plan_patch",
   "generatedBy": "coach",
   "reason": "说明本次调整原因",
-  "effectiveFrom": "YYYY-MM-DD",
-  "planTemplates": [],
-  "routineTemplates": [],
-  "dailyPlanItems": [],
-  "planAdjustments": []
+  "effectiveFrom": "YYYY-MM-DD"
 }
 ```
 
-如果某一类实体不需要修改，可以省略字段，也可以写空数组。两者都不应触发删除。
+如果某一类实体不需要修改，推荐直接省略该字段，不要写空数组。
+身刻会把空数组当作 no-op 兼容处理，但计划端默认不应输出无意义的 `planTemplates: []`、`routineTemplates: []`、`dailyPlanItems: []` 或 `planAdjustments: []`。
 
 ## routine_templates 字段要求
 
@@ -142,8 +139,7 @@
         }
       ]
     }
-  ],
-  "dailyPlanItems": []
+  ]
 }
 ```
 

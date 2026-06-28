@@ -157,6 +157,7 @@ Rules:
 
 - Missing entity fields mean "do not process this entity".
 - Empty arrays mean "do not process this entity".
+- Coach outputs should prefer omitting unchanged entity fields instead of emitting empty arrays; empty arrays are accepted only as a compatibility no-op.
 - `routineTemplates`, `dailyPlanItems`, `planAdjustments`, and `planTemplates` are upserted by `id`.
 - A routine-only patch must not modify plan templates, daily plan items, or adjustments.
 - Existing records may be deleted only when the incoming record explicitly includes `operation: "delete"` or `deletedAt`.

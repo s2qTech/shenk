@@ -2,6 +2,15 @@
 
 更新时间：2026-06-27
 
+## 计划端输出约定
+
+`coach_plan_patch` 默认是 merge/upsert。计划端只输出本次需要新增、更新或删除的实体字段。
+
+- 不需要修改的实体字段直接省略。
+- 不推荐输出 `planTemplates: []`、`routineTemplates: []`、`dailyPlanItems: []`、`planAdjustments: []`。
+- 身刻会把空数组当作 no-op 兼容处理，但空数组永远不能表示清空。
+- 删除必须逐条写 `operation: "delete"` 或 `deletedAt`。
+
 ## 目标
 
 身刻负责训练计划的承载、执行入口、记录、同步和反馈摘要；Codex 对话负责根据用户状态和历史数据制定、解释、修改训练计划。
@@ -182,7 +191,7 @@ Codex 根据摘要输出两部分：
 
 计划草案应用规则：
 - 默认是 merge/upsert 模式，绝不能把缺省字段或空数组解释为清空现有记录。
-- `routineTemplates: []`、`dailyPlanItems: []`、`planAdjustments: []`、`planTemplates: []` 都表示本次不处理该实体。
+- 兼容 `routineTemplates: []`、`dailyPlanItems: []`、`planAdjustments: []`、`planTemplates: []` 为 no-op，但计划端应优先省略不修改的实体字段。
 - 只输出需要新增或修改的记录；相同 `id` 表示更新，不同 `id` 表示新增。
 - 删除必须逐条显式声明：`operation: "delete"` 或 `deletedAt`。没有这两个字段时不得删除。
 - 导入预览必须显示新增、更新、删除数量；删除数量非 0 时必须二次确认。
@@ -226,7 +235,7 @@ Codex 根据摘要输出两部分：
 8. scene 用 home / walk / recovery / travel；sortOrder 控制排序；isDefault 控制同组默认。
 9. trainingType 使用 strength / indoor_cardio / warmup / stretch / recovery / travel_strength / seat_recovery / easy_walk / quality_walk。
 10. daily_plan_items 只写未来日期；不要覆盖已有实际训练记录。
-11. 缺省字段和空数组都表示不处理该实体，绝不能表示清空。
+11. 不修改的实体字段请直接省略；空数组仅作为 no-op 兼容，绝不能表示清空。
 12. 删除必须逐条写 operation: "delete" 或 deletedAt；默认不要输出删除。
 
 请输出顶层 schema 为 coach_plan_patch 的 JSON：
