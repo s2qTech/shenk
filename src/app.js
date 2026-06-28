@@ -3434,6 +3434,12 @@
         rows.push({ entity, id, action: "无效", reason: `${options.label || entity}[${index}] 缺少必填字段。` });
         return;
       }
+      const invalidReason = options.invalidReason ? options.invalidReason(normalized, item, index) : "";
+      if (invalidReason) {
+        counts.invalid += 1;
+        rows.push({ entity, id: normalized.id, action: "无效", reason: invalidReason });
+        return;
+      }
       const skipReason = options.skipReason ? options.skipReason(normalized) : "";
       if (skipReason) {
         counts.skipped += 1;
@@ -3466,11 +3472,37 @@
     return `新增 ${counts.add}，更新 ${counts.update}，删除 ${counts.delete}`;
   }
 
+  function getAvailableRoutineIdsForPatch(patch) {
+    const ids = new Set();
+    const deletedIds = new Set();
+    getPatchArray(patch, "routineTemplates").forEach((item) => {
+      const id = getPatchItemId(item);
+      if (!id) return;
+      if (isPatchDeleteItem(item)) deletedIds.add(id);
+      else ids.add(id);
+    });
+    (state.records.routine_templates || []).forEach((item) => {
+      const id = item.data?.id || item.id;
+      if (!id || item.deletedAt || deletedIds.has(id)) return;
+      ids.add(id);
+    });
+    return ids;
+  }
+
+  function getDailyPlanRoutineIssue(item, availableRoutineIds) {
+    if (!item) return "";
+    const routineId = String(item.routineId || item.routine_id || "").trim();
+    if ((item.needsTimer || item.needs_timer) && !routineId) return "需要计时器执行的日计划缺少 routineId。";
+    if (routineId && !availableRoutineIds.has(routineId)) return `routineId 未找到对应的 routine_templates：${routineId}`;
+    return "";
+  }
+
   function previewPlanPatch(patch) {
     const errors = validateCoachPlanPatch(patch);
     const warnings = [...errors];
     if (patch?.replaceMode) warnings.push("检测到 replaceMode: true。身刻仍按安全合并处理，只有明确 operation: delete 或 deletedAt 的记录才会删除。");
     const now = new Date().toISOString();
+    const availableRoutineIds = getAvailableRoutineIdsForPatch(patch);
     const planPreview = buildPatchEntityPreview(
       "plan_templates",
       getPatchPlanTemplates(patch),
@@ -3497,6 +3529,7 @@
       (item) => normalizeDailyPlanItemData({ ...item, updatedAt: now, createdAt: item.createdAt || now }),
       {
         label: "dailyPlanItems",
+        invalidReason: (item) => getDailyPlanRoutineIssue(item, availableRoutineIds),
         skipReason: (item) => {
           if (item.date < todayISO()) return "过去日期不改写。";
           if (getWorkoutsByDate(item.date).length) return "已有实际训练记录，不覆盖。";

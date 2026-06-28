@@ -223,4 +223,64 @@ function routinePatch(overrides = {}) {
   assert.equal(preview.routinePreview.invalid, 1);
 }
 
+{
+  const api = loadAppTestApi();
+  reset(api);
+  const patch = {
+    schema: "coach_plan_patch",
+    effectiveFrom: "2099-06-01",
+    dailyPlanItems: [{
+      id: "daily_missing_routine_id",
+      date: "2099-06-01",
+      trainingType: "recovery",
+      title: "Recovery",
+      needsTimer: true
+    }]
+  };
+  const preview = api.previewPlanPatch(patch);
+  assert.equal(preview.valid, false);
+  assert.equal(preview.dailyPreviewCounts.invalid, 1);
+  assert.match(preview.warnings.join("\n"), /缺少 routineId/);
+}
+
+{
+  const api = loadAppTestApi();
+  reset(api);
+  const patch = {
+    schema: "coach_plan_patch",
+    effectiveFrom: "2099-06-02",
+    dailyPlanItems: [{
+      id: "daily_unknown_routine",
+      date: "2099-06-02",
+      trainingType: "strength",
+      title: "Strength",
+      routineId: "routine_not_found"
+    }]
+  };
+  const preview = api.previewPlanPatch(patch);
+  assert.equal(preview.valid, false);
+  assert.equal(preview.dailyPreviewCounts.invalid, 1);
+  assert.match(preview.warnings.join("\n"), /routine_not_found/);
+}
+
+{
+  const api = loadAppTestApi();
+  reset(api);
+  upsert(api, "routine_templates", routinePatch({ id: "routine_existing_strength", title: "Existing Strength" }));
+  const patch = {
+    schema: "coach_plan_patch",
+    effectiveFrom: "2099-06-03",
+    dailyPlanItems: [{
+      id: "daily_existing_routine",
+      date: "2099-06-03",
+      trainingType: "strength",
+      title: "Strength",
+      routineId: "routine_existing_strength"
+    }]
+  };
+  const preview = api.previewPlanPatch(patch);
+  assert.equal(preview.valid, true);
+  assert.equal(preview.dailyPreviewCounts.add, 1);
+}
+
 console.log("coach-plan-patch tests passed");
