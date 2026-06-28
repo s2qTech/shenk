@@ -397,7 +397,7 @@ Timer session links are written by `身刻`. They record how a timer fact was ha
   "action": "converted",
   "targetTrainingLogId": "log_2026-06-19_session_2026-06-19_2130_001",
   "role": "main",
-  "note": "由计时器记录转为正式训练日志",
+  "note": "由计时器记录补全后保存为正式训练记录",
   "createdAt": "2026-06-19T22:20:00+08:00",
   "updatedAt": "2026-06-19T22:20:00+08:00"
 }
@@ -406,8 +406,10 @@ Timer session links are written by `身刻`. They record how a timer fact was ha
 Allowed `action` values:
 
 - `linked`: associated with an existing training log or kept as an auxiliary flow.
-- `converted`: converted into a formal `training_logs` record.
+- `converted`: saved into a formal `training_logs` record after the user reviews and completes the training draft.
 - `ignored`: intentionally hidden from pending timer workflows.
+
+`身刻` must not create a formal training log from a timer session without showing an editable draft first. The draft may be prefilled from the timer session, but the user must be able to add or correct distance, heart rate, notes, and status before saving.
 
 Allowed `role` values:
 

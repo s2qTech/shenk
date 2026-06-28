@@ -2252,7 +2252,7 @@
       ["all", "全部状态"],
       ["pending", "未处理"],
       ["linked", "已关联"],
-      ["converted", "已转训练日志"],
+      ["converted", "已入记录"],
       ["ignored", "已忽略"]
     ];
     return `

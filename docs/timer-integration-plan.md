@@ -1,6 +1,6 @@
 # Timer Integration Plan
 
-Last updated: 2026-06-19
+Last updated: 2026-06-28
 
 ## Goal
 
@@ -50,8 +50,8 @@ daily_plan_items
 timer_sessions
   -> written by timer
   -> read by 身刻
-  -> user confirms, links, ignores, or converts through timer_session_links
-  -> only user-confirmed main/recovery sessions become training_logs
+  -> user either ignores, marks as auxiliary, or opens a prefilled training draft in 身刻
+  -> only user-saved main/recovery drafts become training_logs
 ```
 
 ## Routine Source
@@ -152,7 +152,7 @@ window.parent.postMessage({
 Pros:
 
 - Better user experience.
-- Can auto-create pending training log.
+- Can open a pending training draft from a completed timer session.
 
 Cons:
 
@@ -213,8 +213,10 @@ If timer session exists but no confirmed training log:
 
 ```text
 发现计时器完成记录
-[生成训练记录] [忽略] [编辑后保存]
+[补全训练记录] [标记为热身/拉伸] [忽略]
 ```
+
+`补全训练记录` only opens an editable draft. It must not write `training_logs` until the user saves the training form.
 
 ## Timer UI Changes
 
