@@ -13,6 +13,7 @@
   const DEFAULT_CLOUD_API_BASE = "https://shenke-cloud-db.sq-muyi.workers.dev/api";
   const DEFAULT_TIMER_URL = "https://s2qtech.github.io/home-training-timer/";
   const SHARED_SCHEMA_VERSION = "2026-06-19-001";
+  const AUTO_PUSH_RETRY_DELAYS = [5000, 15000, 60000];
   const SHARED_ENTITIES = [
     "plan_templates",
     "routine_templates",
@@ -261,6 +262,7 @@
   let db = null;
   let messageTimer = null;
   let autoPushRetryTimer = null;
+  let autoPushRetryCount = 0;
 
   const state = {
     ready: false,
@@ -293,7 +295,8 @@
     syncStatus: {
       busy: false,
       lastResult: "",
-      lastError: ""
+      lastError: "",
+      retryAt: ""
     }
   };
 
@@ -2592,6 +2595,7 @@
     const configProfileId = config.configProfileId || "";
     const status = state.syncStatus.busy ? "云端读写中..." : state.syncStatus.lastResult || "未连接";
     const error = state.syncStatus.lastError;
+    const retryText = state.syncStatus.retryAt ? `，下次自动重试 ${formatLocalDateTime(state.syncStatus.retryAt)}` : "";
     return `
       <form class="sync-form" id="sync-config-form">
         <section class="settings-block sync-config-block">
@@ -2650,7 +2654,7 @@
             <button type="button" data-action="resolve-conflicts-local">使用本地覆盖</button>
             </div>
           ` : ""}
-          <p class="sync-status ${error ? "sync-error" : ""}">${escapeHtml(error || status)}</p>
+          <p class="sync-status ${error ? "sync-error" : ""}">${escapeHtml(`${error || status}${retryText}`)}</p>
         </section>
 
         <details class="settings-block sync-transfer sync-profile-block" open>
@@ -4710,6 +4714,7 @@
 
   async function autoPushDirtyRecords(localMessage) {
     if (!hasShenkSyncConfig()) {
+      clearAutoPushRetry();
       state.syncStatus.lastError = "云同步未配置，已仅保存到本地";
       state.syncStatus.lastResult = "";
       state.message = `${localMessage}（仅本地）`;
@@ -4717,22 +4722,40 @@
     }
     if (state.syncStatus.busy) {
       state.message = `${localMessage}，云端稍后同步`;
-      if (!autoPushRetryTimer) {
-        autoPushRetryTimer = window.setTimeout(async () => {
-          autoPushRetryTimer = null;
-          await autoPushDirtyRecords(localMessage);
-          render();
-        }, 1200);
-      }
+      scheduleAutoPushRetry(localMessage, 1200, false);
       return;
     }
 
     await pushDirtyRecords({ silent: true });
     if (state.syncStatus.lastError) {
       state.message = `${localMessage}，云端同步失败`;
+      scheduleAutoPushRetry(localMessage);
       return;
     }
+    clearAutoPushRetry();
     state.message = `${localMessage}，已同步云端`;
+  }
+
+  function scheduleAutoPushRetry(localMessage, overrideDelay = null, countAsFailure = true) {
+    if (autoPushRetryTimer || !hasShenkSyncConfig()) return;
+    const delay = overrideDelay ?? AUTO_PUSH_RETRY_DELAYS[Math.min(autoPushRetryCount, AUTO_PUSH_RETRY_DELAYS.length - 1)];
+    if (countAsFailure) autoPushRetryCount += 1;
+    state.syncStatus.retryAt = new Date(Date.now() + delay).toISOString();
+    autoPushRetryTimer = window.setTimeout(async () => {
+      autoPushRetryTimer = null;
+      state.syncStatus.retryAt = "";
+      await autoPushDirtyRecords(localMessage);
+      render();
+    }, delay);
+  }
+
+  function clearAutoPushRetry() {
+    if (autoPushRetryTimer) {
+      window.clearTimeout(autoPushRetryTimer);
+      autoPushRetryTimer = null;
+    }
+    autoPushRetryCount = 0;
+    state.syncStatus.retryAt = "";
   }
 
   async function doPullCloudRecords() {
@@ -4760,6 +4783,7 @@
     state.records = normalizeSharedRecords(state.records);
     const records = getDirtySharedRecords();
     if (!records.length) {
+      clearAutoPushRetry();
       const now = new Date().toISOString();
       saveSyncConfig({ lastPushAt: now, lastSyncAt: now });
       state.syncStatus.lastResult = "没有待写入云端的记录";
@@ -4786,6 +4810,7 @@
     markAcceptedRecords(result.accepted || []);
     markConflictRecords(result.conflicts || []);
     refreshLegacyCachesFromSharedRecords();
+    clearAutoPushRetry();
     const now = result.serverTime || new Date().toISOString();
     saveSyncConfig({ lastPushAt: now, lastSyncAt: now });
     state.syncStatus.lastResult = `已写入 ${result.accepted?.length || 0} 条，冲突 ${result.conflicts?.length || 0} 条`;
