@@ -1468,11 +1468,34 @@ textarea {
   min-height: 40px;
 }
 
+.settings-subsection {
+  display: grid;
+  gap: 10px;
+  margin-top: 8px;
+  border-top: 1px solid rgba(203, 214, 205, 0.72);
+  padding-top: 12px;
+}
+
+.settings-subsection-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.settings-subsection-head strong {
+  color: var(--ink);
+  font-size: 14px;
+}
+
+.settings-subsection-head span {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
 .settings-danger-zone {
   display: grid;
-  margin-top: 12px;
-  border-top: 1px solid var(--line);
-  padding-top: 12px;
 }
 
 .settings-danger-zone button {
@@ -1529,7 +1552,7 @@ textarea {
 
 .sync-profile-block > .settings-actions {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
 .sync-profile-block > .settings-actions > button {
@@ -1538,7 +1561,7 @@ textarea {
 }
 
 .sync-profile-block > .sync-advanced {
-  margin-top: 10px;
+  margin-top: 4px;
   border-style: dashed;
   background: rgba(255, 255, 255, 0.72);
 }
@@ -1554,6 +1577,58 @@ textarea {
 }
 
 .sync-profile-block .sync-advanced .settings-actions > button {
+  width: 100%;
+}
+
+.sync-profile-export {
+  grid-template-columns: minmax(0, 1fr) minmax(180px, 220px);
+  align-items: center;
+  border-top-style: dashed;
+}
+
+.sync-profile-export button {
+  width: 100%;
+}
+
+.sync-profile-block > .sync-legacy-config {
+  margin-top: 12px;
+}
+
+.sync-legacy-config .settings-subsection-head {
+  margin-top: 10px;
+}
+
+.local-data-panel {
+  display: grid;
+  gap: 14px;
+}
+
+.local-data-summary {
+  margin-bottom: 2px;
+}
+
+.local-data-transfer {
+  grid-template-columns: minmax(0, 1fr) minmax(260px, 460px);
+  align-items: center;
+}
+
+.local-data-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.local-data-actions > button,
+.local-data-actions > .file-button {
+  width: 100%;
+  min-width: 0;
+}
+
+.local-data-panel .settings-danger-zone {
+  grid-template-columns: minmax(0, 1fr) minmax(180px, 220px);
+  align-items: center;
+}
+
+.local-data-panel .settings-danger-zone button {
   width: 100%;
 }
 
@@ -2948,12 +3023,17 @@ textarea {
   }
 
   .sync-profile-block > .settings-actions,
-  .sync-profile-block .sync-advanced .settings-actions {
+  .sync-profile-block .sync-advanced .settings-actions,
+  .sync-profile-export,
+  .local-data-transfer,
+  .local-data-actions,
+  .local-data-panel .settings-danger-zone {
     grid-template-columns: 1fr;
   }
 
   .settings-block-head,
-  .sync-transfer summary {
+  .sync-transfer summary,
+  .settings-subsection-head {
     align-items: flex-start;
     flex-direction: column;
     gap: 4px;

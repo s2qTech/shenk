@@ -2382,20 +2382,32 @@
       records: state.records
     }).length;
     return `
-      <div class="data-grid">
-        <div class="metric"><strong>${state.workouts.length}</strong><span>训练记录</span></div>
-        <div class="metric"><strong>${state.bodyMetrics.length}</strong><span>身体记录</span></div>
-        <div class="metric"><strong>${Math.ceil(snapshotSize / 1024)}</strong><span>KB 本地数据</span></div>
-      </div>
-      <div class="button-row settings-actions local-data-actions">
-        <button type="button" class="primary" data-action="export">导出 JSON</button>
-        <label class="file-button">
-          导入 JSON
-          <input type="file" accept="application/json,.json" data-action="import">
-        </label>
-      </div>
-      <div class="settings-danger-zone">
-        <button type="button" class="danger" data-action="restore-seed">恢复种子记录</button>
+      <div class="local-data-panel">
+        <div class="data-grid local-data-summary">
+          <div class="metric"><strong>${state.workouts.length}</strong><span>训练记录</span></div>
+          <div class="metric"><strong>${state.bodyMetrics.length}</strong><span>身体记录</span></div>
+          <div class="metric"><strong>${Math.ceil(snapshotSize / 1024)}</strong><span>KB 本地数据</span></div>
+        </div>
+        <section class="settings-subsection local-data-transfer">
+          <div class="settings-subsection-head">
+            <strong>数据迁移</strong>
+            <span>低频使用，用于备份或换设备。</span>
+          </div>
+          <div class="button-row settings-actions local-data-actions">
+            <button type="button" class="primary" data-action="export">导出 JSON</button>
+            <label class="file-button">
+              导入 JSON
+              <input type="file" accept="application/json,.json" data-action="import">
+            </label>
+          </div>
+        </section>
+        <section class="settings-subsection settings-danger-zone">
+          <div class="settings-subsection-head">
+            <strong>维护操作</strong>
+            <span>仅用于测试或重建示例数据。</span>
+          </div>
+          <button type="button" class="danger" data-action="restore-seed">恢复种子记录</button>
+        </section>
       </div>
     `;
   }
@@ -2673,14 +2685,24 @@
               <input type="password" data-sync-profile-password autocomplete="new-password" placeholder="用于加密或解密，不会保存">
             </label>
           </div>
-          <div class="button-row settings-actions secondary-actions">
+          <div class="button-row settings-actions secondary-actions sync-profile-actions">
             <button type="button" class="primary" data-action="save-sync-profile">保存加密档案</button>
             <button type="button" data-action="load-sync-profile">读取加密档案</button>
-            <button type="button" data-action="copy-sync-profile-package">复制配置字符串</button>
           </div>
-          <details class="sync-advanced">
+          <section class="settings-subsection sync-profile-export">
+            <div class="settings-subsection-head">
+              <strong>新设备迁移</strong>
+              <span>需要换设备时再复制，不参与日常同步。</span>
+            </div>
+            <button type="button" data-action="copy-sync-profile-package">复制配置字符串</button>
+          </section>
+          <details class="sync-advanced sync-legacy-config">
             <summary>明文配置包（过渡）</summary>
-            <p>旧配置包包含访问密钥，只给自己的设备临时使用；长期建议使用上面的加密档案。</p>
+            <div class="settings-subsection-head">
+              <strong>旧方式导入导出</strong>
+              <span>包含访问密钥，只给自己的设备临时使用。</span>
+            </div>
+            <p>长期建议使用加密档案；这里保留给旧设备迁移和兜底排障。</p>
             <div class="button-row settings-actions secondary-actions">
               <button type="button" data-action="copy-sync-config-package">复制明文配置包</button>
               <button type="button" data-action="paste-sync-config-package">从剪贴板导入</button>
