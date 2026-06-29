@@ -627,6 +627,7 @@ textarea {
 .settings-content .panel-body {
   min-height: 0;
   overflow: auto;
+  overflow-x: hidden;
 }
 
 .timer-embed-page {
@@ -1426,6 +1427,7 @@ textarea {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
+  flex-wrap: wrap;
   gap: 12px;
   border-bottom: 1px solid rgba(223, 229, 223, 0.82);
   padding-bottom: 10px;
@@ -1439,8 +1441,10 @@ textarea {
 
 .settings-block-head span,
 .sync-transfer summary span {
+  min-width: 0;
   color: var(--muted);
   font-size: 12px;
+  line-height: 1.45;
 }
 
 .settings-form-grid {
@@ -1488,6 +1492,7 @@ textarea {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
+  flex-wrap: wrap;
   gap: 12px;
 }
 
@@ -1499,6 +1504,9 @@ textarea {
 }
 
 .sync-transfer textarea {
+  display: block;
+  width: 100%;
+  margin-top: 10px;
   min-height: 76px;
   resize: vertical;
 }
@@ -1519,12 +1527,42 @@ textarea {
   margin-top: 10px;
 }
 
+.sync-profile-block > .settings-actions {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.sync-profile-block > .settings-actions > button {
+  width: 100%;
+  min-width: 0;
+}
+
+.sync-profile-block > .sync-advanced {
+  margin-top: 10px;
+  border-style: dashed;
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.sync-profile-block > .sync-advanced summary {
+  font-weight: 600;
+}
+
+.sync-profile-block .sync-advanced .settings-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 180px));
+  justify-content: start;
+}
+
+.sync-profile-block .sync-advanced .settings-actions > button {
+  width: 100%;
+}
+
 .sync-metrics {
   grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
 .settings-section-cloud .sync-form {
-  grid-template-columns: minmax(0, 1fr) minmax(340px, 0.82fr);
+  grid-template-columns: minmax(520px, 1fr) minmax(320px, 0.72fr);
   align-items: start;
 }
 
@@ -2907,6 +2945,11 @@ textarea {
   .settings-danger-zone button {
     flex: 1 1 100%;
     width: 100%;
+  }
+
+  .sync-profile-block > .settings-actions,
+  .sync-profile-block .sync-advanced .settings-actions {
+    grid-template-columns: 1fr;
   }
 
   .settings-block-head,
