@@ -2685,10 +2685,16 @@
               <input type="password" data-sync-profile-password autocomplete="new-password" placeholder="用于加密或解密，不会保存">
             </label>
           </div>
-          <div class="button-row settings-actions secondary-actions sync-profile-actions">
-            <button type="button" class="primary" data-action="save-sync-profile">保存加密档案</button>
-            <button type="button" data-action="load-sync-profile">读取加密档案</button>
-          </div>
+          <section class="settings-subsection sync-profile-action-block">
+            <div class="settings-subsection-head">
+              <strong>档案操作</strong>
+              <span>保存当前配置，或在新设备上读取已有档案。</span>
+            </div>
+            <div class="button-row settings-actions secondary-actions sync-profile-actions">
+              <button type="button" class="primary" data-action="save-sync-profile">保存加密档案</button>
+              <button type="button" data-action="load-sync-profile">读取加密档案</button>
+            </div>
+          </section>
           <section class="settings-subsection sync-profile-export">
             <div class="settings-subsection-head">
               <strong>新设备迁移</strong>
