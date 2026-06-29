@@ -181,6 +181,41 @@ function upsert(api, entity, data) {
 {
   const api = loadAppTestApi();
   reset(api);
+  upsert(api, "daily_plan_items", {
+    id: "daily_adjusted_plan",
+    date: "2099-06-03",
+    trainingType: "quality_walk",
+    title: "原始提高走",
+    estimatedMinutes: 50,
+    routineId: "routine_quality_walk_test"
+  });
+  upsert(api, "plan_adjustments", {
+    id: "adjust_daily_plan",
+    date: "2099-06-03",
+    targetDailyPlanItemId: "daily_adjusted_plan",
+    adjustedBy: "coach",
+    adjustedAt: "2099-06-03T09:00:00.000Z",
+    reason: "当天降级。",
+    toSnapshot: {
+      trainingType: "easy_walk",
+      title: "调整普通走",
+      estimatedMinutes: 45,
+      routineId: "routine_easy_walk_test"
+    }
+  });
+  api.state.selectedDate = "2099-06-03";
+  const summary = api.renderSelectedSummary();
+  assert.match(summary, /调整后执行/);
+  assert.match(summary, /调整普通走/);
+  assert.match(summary, /原计划参考/);
+  assert.match(summary, /原始提高走/);
+  assert.ok(summary.indexOf("调整普通走") < summary.indexOf("原始提高走"));
+  assert.doesNotMatch(summary, /<h3>计划<\/h3>/);
+}
+
+{
+  const api = loadAppTestApi();
+  reset(api);
   upsert(api, "timer_sessions", {
     id: "session_shenk_must_not_push",
     date: "2099-06-05",

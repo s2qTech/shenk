@@ -1591,16 +1591,20 @@
     const draft = getEditorDraft(state.selectedDate);
     const trainingDraft = draft?.training || {};
     const statusDraft = draft?.status || {};
-    const recommendedType = getDisplayRecommendation(state.selectedDate).type;
+    const effectivePlan = getEffectivePlanForDate(state.selectedDate);
+    const effectivePlanData = effectivePlan?.data || null;
+    const plannedType = effectivePlanData ? toLegacyTrainingType(effectivePlanData.trainingType || effectivePlanData.type) : null;
+    const plannedDurationMin = effectivePlanData && effectivePlanData.estimatedMinutes ? effectivePlanData.estimatedMinutes : "";
+    const recommendedType = plannedType || getDisplayRecommendation(state.selectedDate).type;
     const type = TYPE_META[draftValue(trainingDraft, "type", record ? record.type : recommendedType)] ? draftValue(trainingDraft, "type", record ? record.type : recommendedType) : recommendedType;
     const status = getStatusForType(type, draftValue(trainingDraft, "status", record ? record.status : "completed"));
     const trainingDate = draftValue(trainingDraft, "date", state.selectedDate);
-    const durationMin = draftValue(trainingDraft, "durationMin", record && record.durationSec ? Math.round(record.durationSec / 60) : "");
+    const durationMin = draftValue(trainingDraft, "durationMin", record && record.durationSec ? Math.round(record.durationSec / 60) : plannedDurationMin);
     const distanceKm = draftValue(trainingDraft, "distanceKm", record && record.distanceKm ? record.distanceKm : "");
     const avgHeartRate = draftValue(trainingDraft, "avgHeartRate", record && record.avgHeartRate ? record.avgHeartRate : "");
     const trainingNotes = draftValue(trainingDraft, "trainingNotes", record ? record.notes : "");
     const trainingLogId = draftValue(trainingDraft, "trainingLogId", record ? record.trainingLogId : "");
-    const dailyPlanItemId = draftValue(trainingDraft, "dailyPlanItemId", record ? record.dailyPlanItemId : "");
+    const dailyPlanItemId = draftValue(trainingDraft, "dailyPlanItemId", record ? record.dailyPlanItemId : effectivePlanData?.dailyPlanItemId || effectivePlanData?.id || "");
     const timerSessionId = draftValue(trainingDraft, "timerSessionId", record ? record.timerSessionId : "");
     const timerSessionIds = draftValue(trainingDraft, "timerSessionIds", record ? record.timerSessionIds : []);
     const trainingSource = draftValue(trainingDraft, "source", record ? record.source : "");
@@ -2069,15 +2073,17 @@
     const visibleTimerSessions = timerSessions.filter((session) => getTimerSessionHandling(session).action !== "converted");
     const sections = [];
     const hasActualRecords = records.length > 0;
+    const latestAdjustment = adjustments.at(-1) || null;
 
-    if (!hasActualRecords && planItems.length) {
+    if (!hasActualRecords && latestAdjustment) {
+      sections.push(renderLayerSection("调整后执行", renderPlanAdjustmentCard(latestAdjustment)));
+      if (planItems.length) {
+        sections.push(renderPlanAuditSection("原计划参考", planItems.map((item) => renderPlanItemCard(item, { tag: "原计划", muted: true })).join("")));
+      }
+    } else if (!hasActualRecords && planItems.length) {
       sections.push(renderLayerSection("计划", planItems.map(renderPlanItemCard).join("")));
     } else if (!hasActualRecords && date >= todayISO()) {
       sections.push(renderLayerSection(date === todayISO() ? "今日建议" : "未来预测", renderAdviceCard(date, date === todayISO() ? "suggestion" : "forecast")));
-    }
-
-    if (!hasActualRecords && adjustments.length) {
-      sections.push(renderLayerSection("调整", adjustments.map(renderPlanAdjustmentCard).join("")));
     }
 
     if (hasActualRecords) {
@@ -2110,7 +2116,16 @@
     `;
   }
 
-  function renderPlanItemCard(envelope) {
+  function renderPlanAuditSection(title, body) {
+    return `
+      <details class="detail-layer plan-audit">
+        <summary>${escapeHtml(title)}</summary>
+        <div class="detail-layer-body">${body}</div>
+      </details>
+    `;
+  }
+
+  function renderPlanItemCard(envelope, options = {}) {
     const data = envelope.data || {};
     const legacyType = toLegacyTrainingType(data.trainingType || data.type);
     const meta = TYPE_META[legacyType] || TYPE_META.easyWalk;
@@ -2120,11 +2135,13 @@
       variant
     ].filter(Boolean).join(" · ");
     const notes = formatPublicNotes(data.notes);
+    const cardClass = options.muted ? "record-card plan-card plan-card-muted" : "record-card plan-card";
+    const tag = options.tag || "计划";
     return `
-      <article class="record-card plan-card">
+      <article class="${cardClass}">
         <div class="record-top">
           <h3>${renderTypeIcon(legacyType, "record-type-icon")}${escapeHtml(getPlanItemDisplayTitle(data) || meta.label)}</h3>
-          <span class="tag">计划</span>
+          <span class="tag">${escapeHtml(tag)}</span>
         </div>
         ${details ? `<p>${escapeHtml(details)}</p>` : ""}
         ${data.goal ? `<p>${escapeHtml(data.goal)}</p>` : ""}
@@ -2140,15 +2157,32 @@
 
   function renderPlanAdjustmentCard(envelope) {
     const data = envelope.data || {};
-    const toTitle = getPlanItemDisplayTitle(data.toSnapshot || {}) || "计划调整";
+    const planData = getPlanAdjustmentEffectiveData(envelope);
+    const legacyType = toLegacyTrainingType(planData.trainingType || planData.type);
+    const meta = TYPE_META[legacyType] || TYPE_META.easyWalk;
+    const variant = getRoutineVariantLabel(planData);
+    const details = [
+      planData.estimatedMinutes ? `${planData.estimatedMinutes} 分` : "",
+      variant
+    ].filter(Boolean).join(" · ");
+    const notes = formatPublicNotes(planData.notes);
+    const adjustedAt = data.adjustedAt ? formatLocalDateTime(data.adjustedAt) : "";
     return `
-      <article class="record-card">
+      <article class="record-card plan-card adjustment-card">
         <div class="record-top">
-          <h3>${escapeHtml(toTitle || "计划调整")}</h3>
-          <span class="tag">${escapeHtml(data.adjustedBy || "adjusted")}</span>
+          <h3>${renderTypeIcon(legacyType, "record-type-icon")}${escapeHtml(getPlanItemDisplayTitle(planData) || meta.label)}</h3>
+          <span class="tag">调整后</span>
         </div>
-        ${data.reason ? `<p>${escapeHtml(data.reason)}</p>` : ""}
-        ${data.adjustedAt ? `<p>${escapeHtml(formatLocalDateTime(data.adjustedAt))}</p>` : ""}
+        ${details ? `<p>${escapeHtml(details)}</p>` : ""}
+        ${planData.goal ? `<p>${escapeHtml(planData.goal)}</p>` : ""}
+        ${notes ? `<p>${escapeHtml(notes)}</p>` : ""}
+        ${data.reason ? `<p class="adjustment-reason">${escapeHtml(data.reason)}</p>` : ""}
+        ${adjustedAt ? `<p class="adjustment-meta">${escapeHtml(data.adjustedBy || "coach")} · ${escapeHtml(adjustedAt)}</p>` : ""}
+        ${planData.routineId ? `
+          <div class="button-row compact-actions">
+            <button type="button" data-action="open-timer-adjustment" data-adjustment-id="${escapeHtml(data.id)}">打开计时器</button>
+          </div>
+        ` : ""}
       </article>
     `;
   }
@@ -2901,6 +2935,7 @@
     bindAction("mark-timer-session-role", markTimerSessionRole);
     bindAction("ignore-timer-session", ignoreTimerSession);
     bindAction("open-timer-plan", openTimerFromPlan);
+    bindAction("open-timer-adjustment", openTimerFromAdjustment);
     bindAction("open-all-records", openAllRecords);
     bindAction("back-to-data", backToDataSummary);
     bindAction("generate-feedback", generateFeedbackExport);
@@ -3795,6 +3830,42 @@
     return getPlanItemsByDate(date)[0] || null;
   }
 
+  function getLatestPlanAdjustmentForDate(date) {
+    return getPlanAdjustmentsByDate(date).at(-1) || null;
+  }
+
+  function getEffectivePlanForDate(date) {
+    const adjustment = getLatestPlanAdjustmentForDate(date);
+    if (adjustment) {
+      return {
+        source: "adjustment",
+        envelope: adjustment,
+        data: getPlanAdjustmentEffectiveData(adjustment)
+      };
+    }
+    const plan = findPlanItemForDate(date);
+    if (!plan) return null;
+    return {
+      source: "plan",
+      envelope: plan,
+      data: plan.data || {}
+    };
+  }
+
+  function getPlanAdjustmentEffectiveData(envelope) {
+    const data = envelope?.data || {};
+    const snapshot = data.toSnapshot || data.to_snapshot || {};
+    const dailyPlanItemId = data.targetDailyPlanItemId || data.target_daily_plan_item_id || snapshot.dailyPlanItemId || snapshot.daily_plan_item_id || snapshot.id || "";
+    return {
+      ...snapshot,
+      date: snapshot.date || data.date,
+      id: snapshot.id || dailyPlanItemId || data.id,
+      dailyPlanItemId,
+      adjustedBy: data.adjustedBy || data.adjusted_by || "",
+      adjustedAt: data.adjustedAt || data.adjusted_at || ""
+    };
+  }
+
   async function handleTrainingSubmit(event) {
     event.preventDefault();
     const previousTrainingDraft = state.editorDrafts?.training || {};
@@ -4126,6 +4197,12 @@
     const envelope = (state.records.daily_plan_items || []).find((item) => item.data?.id === element.dataset.planId || item.id === element.dataset.planId);
     if (!envelope) return;
     openTimerUrl(envelope.data || {});
+  }
+
+  function openTimerFromAdjustment(element) {
+    const envelope = (state.records.plan_adjustments || []).find((item) => item.data?.id === element.dataset.adjustmentId || item.id === element.dataset.adjustmentId);
+    if (!envelope) return;
+    openTimerUrl(getPlanAdjustmentEffectiveData(envelope));
   }
 
   function openTimerUrl(planItem) {
