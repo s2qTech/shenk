@@ -205,12 +205,12 @@ function upsert(api, entity, data) {
   });
   api.state.selectedDate = "2099-06-03";
   const summary = api.renderSelectedSummary();
-  assert.match(summary, /调整后执行/);
+  assert.match(summary, /训练安排/);
   assert.match(summary, /调整普通走/);
-  assert.match(summary, /原计划参考/);
-  assert.match(summary, /原始提高走/);
-  assert.ok(summary.indexOf("调整普通走") < summary.indexOf("原始提高走"));
-  assert.doesNotMatch(summary, /<h3>计划<\/h3>/);
+  assert.doesNotMatch(summary, /原计划参考/);
+  assert.doesNotMatch(summary, /原始提高走/);
+  assert.doesNotMatch(summary, /当天降级/);
+  assert.doesNotMatch(summary, /coach/);
 }
 
 {

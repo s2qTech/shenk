@@ -2489,24 +2489,6 @@ textarea {
   font-weight: 700;
 }
 
-.plan-audit {
-  border: 0;
-  color: var(--muted);
-}
-
-.plan-audit summary {
-  width: fit-content;
-  cursor: pointer;
-  font-size: 13px;
-  font-weight: 700;
-  color: var(--muted);
-}
-
-.plan-audit[open] {
-  display: grid;
-  gap: 8px;
-}
-
 .detail-layer-body {
   display: grid;
   gap: 8px;
@@ -2522,20 +2504,6 @@ textarea {
 .adjustment-card {
   border-color: rgba(79, 112, 88, 0.28);
   background: #f8fbf7;
-}
-
-.plan-card-muted {
-  background: var(--surface-2);
-  opacity: 0.82;
-}
-
-.adjustment-reason {
-  color: var(--text);
-}
-
-.adjustment-meta {
-  color: var(--muted);
-  font-size: 12px;
 }
 
 .timer-card.timer-pending {

@@ -1389,6 +1389,7 @@
   function getSelectedPanelTitle() {
     const date = state.selectedDate;
     if (getWorkoutByDate(date) || getMetricByDate(date)) return "日期详情";
+    if (getEffectivePlanForDate(date)) return date === todayISO() ? "今日安排" : "训练安排";
     if (date === todayISO()) return "今日建议";
     if (date > todayISO()) return "未来预测";
     return "日期详情";
@@ -2065,23 +2066,18 @@
   function renderSelectedSummary() {
     const date = state.selectedDate;
     const records = getWorkoutsByDate(date);
-    const record = records[0] || null;
     const metric = getMetricByDate(date);
-    const planItems = getPlanItemsByDate(date);
-    const adjustments = getPlanAdjustmentsByDate(date);
     const timerSessions = getTimerSessionsForDate(date);
     const visibleTimerSessions = timerSessions.filter((session) => getTimerSessionHandling(session).action !== "converted");
     const sections = [];
     const hasActualRecords = records.length > 0;
-    const latestAdjustment = adjustments.at(-1) || null;
+    const effectivePlan = getEffectivePlanForDate(date);
 
-    if (!hasActualRecords && latestAdjustment) {
-      sections.push(renderLayerSection("调整后执行", renderPlanAdjustmentCard(latestAdjustment)));
-      if (planItems.length) {
-        sections.push(renderPlanAuditSection("原计划参考", planItems.map((item) => renderPlanItemCard(item, { tag: "原计划", muted: true })).join("")));
-      }
-    } else if (!hasActualRecords && planItems.length) {
-      sections.push(renderLayerSection("计划", planItems.map(renderPlanItemCard).join("")));
+    if (!hasActualRecords && effectivePlan) {
+      const body = effectivePlan.source === "adjustment"
+        ? renderPlanAdjustmentCard(effectivePlan.envelope)
+        : renderPlanItemCard(effectivePlan.envelope);
+      sections.push(renderLayerSection(date === todayISO() ? "今日安排" : "训练安排", body));
     } else if (!hasActualRecords && date >= todayISO()) {
       sections.push(renderLayerSection(date === todayISO() ? "今日建议" : "未来预测", renderAdviceCard(date, date === todayISO() ? "suggestion" : "forecast")));
     }
@@ -2116,16 +2112,7 @@
     `;
   }
 
-  function renderPlanAuditSection(title, body) {
-    return `
-      <details class="detail-layer plan-audit">
-        <summary>${escapeHtml(title)}</summary>
-        <div class="detail-layer-body">${body}</div>
-      </details>
-    `;
-  }
-
-  function renderPlanItemCard(envelope, options = {}) {
+  function renderPlanItemCard(envelope) {
     const data = envelope.data || {};
     const legacyType = toLegacyTrainingType(data.trainingType || data.type);
     const meta = TYPE_META[legacyType] || TYPE_META.easyWalk;
@@ -2135,13 +2122,11 @@
       variant
     ].filter(Boolean).join(" · ");
     const notes = formatPublicNotes(data.notes);
-    const cardClass = options.muted ? "record-card plan-card plan-card-muted" : "record-card plan-card";
-    const tag = options.tag || "计划";
     return `
-      <article class="${cardClass}">
+      <article class="record-card plan-card">
         <div class="record-top">
           <h3>${renderTypeIcon(legacyType, "record-type-icon")}${escapeHtml(getPlanItemDisplayTitle(data) || meta.label)}</h3>
-          <span class="tag">${escapeHtml(tag)}</span>
+          <span class="tag">计划</span>
         </div>
         ${details ? `<p>${escapeHtml(details)}</p>` : ""}
         ${data.goal ? `<p>${escapeHtml(data.goal)}</p>` : ""}
@@ -2166,18 +2151,15 @@
       variant
     ].filter(Boolean).join(" · ");
     const notes = formatPublicNotes(planData.notes);
-    const adjustedAt = data.adjustedAt ? formatLocalDateTime(data.adjustedAt) : "";
     return `
       <article class="record-card plan-card adjustment-card">
         <div class="record-top">
           <h3>${renderTypeIcon(legacyType, "record-type-icon")}${escapeHtml(getPlanItemDisplayTitle(planData) || meta.label)}</h3>
-          <span class="tag">调整后</span>
+          <span class="tag">计划</span>
         </div>
         ${details ? `<p>${escapeHtml(details)}</p>` : ""}
         ${planData.goal ? `<p>${escapeHtml(planData.goal)}</p>` : ""}
         ${notes ? `<p>${escapeHtml(notes)}</p>` : ""}
-        ${data.reason ? `<p class="adjustment-reason">${escapeHtml(data.reason)}</p>` : ""}
-        ${adjustedAt ? `<p class="adjustment-meta">${escapeHtml(data.adjustedBy || "coach")} · ${escapeHtml(adjustedAt)}</p>` : ""}
         ${planData.routineId ? `
           <div class="button-row compact-actions">
             <button type="button" data-action="open-timer-adjustment" data-adjustment-id="${escapeHtml(data.id)}">打开计时器</button>
