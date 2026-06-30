@@ -225,6 +225,13 @@ function upsert(api, entity, data) {
     actualSeconds: 1800,
     startedAt: "2099-06-05T10:00:00.000Z"
   });
+  upsert(api, "timer_session_links", {
+    id: "timer_link_shenk_must_not_push",
+    timerSessionId: "session_shenk_must_not_push",
+    date: "2099-06-05",
+    action: "converted",
+    role: "main"
+  });
   upsert(api, "training_logs", {
     id: "log_shenk_can_push",
     date: "2099-06-05",
@@ -235,6 +242,7 @@ function upsert(api, entity, data) {
   });
   const dirty = api.getDirtySharedRecords();
   assert.equal(dirty.some((item) => item.entity === "timer_sessions"), false);
+  assert.equal(dirty.some((item) => item.entity === "timer_session_links"), false);
   assert.equal(dirty.some((item) => item.entity === "training_logs" && item.id === "log_shenk_can_push"), true);
 }
 
@@ -301,7 +309,7 @@ function upsert(api, entity, data) {
   api.refreshLegacyCachesFromSharedRecords();
   const timerEnvelope = api.state.records.timer_sessions.find((item) => item.id === "session_strength_001");
   const handling = api.getTimerSessionHandling(timerEnvelope);
-  assert.equal(handling.action, "converted");
+  assert.equal(handling.action, "logged");
   assert.equal(handling.targetTrainingLogId, trainingLog.id);
 }
 

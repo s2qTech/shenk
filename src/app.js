@@ -32,7 +32,6 @@
     "routine_templates",
     "daily_plan_items",
     "plan_adjustments",
-    "timer_session_links",
     "training_logs",
     "body_metrics",
     "weather_logs",
@@ -170,10 +169,11 @@
   };
 
   const TIMER_LINK_ACTION_META = {
-    pending: "未处理",
-    linked: "已关联",
-    converted: "已入记录",
-    ignored: "已忽略"
+    draftable: "可补训练",
+    support: "辅助事实",
+    short: "过短",
+    fact: "计时事实",
+    logged: "已成记录"
   };
 
   const TIMER_LINK_ROLE_META = {
@@ -1951,10 +1951,10 @@
       kind: "timer",
       type,
       icon: meta.icon,
-      marker: "待确认",
+      marker: "计时",
       text: "计时器记录",
       className: meta.className,
-      statusClass: "status-pending"
+      statusClass: "status-fact"
     };
   }
 
@@ -2068,7 +2068,7 @@
     const records = getWorkoutsByDate(date);
     const metric = getMetricByDate(date);
     const timerSessions = getTimerSessionsForDate(date);
-    const visibleTimerSessions = timerSessions.filter((session) => getTimerSessionHandling(session).action !== "converted");
+    const visibleTimerSessions = timerSessions.filter((session) => getTimerSessionHandling(session).action !== "logged");
     const sections = [];
     const hasActualRecords = records.length > 0;
     const effectivePlan = getEffectivePlanForDate(date);
@@ -2084,8 +2084,6 @@
 
     if (hasActualRecords) {
       sections.push(renderLayerSection("正式训练记录", records.map(renderRecordCard).join("")));
-    } else if (visibleTimerSessions.some((session) => getTimerSessionHandling(session).action === "pending")) {
-      sections.push(renderLayerSection("正式训练记录", `<div class="empty-state compact">有计时器记录待处理，确认后才会进入正式训练记录。</div>`));
     }
 
     if (visibleTimerSessions.length) {
@@ -2224,7 +2222,7 @@
             <div class="panel-header timer-panel-header">
               <div>
                 <h2 class="panel-title">最近计时</h2>
-                <p class="panel-subtitle">来自计时器的执行事实，不在这里手动补训练数据</p>
+                <p class="panel-subtitle">来自计时器的执行事实，需要时带入正式训练记录</p>
               </div>
               ${renderTimerFilters()}
             </div>
@@ -2234,7 +2232,7 @@
             <div class="panel-header">
               <div>
                 <h2 class="panel-title">计时详情</h2>
-                <p class="panel-subtitle">补全训练、标记辅助流程，不改写 timer_sessions</p>
+                <p class="panel-subtitle">只读计时事实，不在这里直接生成训练日志</p>
               </div>
             </div>
             <div class="panel-body">${renderTimerSessionDetail(selected)}</div>
@@ -2247,15 +2245,15 @@
   function renderTimerStats() {
     const sessions = getAllTimerSessions();
     const today = todayISO();
-    const todayPending = sessions.filter((item) => item.data?.date === today && getTimerSessionHandling(item).action === "pending").length;
+    const todayDraftable = sessions.filter((item) => item.data?.date === today && getTimerSessionHandling(item).action === "draftable").length;
     const recent7 = sessions.filter((item) => dateWithinDays(item.data?.date, today, 7)).length;
-    const linked = sessions.filter((item) => ["linked", "converted"].includes(getTimerSessionHandling(item).action)).length;
+    const logged = sessions.filter((item) => getTimerSessionHandling(item).action === "logged").length;
     const short = sessions.filter((item) => isShortTimerSession(item.data)).length;
     return `
       <div class="timer-stat-grid">
-        <div class="metric"><strong>${todayPending}</strong><span>今日未处理</span></div>
+        <div class="metric"><strong>${todayDraftable}</strong><span>今日可补</span></div>
         <div class="metric"><strong>${recent7}</strong><span>最近 7 天</span></div>
-        <div class="metric"><strong>${linked}</strong><span>已处理</span></div>
+        <div class="metric"><strong>${logged}</strong><span>已成记录</span></div>
         <div class="metric"><strong>${short}</strong><span>过短/测试</span></div>
       </div>
     `;
@@ -2264,12 +2262,14 @@
   function renderTimerFilters() {
     const filters = state.timerFilters;
     const typeOptions = getTimerTypeOptions();
+    const statusFilter = normalizeTimerStatusFilter(filters.status);
     const statusOptions = [
-      ["all", "全部状态"],
-      ["pending", "未处理"],
-      ["linked", "已关联"],
-      ["converted", "已入记录"],
-      ["ignored", "已忽略"]
+      ["all", "全部"],
+      ["draftable", "可补训练"],
+      ["logged", "已成记录"],
+      ["support", "辅助事实"],
+      ["short", "过短/测试"],
+      ["fact", "计时事实"]
     ];
     return `
       <div class="timer-filters">
@@ -2286,7 +2286,7 @@
         <label>
           <span>状态</span>
           <select data-timer-filter="status">
-            ${statusOptions.map(([value, label]) => `<option value="${escapeHtml(value)}" ${filters.status === value ? "selected" : ""}>${escapeHtml(label)}</option>`).join("")}
+            ${statusOptions.map(([value, label]) => `<option value="${escapeHtml(value)}" ${statusFilter === value ? "selected" : ""}>${escapeHtml(label)}</option>`).join("")}
           </select>
         </label>
       </div>
@@ -2306,7 +2306,7 @@
           <span>流程</span>
           <span>时长</span>
           <span>完成</span>
-          <span>处理</span>
+          <span>状态</span>
           <span>操作</span>
         </div>
         ${sessions.map(renderTimerSessionRow).join("")}
@@ -2319,7 +2319,7 @@
     const typeMeta = getTimerTypeMeta(data.trainingType);
     const handling = getTimerSessionHandling(envelope);
     const selected = state.timerFilters.selectedSessionId === data.id;
-    const canDraft = canDraftTimerSessionTraining(data) && handling.action === "pending";
+    const canDraft = handling.action === "draftable";
     return `
       <article class="timer-table-row ${selected ? "selected" : ""}" data-session-id="${escapeHtml(data.id)}">
         <button type="button" class="timer-row-main" data-action="select-timer-session" data-session-id="${escapeHtml(data.id)}">
@@ -2332,8 +2332,7 @@
           <span><i class="timer-status-dot status-${handling.action}"></i>${escapeHtml(handling.label)}</span>
         </button>
         <div class="timer-row-actions">
-          ${canDraft ? `<button type="button" data-action="draft-timer-session-training" data-session-id="${escapeHtml(data.id)}">补全</button>` : ""}
-          ${handling.action === "pending" ? `<button type="button" data-action="ignore-timer-session" data-session-id="${escapeHtml(data.id)}">忽略</button>` : ""}
+          ${canDraft ? `<button type="button" data-action="draft-timer-session-training" data-session-id="${escapeHtml(data.id)}">补训练</button>` : ""}
         </div>
       </article>
     `;
@@ -2357,8 +2356,7 @@
       variant ? ["版本", variant] : null,
       ["实际时长", formatDuration(data.actualSeconds) || "-"],
       ["完成状态", getTimerCompletionLabel(data.completion)],
-      ["处理状态", handling.label],
-      ["关联", handling.targetTrainingLogId ? "已关联" : "-"]
+      ["记录状态", handling.label]
     ].filter(Boolean);
     return `
       <div class="timer-detail">
@@ -2378,18 +2376,16 @@
   function renderTimerSessionActions(envelope) {
     const data = envelope.data || {};
     const handling = getTimerSessionHandling(envelope);
-    if (handling.action !== "pending") {
-      return `<p class="timer-note">这条记录已经处理。如需修改，后续可在关联记录里增加编辑入口。</p>`;
+    if (handling.action === "logged") {
+      return `<p class="timer-note">这条计时已经进入正式训练记录，详情以训练记录为准。</p>`;
     }
-    const canDraft = canDraftTimerSessionTraining(data);
+    const canDraft = handling.action === "draftable";
     return `
-      <div class="button-row timer-action-row">
-        ${canDraft ? `<button type="button" class="primary" data-action="draft-timer-session-training" data-session-id="${escapeHtml(data.id)}">补全训练记录</button>` : ""}
-        <button type="button" data-action="mark-timer-session-role" data-role="warmup" data-session-id="${escapeHtml(data.id)}">标记为热身</button>
-        <button type="button" data-action="mark-timer-session-role" data-role="stretch" data-session-id="${escapeHtml(data.id)}">标记为拉伸/冷身</button>
-        <button type="button" data-action="ignore-timer-session" data-session-id="${escapeHtml(data.id)}">忽略</button>
-      </div>
-      ${!canDraft ? `<p class="timer-note">这条记录更像辅助流程或测试记录，默认不建议进入正式训练记录。</p>` : ""}
+      ${canDraft ? `
+        <div class="button-row timer-action-row">
+          <button type="button" class="primary" data-action="draft-timer-session-training" data-session-id="${escapeHtml(data.id)}">带入补训练</button>
+        </div>
+      ` : `<p class="timer-note">这条记录只作为计时事实保留；热身、拉伸、过短测试不单独生成正式训练。</p>`}
     `;
   }
 
@@ -2910,12 +2906,8 @@
     bindAction("cancel-edit", cancelSelectedEdit);
     bindAction("delete-date", deleteSelectedDate);
     bindAction("restore-seed", restoreSeed);
-    bindAction("confirm-timer-session", confirmTimerSession);
     bindAction("select-timer-session", selectTimerSession);
     bindAction("draft-timer-session-training", openTimerSessionTrainingDraft);
-    bindAction("convert-timer-session", convertTimerSession);
-    bindAction("mark-timer-session-role", markTimerSessionRole);
-    bindAction("ignore-timer-session", ignoreTimerSession);
     bindAction("open-timer-plan", openTimerFromPlan);
     bindAction("open-timer-adjustment", openTimerFromAdjustment);
     bindAction("open-all-records", openAllRecords);
@@ -3290,7 +3282,7 @@
     const recentPain = metrics.filter((item) => formatPainSummary(item.pain)).slice(-3);
     if (recentPain.length) questions.push("近期仍有疼痛记录，是否需要继续降低提高走或力量密度？");
     if (workouts.some((item) => item.status === "skipped" || item.status === "short")) questions.push("最近存在跳过或缩短训练，是否需要调整下一阶段计划容量？");
-    if (timerSessions.some((item) => getTimerSessionHandling(item).action === "pending")) questions.push("仍有计时器记录未确认，是否先补齐正式训练记录再改计划？");
+    if (timerSessions.some((item) => getTimerSessionHandling(item).action === "draftable")) questions.push("仍有计时器记录可带入补训练，是否先补齐正式训练记录再改计划？");
     return questions;
   }
 
@@ -3315,7 +3307,7 @@
       "## 快速概览",
       `- 训练记录：${actual.total} 条，完成 ${actual.completed} 条，跳过 ${actual.skipped} 条，短版 ${actual.short} 条，只拉伸 ${actual.stretchOnly} 条。`,
       `- 训练总量：${formatDuration(actual.durationSec)}，距离 ${formatNumber(actual.distanceKm, 2)} km。`,
-      `- 计时器记录：${summary.timerSessions.length} 条，其中待处理 ${summary.timerSessions.filter((item) => item.handling === "pending").length} 条。`,
+      `- 计时器记录：${summary.timerSessions.length} 条，其中可补训练 ${summary.timerSessions.filter((item) => item.handling === "draftable").length} 条。`,
       `- 状态记录：${summary.bodyMetrics.length} 条。`,
       body.weight ? `- 体重：${body.weight.latest.value} ${body.weight.unit}，区间变化 ${body.weight.delta} ${body.weight.unit}。` : "- 体重：无记录。",
       body.waist ? `- 腰围：${body.waist.latest.value} ${body.waist.unit}，区间变化 ${body.waist.delta} ${body.waist.unit}。` : "- 腰围：无记录。",
@@ -3987,29 +3979,15 @@
     return rawJson;
   }
 
-  async function confirmTimerSession(element) {
-    openTimerSessionTrainingDraft(element);
-  }
-
   function selectTimerSession(element) {
     state.timerFilters.selectedSessionId = element.dataset.sessionId || "";
     render();
-  }
-
-  function convertTimerSession(element) {
-    openTimerSessionTrainingDraft(element);
   }
 
   function openTimerSessionTrainingDraft(element) {
     const envelope = findTimerSessionById(element.dataset.sessionId);
     if (!envelope) return;
     const session = envelope.data;
-    const existingLink = getTimerSessionLink(session.id);
-    if (existingLink) {
-      state.message = "这条运动记录已经处理过";
-      render();
-      return;
-    }
     if (getTrainingLogForTimerSession(session.id)) {
       state.message = "这条运动记录已进入正式训练记录";
       render();
@@ -4032,74 +4010,6 @@
       status: {}
     };
     state.message = "已带入计时器数据，请补完心率、距离或备注后保存训练";
-    render();
-  }
-
-  async function markTimerSessionRole(element) {
-    const envelope = findTimerSessionById(element.dataset.sessionId);
-    if (!envelope) return;
-    const session = envelope.data;
-    if (getTimerSessionLink(session.id)) {
-      state.message = "这条运动记录已经处理过";
-      render();
-      return;
-    }
-    const role = TIMER_LINK_ROLE_META[element.dataset.role] ? element.dataset.role : defaultTimerLinkRole(session.trainingType);
-    const target = findDefaultWorkoutForTimerSession(session);
-    upsertTimerSessionLink(createTimerSessionLinkData(session, "linked", role, target ? getTrainingLogIdForWorkout(target) : null, `${TIMER_LINK_ROLE_META[role] || "辅助流程"}记录`));
-    await refreshAfterTimerSessionAction(session, `已标记为${TIMER_LINK_ROLE_META[role] || "辅助流程"}`);
-  }
-
-  async function ignoreTimerSession(element) {
-    const envelope = findTimerSessionById(element.dataset.sessionId);
-    if (!envelope) return;
-    const session = envelope.data;
-    if (getTimerSessionLink(session.id)) {
-      state.message = "这条运动记录已经处理过";
-      render();
-      return;
-    }
-    upsertTimerSessionLink(createTimerSessionLinkData(session, "ignored", "note", null, "用户忽略"));
-    await refreshAfterTimerSessionAction(session, "已忽略运动记录");
-  }
-
-  function findDefaultWorkoutForTimerSession(session) {
-    const workouts = getWorkoutsByDate(session.date).filter((item) => item.type !== "rest");
-    return workouts[0] || null;
-  }
-
-  function getTrainingLogIdForWorkout(workout) {
-    return workout?.trainingLogId || workoutToTrainingLogData(workout)?.id || null;
-  }
-
-  function createTimerSessionLinkData(session, action, role, targetTrainingLogId = null, note = "") {
-    const now = new Date().toISOString();
-    return {
-      id: `timer_link_${safeIdPart(session.id)}`,
-      timerSessionId: session.id,
-      date: session.date,
-      action,
-      targetTrainingLogId,
-      role: defaultTimerLinkRole(role),
-      note,
-      createdAt: now,
-      updatedAt: now
-    };
-  }
-
-  function upsertTimerSessionLink(data) {
-    upsertSharedEnvelope(state.records, "timer_session_links", data, getTimerSessionLink(data.timerSessionId));
-  }
-
-  async function refreshAfterTimerSessionAction(session, message) {
-    state.timerFilters.selectedSessionId = session.id;
-    state.selectedDate = session.date;
-    state.visibleMonth = session.date.slice(0, 7);
-    if (state.activeTab === "calendar") state.detailOpen = true;
-    state.editMode = false;
-    clearEditorDrafts();
-    await saveSnapshot(message);
-    await autoPushDirtyRecords(message);
     render();
   }
 
@@ -4860,8 +4770,8 @@
     }
     const now = result.serverTime || new Date().toISOString();
     saveSyncConfig({ lastPullAt: now, lastSyncAt: now });
-    const pendingTimers = countPendingTimerSessions();
-    state.syncStatus.lastResult = `已读取 ${records.length} 条云端记录${pendingTimers ? `，${pendingTimers} 条计时器记录待确认` : ""}`;
+    const draftableTimers = countDraftableTimerSessions();
+    state.syncStatus.lastResult = `已读取 ${records.length} 条云端记录${draftableTimers ? `，${draftableTimers} 条计时器记录可补训练` : ""}`;
     state.syncStatus.lastError = "";
     await saveSnapshot();
   }
@@ -5135,14 +5045,20 @@
 
   function getFilteredTimerSessions() {
     const filters = state.timerFilters;
+    const statusFilter = normalizeTimerStatusFilter(filters.status);
     return getAllTimerSessions().filter((item) => {
       const data = item.data || {};
       const handling = getTimerSessionHandling(item);
       if (filters.date && data.date !== filters.date) return false;
       if (filters.type !== "all" && data.trainingType !== filters.type) return false;
-      if (filters.status !== "all" && handling.action !== filters.status) return false;
+      if (statusFilter !== "all" && handling.action !== statusFilter) return false;
       return true;
     });
+  }
+
+  function normalizeTimerStatusFilter(value) {
+    if (["pending", "converted", "linked", "ignored"].includes(value)) return "all";
+    return ["all", "draftable", "logged", "support", "short", "fact"].includes(value) ? value : "all";
   }
 
   function getSelectedTimerSession(sessions = getFilteredTimerSessions()) {
@@ -5240,43 +5156,44 @@
       .join("；");
   }
 
-  function getTimerSessionLink(sessionId) {
-    if (!sessionId) return null;
-    return (state.records.timer_session_links || [])
-      .filter((item) => !item.deletedAt && item.data?.timerSessionId === sessionId)
-      .sort(compareSharedEnvelopes)
-      .slice(-1)[0] || null;
-  }
-
   function getTimerSessionHandling(envelope) {
     const session = envelope?.data || envelope || {};
-    const link = getTimerSessionLink(session.id);
-    if (link) {
-      const data = link.data || {};
-      return {
-        action: data.action,
-        label: TIMER_LINK_ACTION_META[data.action] || data.action,
-        role: data.role || "note",
-        roleLabel: TIMER_LINK_ROLE_META[data.role] || data.role || "",
-        targetTrainingLogId: data.targetTrainingLogId || null,
-        link
-      };
-    }
     const linkedLog = getTrainingLogForTimerSession(session.id);
     if (linkedLog) {
       const targetTrainingLogId = linkedLog.data?.id || linkedLog.trainingLogId || null;
       return {
-        action: "converted",
-        label: TIMER_LINK_ACTION_META.converted,
+        action: "logged",
+        label: TIMER_LINK_ACTION_META.logged,
         role: "main",
         roleLabel: TIMER_LINK_ROLE_META.main,
         targetTrainingLogId,
         link: null
       };
     }
+    if (isShortTimerSession(session)) {
+      return {
+        action: "short",
+        label: TIMER_LINK_ACTION_META.short,
+        role: "note",
+        roleLabel: TIMER_LINK_ROLE_META.note,
+        targetTrainingLogId: null,
+        link: null
+      };
+    }
+    if (!canDraftTimerSessionTraining(session)) {
+      const role = getTimerTypeMeta(session.trainingType).defaultRole;
+      return {
+        action: role === "main" ? "fact" : "support",
+        label: TIMER_LINK_ACTION_META[role === "main" ? "fact" : "support"],
+        role,
+        roleLabel: TIMER_LINK_ROLE_META[role],
+        targetTrainingLogId: null,
+        link: null
+      };
+    }
     return {
-      action: "pending",
-      label: TIMER_LINK_ACTION_META.pending,
+      action: "draftable",
+      label: TIMER_LINK_ACTION_META.draftable,
       role: getTimerTypeMeta(session.trainingType).defaultRole,
       roleLabel: TIMER_LINK_ROLE_META[getTimerTypeMeta(session.trainingType).defaultRole],
       targetTrainingLogId: null,
@@ -5319,15 +5236,11 @@
     return 3;
   }
 
-  function getConfirmableTimerSessions(date) {
-    return getTimerSessionsForDate(date).filter((item) => isConfirmableTimerSession(item.data) && getTimerSessionHandling(item).action === "pending");
-  }
-
-  function countPendingTimerSessions() {
+  function countDraftableTimerSessions() {
     return (state.records.timer_sessions || []).filter((item) => (
       !item.deletedAt &&
       isConfirmableTimerSession(item.data) &&
-      getTimerSessionHandling(item).action === "pending"
+      getTimerSessionHandling(item).action === "draftable"
     )).length;
   }
 

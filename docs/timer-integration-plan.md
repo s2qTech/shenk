@@ -152,7 +152,7 @@ window.parent.postMessage({
 Pros:
 
 - Better user experience.
-- Can open a pending training draft from a completed timer session.
+- Can open an editable training draft from an eligible completed timer session.
 
 Cons:
 
@@ -213,10 +213,12 @@ If timer session exists but no confirmed training log:
 
 ```text
 发现计时器完成记录
-[补全训练记录] [标记为热身/拉伸] [忽略]
+[补训练]
 ```
 
-`补全训练记录` only opens an editable draft. It must not write `training_logs` until the user saves the training form.
+`补训练` only opens an editable draft. It must not write `training_logs` until the user saves the training form.
+
+Timer sessions are facts, not tasks. `身刻` does not directly convert, link, mark, or ignore them from the timer session page. Warmups, stretch/cooldown flows, seat recovery, and very short tests stay as timer facts unless the user manually creates a formal training record.
 
 ## Timer UI Changes
 
@@ -234,8 +236,8 @@ Keep existing controls:
 Add only minimal data-driven indicators:
 
 - routine title
-- linked date
-- linked plan item
+- selected date
+- selected plan item
 - sync status
 
 Do not add calendar or body metrics to timer UI.
@@ -296,7 +298,7 @@ When timer is merged into `身刻`, both modules use the same IndexedDB database
 
 - Embed timer route in `身刻`.
 - Use postMessage to pass timer session result.
-- Convert session into pending training log.
+- Use a timer session to prefill an editable training draft; only saving the draft writes `training_logs`.
 
 ## Verification Checklist
 
@@ -305,6 +307,6 @@ When timer is merged into `身刻`, both modules use the same IndexedDB database
 - A planned strength day can open the standard strength routine.
 - Timer completion creates a timer session.
 - `身刻` can read the timer session.
-- User can confirm a timer session into a training log.
+- User can use an eligible timer session to open a prefilled training draft, add missing data, and save a formal training log.
 - Original daily plan remains visible after adjustment and actual completion.
 - JSON export includes plans, routines, sessions, logs, and body metrics.

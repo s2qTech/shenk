@@ -20,7 +20,7 @@ X-Shenke-Device-Id: <stable-device-id>
 Roles:
 
 - `ADMIN_TOKEN`: read/write all records.
-- `SHENK_TOKEN`: write 身刻-owned records, including `timer_session_links`.
+- `SHENK_TOKEN`: write 身刻-owned records such as plans, training logs, body metrics, media metadata, and feedback summaries. `timer_session_links` is legacy-compatible but new Web flows should use `training_logs.timerSessionId` / `training_logs.timerSessionIds` instead of writing link-only handling records.
 - `TIMER_TOKEN`: write timer-owned records.
 
 ## Entity Envelope

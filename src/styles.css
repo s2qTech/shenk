@@ -2506,25 +2506,21 @@ textarea {
   background: #f8fbf7;
 }
 
-.timer-card.timer-pending {
+.timer-card.timer-draftable {
   border-color: rgba(73, 91, 150, 0.28);
   background: #f7f9ff;
 }
 
-.timer-card.timer-linked {
-  background: var(--surface-2);
-}
-
-.timer-card.timer-converted,
-.timer-card.timer-linked {
+.timer-card.timer-logged {
   border-color: rgba(79, 112, 88, 0.22);
   background: #f5faf6;
 }
 
-.timer-card.timer-ignored {
+.timer-card.timer-support,
+.timer-card.timer-short,
+.timer-card.timer-fact {
   border-color: rgba(103, 112, 106, 0.16);
   background: #f4f5f4;
-  opacity: 0.86;
 }
 
 .timer-stat-grid {
@@ -2647,16 +2643,17 @@ textarea {
   background: var(--muted);
 }
 
-.timer-status-dot.status-pending {
+.timer-status-dot.status-draftable {
   background: #d7ad42;
 }
 
-.timer-status-dot.status-linked,
-.timer-status-dot.status-converted {
+.timer-status-dot.status-logged {
   background: var(--green);
 }
 
-.timer-status-dot.status-ignored {
+.timer-status-dot.status-support,
+.timer-status-dot.status-short,
+.timer-status-dot.status-fact {
   background: #9a9f99;
 }
 

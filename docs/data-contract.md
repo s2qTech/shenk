@@ -1,6 +1,6 @@
 # Shared Data Contract
 
-Last updated: 2026-06-28
+Last updated: 2026-06-30
 
 ## Purpose
 
@@ -15,7 +15,8 @@ Both sides may read all data. Write ownership is narrower:
 
 - `身刻` writes plan templates, daily plan snapshots, adjustments, training logs, body metrics, media metadata, feedback summaries.
 - `home-training-timer` writes timer sessions and routine execution details.
-- `身刻` writes timer session handling records in `timer_session_links`; it does not modify `timer_sessions`.
+- `timer_sessions` are read-only execution facts in `身刻`; `身刻` must not modify them.
+- `timer_session_links` is a legacy compatibility entity. New Web flows should prefer `training_logs.timerSessionId` / `training_logs.timerSessionIds` and should not create new link-only handling records.
 - Routine templates are modified only through explicit plan updates, not by timer execution.
 - Plans are modified only through explicit coach/user-confirmed updates, not automatically by the app.
 - `routine_templates` in Cloudflare D1 are the source of truth for timer-executable routines.
@@ -28,7 +29,7 @@ Both sides may read all data. Write ownership is narrower:
 3. Calendar days store snapshots, not only references.
 4. Adjustments never overwrite the original planned item.
 5. Actual completion records never overwrite the planned item.
-6. Timer sessions are raw execution records; `身刻` may summarize them into training logs.
+6. Timer sessions are raw execution records; `身刻` may prefill an editable training draft from them, but only a user save creates `training_logs`.
 7. Local IndexedDB remains the first write target; cloud sync mirrors data.
 8. All records must be exportable as JSON.
 9. Timer routine selection is driven by `routine_templates.timerVisible === true`.
@@ -385,9 +386,9 @@ Timer sessions are written by `home-training-timer`.
 }
 ```
 
-## Timer Session Link
+## Timer Session Link (Legacy)
 
-Timer session links are written by `身刻`. They record how a timer fact was handled without mutating the original `timer_sessions` row.
+`timer_session_links` is kept for older records and schema compatibility. New Web flows should not create link-only handling records. A timer fact becomes part of the official record only when the user opens an editable training draft and saves it as a `training_logs` record with `timerSessionId` and `timerSessionIds`.
 
 ```json
 {
@@ -403,15 +404,20 @@ Timer session links are written by `身刻`. They record how a timer fact was ha
 }
 ```
 
-Allowed `action` values:
+Historical `action` values:
 
 - `linked`: associated with an existing training log or kept as an auxiliary flow.
 - `converted`: saved into a formal `training_logs` record after the user reviews and completes the training draft.
-- `ignored`: intentionally hidden from pending timer workflows.
+- `ignored`: intentionally hidden from older timer handling workflows.
 
-`身刻` must not create a formal training log from a timer session without showing an editable draft first. The draft may be prefilled from the timer session, but the user must be able to add or correct distance, heart rate, notes, and status before saving.
+Current Web rule:
 
-Allowed `role` values:
+- Timer facts are shown as read-only execution records.
+- Main sessions may show a "补训练" action that only opens an editable training draft.
+- Warmups, stretch/cooldown flows, seat recovery, and very short tests remain timer facts by default.
+- `身刻` must not create a formal training log from a timer session without showing an editable draft first. The draft may be prefilled from the timer session, but the user must be able to add or correct distance, heart rate, notes, and status before saving.
+
+Historical `role` values:
 
 - `warmup`
 - `stretch`
