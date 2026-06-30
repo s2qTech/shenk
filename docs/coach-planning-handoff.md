@@ -213,9 +213,38 @@ Codex 根据摘要输出两部分：
 - `stepId`：动作 ID，优先使用计时器已有动作 key；未知 key 也可以，但需要提供 `name`。
 - `name`：动作名称。
 - `phase`：热身 / 训练 / 恢复 / 拉伸 / 冷身。
-- `durationSeconds`：时长秒数。
+- `durationSeconds`：用户看到的动作主体时长秒数，不包含自动展开的准备和换侧时间。
 - `dose`：动作剂量或口令。
 - `cues` / `warnings`：可选提示。
+- `execution`：可选执行结构，由计时器运行时展开；缺省时等同 `simple`。
+
+`execution.mode` 支持：
+- `simple`：普通动作，不展开。
+- `prepare_only`：动作前增加准备时间，适合臀桥、弹力带划船、撑桌俯卧撑等。
+- `alternating`：左右交替动作，只加准备时间，不拆左右侧，适合死虫、鸟狗式等。
+- `bilateral_hold`：左右分别保持，展开为准备、左侧、换侧、右侧，适合小腿/臀部/胸肩拉伸。
+- `bilateral_reps`：左右分别做次数，展开为准备、左侧、换侧、右侧，适合蚌式开合、踝关节绕圈等。
+
+示例：
+
+```json
+{
+  "stepId": "stretch_calf_straight",
+  "name": "小腿直膝拉伸",
+  "phase": "stretch",
+  "durationSeconds": 30,
+  "dose": "每侧30秒",
+  "execution": {
+    "mode": "bilateral_hold",
+    "prepareSeconds": 8,
+    "sideSeconds": 30,
+    "switchSeconds": 6,
+    "sides": ["左侧", "右侧"]
+  }
+}
+```
+
+计划端不要再把准备、换侧、左侧、右侧手工拆成多个 step；除非确实是不同动作。计时器会按 `execution` 自动计算真实总时长和语音提示。
 
 ## 给健身计划对话的提示
 
@@ -232,11 +261,12 @@ Codex 根据摘要输出两部分：
 5. 需要在计时器方案列表显示的 routine 必须写 timerVisible: true 和 needsTimer: true。
 6. routine title 使用用户侧中文名称，不要包含 routineId、英文下划线 ID、v1/v2/v3 版本号。
 7. routine 必须包含 steps；每个 step 至少包含 stepId 或 name、phase、durationSeconds、dose。
-8. scene 用 home / walk / recovery / travel；sortOrder 控制排序；isDefault 控制同组默认。
-9. trainingType 使用 strength / indoor_cardio / warmup / stretch / recovery / travel_strength / seat_recovery / easy_walk / quality_walk。
-10. daily_plan_items 只写未来日期；不要覆盖已有实际训练记录。
-11. 不修改的实体字段请直接省略；空数组仅作为 no-op 兼容，绝不能表示清空。
-12. 删除必须逐条写 operation: "delete" 或 deletedAt；默认不要输出删除。
+8. 需要准备时间、左右侧或换侧提示时，优先在 step.execution 中声明，不要把准备/换侧手工拆成独立 step。
+9. scene 用 home / walk / recovery / travel；sortOrder 控制排序；isDefault 控制同组默认。
+10. trainingType 使用 strength / indoor_cardio / warmup / stretch / recovery / travel_strength / seat_recovery / easy_walk / quality_walk。
+11. daily_plan_items 只写未来日期；不要覆盖已有实际训练记录。
+12. 不修改的实体字段请直接省略；空数组仅作为 no-op 兼容，绝不能表示清空。
+13. 删除必须逐条写 operation: "delete" 或 deletedAt；默认不要输出删除。
 
 请输出顶层 schema 为 coach_plan_patch 的 JSON：
 - schema

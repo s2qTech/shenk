@@ -531,11 +531,20 @@
     };
   }
 
+  const ROUTINE_STEP_EXECUTION_MODES = new Set([
+    "simple",
+    "prepare_only",
+    "alternating",
+    "bilateral_hold",
+    "bilateral_reps"
+  ]);
+
   function normalizeRoutineTemplateData(data) {
     if (!data || typeof data !== "object") return null;
     const id = data.id || data.routineId || data.routine_id || `routine_${makeId()}`;
     const trainingType = normalizeTimerTrainingType(data.trainingType || data.training_type || data.type || inferTrainingTypeFromRoutineId(id));
     const steps = Array.isArray(data.steps) ? data.steps : parseJsonArrayValue(data.stepsJson || data.steps_json);
+    const normalizedSteps = steps.map(normalizeRoutineStepData).filter(Boolean);
     const explicitVisible = parseOptionalBoolean(
       data.timerVisible
       ?? data.timer_visible
@@ -559,7 +568,7 @@
       variant: data.variant || data.routineVariant || data.routine_variant || "",
       trainingType,
       estimatedMinutes: toNullableNumber(data.estimatedMinutes ?? data.estimated_minutes),
-      steps: steps.length ? steps : data.steps,
+      steps: normalizedSteps.length ? normalizedSteps : data.steps,
       defaultOptions,
       timerVisible,
       needsTimer: Boolean(data.needsTimer ?? data.needs_timer ?? timerVisible),
@@ -567,6 +576,38 @@
       createdAt: data.createdAt || data.created_at || new Date().toISOString(),
       updatedAt: data.updatedAt || data.updated_at || new Date().toISOString()
     };
+  }
+
+  function normalizeRoutineStepData(step) {
+    if (Array.isArray(step)) return step;
+    if (!step || typeof step !== "object") return null;
+    const next = { ...step };
+    if (!next.stepId && step.step_id) next.stepId = step.step_id;
+    const durationSeconds = toNullableNumber(step.durationSeconds ?? step.duration_seconds ?? step.seconds ?? step.plannedSeconds ?? step.planned_seconds);
+    if (durationSeconds !== null) next.durationSeconds = Math.max(1, Math.round(durationSeconds));
+    const execution = normalizeRoutineStepExecution(step.execution);
+    if (execution) next.execution = execution;
+    return next;
+  }
+
+  function normalizeRoutineStepExecution(execution) {
+    if (!execution || typeof execution !== "object" || Array.isArray(execution)) return null;
+    const mode = String(execution.mode || "simple").trim() || "simple";
+    const normalized = { ...execution, mode };
+    const prepareSeconds = toNullableNumber(execution.prepareSeconds ?? execution.prepare_seconds);
+    const sideSeconds = toNullableNumber(execution.sideSeconds ?? execution.side_seconds);
+    const switchSeconds = toNullableNumber(execution.switchSeconds ?? execution.switch_seconds);
+    delete normalized.prepare_seconds;
+    delete normalized.side_seconds;
+    delete normalized.switch_seconds;
+    if (prepareSeconds !== null) normalized.prepareSeconds = Math.max(0, Math.round(prepareSeconds));
+    if (sideSeconds !== null) normalized.sideSeconds = Math.max(1, Math.round(sideSeconds));
+    if (switchSeconds !== null) normalized.switchSeconds = Math.max(0, Math.round(switchSeconds));
+    if (Array.isArray(execution.sides)) {
+      const sides = execution.sides.map((item) => String(item || "").trim()).filter(Boolean);
+      if (sides.length) normalized.sides = sides;
+    }
+    return normalized;
   }
 
   function parseJsonArrayValue(value) {
@@ -3664,6 +3705,19 @@
     const hasDaily = Array.isArray(patch.dailyPlanItems) && patch.dailyPlanItems.length;
     const hasAdjustments = Array.isArray(patch.planAdjustments) && patch.planAdjustments.length;
     if (!hasPlan && !hasRoutines && !hasDaily && !hasAdjustments) errors.push("草案没有可写入的计划内容。");
+    if (hasRoutines) {
+      patch.routineTemplates.forEach((routine, routineIndex) => {
+        if (!routine || typeof routine !== "object") {
+          errors.push(`routineTemplates[${routineIndex}] 不是有效对象。`);
+          return;
+        }
+        if (isPatchDeleteItem(routine)) {
+          if (!getPatchItemId(routine)) errors.push(`routineTemplates[${routineIndex}] 删除操作缺少 id。`);
+          return;
+        }
+        validateRoutineTemplateSteps(routine, routineIndex, errors);
+      });
+    }
     if (hasDaily) {
       patch.dailyPlanItems.forEach((item, index) => {
         if (!item || typeof item !== "object") {
@@ -3676,6 +3730,38 @@
       });
     }
     return errors;
+  }
+
+  function validateRoutineTemplateSteps(routine, routineIndex, errors) {
+    const steps = Array.isArray(routine.steps) ? routine.steps : parseJsonArrayValue(routine.stepsJson || routine.steps_json);
+    steps.forEach((step, stepIndex) => {
+      if (!step || typeof step !== "object" || Array.isArray(step) || step.execution === undefined || step.execution === null) return;
+      const execution = step.execution;
+      const path = `routineTemplates[${routineIndex}].steps[${stepIndex}].execution`;
+      if (!execution || typeof execution !== "object" || Array.isArray(execution)) {
+        errors.push(`${path} 必须是对象。`);
+        return;
+      }
+      const mode = String(execution.mode || "simple").trim() || "simple";
+      if (!ROUTINE_STEP_EXECUTION_MODES.has(mode)) {
+        errors.push(`${path}.mode 不支持：${mode}。`);
+      }
+      [
+        ["prepareSeconds", execution.prepareSeconds ?? execution.prepare_seconds, true],
+        ["sideSeconds", execution.sideSeconds ?? execution.side_seconds, false],
+        ["switchSeconds", execution.switchSeconds ?? execution.switch_seconds, true]
+      ].forEach(([field, value, allowZero]) => {
+        if (value === undefined || value === null || value === "") return;
+        const numeric = Number(value);
+        if (!Number.isFinite(numeric) || numeric < (allowZero ? 0 : 1)) {
+          errors.push(`${path}.${field} 必须是${allowZero ? "非负" : "正"}秒数。`);
+        }
+      });
+      if (execution.sides !== undefined) {
+        const sides = Array.isArray(execution.sides) ? execution.sides.map((item) => String(item || "").trim()).filter(Boolean) : [];
+        if (!sides.length) errors.push(`${path}.sides 必须是非空数组。`);
+      }
+    });
   }
 
   function applyCoachPlanPatch(patch) {

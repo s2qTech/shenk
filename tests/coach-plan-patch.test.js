@@ -228,6 +228,65 @@ function routinePatch(overrides = {}) {
   reset(api);
   const patch = {
     schema: "coach_plan_patch",
+    effectiveFrom: "2099-05-02",
+    routineTemplates: [routinePatch({
+      id: "routine_execution_recovery",
+      title: "Execution Recovery",
+      trainingType: "recovery",
+      steps: [{
+        stepId: "stretch_calf_straight",
+        name: "小腿直膝拉伸",
+        phase: "stretch",
+        durationSeconds: 30,
+        dose: "每侧30秒",
+        execution: {
+          mode: "bilateral_hold",
+          prepare_seconds: 8,
+          sideSeconds: 30,
+          switchSeconds: 6,
+          sides: ["左侧", "右侧"]
+        }
+      }]
+    })]
+  };
+  const preview = api.previewPlanPatch(patch);
+  assert.equal(preview.valid, true);
+  assert.equal(preview.routinePreview.add, 1);
+  api.applyCoachPlanPatch(patch);
+  const stored = record(api, "routine_templates", "routine_execution_recovery").data.steps[0];
+  assert.equal(stored.execution.mode, "bilateral_hold");
+  assert.equal(stored.execution.prepareSeconds, 8);
+  assert.equal(stored.execution.sideSeconds, 30);
+  assert.equal(stored.execution.switchSeconds, 6);
+  assert.deepEqual(stored.execution.sides, ["左侧", "右侧"]);
+  assert.equal(stored.execution.prepare_seconds, undefined);
+}
+
+{
+  const api = loadAppTestApi();
+  reset(api);
+  const patch = {
+    schema: "coach_plan_patch",
+    effectiveFrom: "2099-05-03",
+    routineTemplates: [routinePatch({
+      id: "routine_bad_execution",
+      steps: [{
+        stepId: "x",
+        durationSeconds: 60,
+        execution: { mode: "split_everything", prepareSeconds: 5 }
+      }]
+    })]
+  };
+  const preview = api.previewPlanPatch(patch);
+  assert.equal(preview.valid, false);
+  assert.match(preview.warnings.join("\n"), /split_everything/);
+}
+
+{
+  const api = loadAppTestApi();
+  reset(api);
+  const patch = {
+    schema: "coach_plan_patch",
     effectiveFrom: "2099-06-01",
     dailyPlanItems: [{
       id: "daily_missing_routine_id",

@@ -152,6 +152,41 @@ Rules:
 - If the cloud read fails, the timer uses the last successful local cache.
 - If there is no cloud data and no local cache, the timer may show a fallback/debug routine set with an explicit warning.
 
+### Routine Step Execution
+
+`routine_templates.steps[]` may include an optional `execution` object. It describes how the timer should expand one user-facing action into precise runtime steps. Existing steps without `execution` are treated as `simple`.
+
+`durationSeconds` is the user-facing body/action duration. The timer's total planned time is calculated from the expanded runtime steps, not from the raw step count.
+
+Supported modes:
+
+- `simple`: run the step as written.
+- `prepare_only`: add `prepareSeconds` before the action, then run the step.
+- `alternating`: add `prepareSeconds` before the action, then run the step without splitting sides.
+- `bilateral_hold`: expand to prepare, left side, switch side, right side.
+- `bilateral_reps`: expand to prepare, left side, switch side, right side; each side uses `sideSeconds` or half of `durationSeconds`.
+
+Example:
+
+```json
+{
+  "stepId": "stretch_calf_straight",
+  "name": "小腿直膝拉伸",
+  "phase": "stretch",
+  "durationSeconds": 30,
+  "dose": "每侧30秒",
+  "execution": {
+    "mode": "bilateral_hold",
+    "prepareSeconds": 8,
+    "sideSeconds": 30,
+    "switchSeconds": 6,
+    "sides": ["左侧", "右侧"]
+  }
+}
+```
+
+Timer runtime speech should use expanded labels such as `准备，小腿直膝拉伸`, `左侧，小腿直膝拉伸`, `换右侧`, and `右侧，小腿直膝拉伸`.
+
 ## Coach Plan Patch Merge Rules
 
 `coach_plan_patch` is always merge/upsert by default.

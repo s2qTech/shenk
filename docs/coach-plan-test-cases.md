@@ -80,6 +80,15 @@
 - `recovery`
 - `travel`
 
+`steps[].execution` 可选。需要准备时间、左右侧或换侧提示时优先使用它，不要把准备、换侧、左侧、右侧手工拆成多个 step。
+
+支持：
+- `simple`
+- `prepare_only`
+- `alternating`
+- `bilateral_hold`
+- `bilateral_reps`
+
 ## daily_plan_items 字段要求
 
 ```json
@@ -148,7 +157,52 @@
 - 日计划新增 0 条、更新 0 条、删除 0 条。
 - 已有 `daily_plan_items` 不被清空。
 
-### 2. 新增未来日计划 + routine
+### 2. 带 execution 的左右侧动作
+
+用途：让计时器运行时自动展开准备、左侧、换侧、右侧。
+
+```json
+{
+  "schema": "coach_plan_patch",
+  "generatedBy": "coach",
+  "reason": "更新拉伸动作执行结构",
+  "effectiveFrom": "2099-01-02",
+  "routineTemplates": [
+    {
+      "id": "routine_walk_stretch_execution",
+      "title": "走后拉伸",
+      "trainingType": "stretch",
+      "scene": "walk",
+      "estimatedMinutes": 8,
+      "timerVisible": true,
+      "steps": [
+        {
+          "stepId": "stretch_calf_straight",
+          "name": "小腿直膝拉伸",
+          "phase": "拉伸",
+          "durationSeconds": 30,
+          "dose": "每侧30秒",
+          "execution": {
+            "mode": "bilateral_hold",
+            "prepareSeconds": 8,
+            "sideSeconds": 30,
+            "switchSeconds": 6,
+            "sides": ["左侧", "右侧"]
+          }
+        }
+      ]
+    }
+  ]
+}
+```
+
+预期：
+- 身刻预览显示 routine 新增或更新 1 条。
+- `execution` 字段保存到 `routine_templates.steps` 中，不被序列化丢失。
+- 计时器执行时展开为准备、左侧、换侧、右侧。
+- 计时器预计总时长使用展开后的真实总时长。
+
+### 3. 新增未来日计划 + routine
 
 用途：新增未来某天计划，并能从身刻打开计时器。
 
@@ -197,7 +251,7 @@
 - 打开计时器 URL 包含 `routineId`、`date`、`dailyPlanItemId`、`source=shenk`。
 - URL 不包含任何 token。
 
-### 3. 已有实际记录的日期不覆盖
+### 4. 已有实际记录的日期不覆盖
 
 用途：计划端误发已有实际记录日期时，身刻必须跳过。
 
@@ -226,7 +280,7 @@
 - 写入后不能覆盖当天正式训练记录。
 - 日历详情有实际记录时不显示计划层。
 
-### 4. 显式删除
+### 5. 显式删除
 
 用途：验证删除必须显式声明。
 
@@ -250,7 +304,7 @@
 - 删除数量非 0 时，身刻应二次确认。
 - 未显式声明删除时不得清空任何记录。
 
-### 5. 无效 routine
+### 6. 无效 routine
 
 用途：验证计划端不能输出不可执行流程。
 
