@@ -262,7 +262,9 @@
   let db = null;
   let messageTimer = null;
   let autoPushRetryTimer = null;
+  let passiveCloudRefreshTimer = null;
   let autoPushRetryCount = 0;
+  let lastPassiveCloudRefreshAt = 0;
 
   const state = {
     ready: false,
@@ -303,6 +305,8 @@
   document.addEventListener("DOMContentLoaded", init);
 
   async function init() {
+    registerTimerSessionReceiver();
+    registerPassiveCloudRefresh();
     render();
     registerOfflineSupport();
     const snapshot = normalizeSnapshot(await loadSnapshot());
@@ -332,6 +336,88 @@
       }, false);
       render();
     }, 300);
+  }
+
+  function registerTimerSessionReceiver() {
+    window.addEventListener("message", (event) => {
+      handleTimerSessionMessage(event).catch((error) => {
+        state.message = error.message || "计时器记录接收失败";
+        if (state.activeTab !== "timer") render();
+      });
+    });
+  }
+
+  function registerPassiveCloudRefresh() {
+    window.addEventListener("focus", () => schedulePassiveCloudRefresh(500));
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "visible") schedulePassiveCloudRefresh(500);
+    });
+  }
+
+  async function handleTimerSessionMessage(event) {
+    const data = event?.data;
+    if (!data || typeof data !== "object") return;
+    if (data.type !== "shenke.timerSession.completed") return;
+    if (data.source && data.source !== "home-training-timer") return;
+    if (!isTrustedTimerMessageOrigin(event.origin)) return;
+    const session = data.payload || data.timerSession || data.session;
+    const accepted = await acceptTimerSessionFromTimer(session);
+    if (!accepted) return;
+    scheduleTimerSessionCloudRefresh();
+  }
+
+  function isTrustedTimerMessageOrigin(origin) {
+    if (!origin || origin === "null") return window.location.protocol === "file:";
+    const trusted = new Set();
+    [DEFAULT_TIMER_URL, state.syncConfig.timerUrl, window.location.href].filter(Boolean).forEach((url) => {
+      try {
+        const parsed = new URL(url, window.location.href);
+        if (parsed.origin && parsed.origin !== "null") trusted.add(parsed.origin);
+      } catch (error) {
+        // Invalid custom timer URLs are ignored here; settings validation handles them separately.
+      }
+    });
+    return trusted.has(origin);
+  }
+
+  async function acceptTimerSessionFromTimer(rawSession) {
+    const session = normalizeTimerSessionData(rawSession);
+    if (!session) return false;
+    const existing = findTimerSessionById(session.id);
+    const envelope = makeSharedEnvelope("timer_sessions", session, existing);
+    if (!envelope) return false;
+    envelope.syncState = "clean";
+    envelope.lastSyncedAt = existing?.lastSyncedAt || envelope.updatedAt;
+    envelope.conflict = null;
+    state.records.timer_sessions = (state.records.timer_sessions || [])
+      .filter((item) => item.id !== envelope.id)
+      .concat(envelope)
+      .sort(compareSharedEnvelopes);
+    const handling = getTimerSessionHandling(envelope);
+    const suffix = handling.action === "draftable" ? "，可在记录中补训练" : "";
+    const message = `已接收计时器记录 ${session.date}${suffix}`;
+    await saveSnapshot(message);
+    if (state.activeTab !== "timer") render();
+    return true;
+  }
+
+  function scheduleTimerSessionCloudRefresh() {
+    if (!hasShenkSyncConfig()) return;
+    window.setTimeout(async () => {
+      await pullCloudRecords({ silent: true });
+      if (state.activeTab !== "timer") render();
+    }, 2200);
+  }
+
+  function schedulePassiveCloudRefresh(delay = 300) {
+    if (!hasShenkSyncConfig() || passiveCloudRefreshTimer || state.syncStatus.busy) return;
+    if (Date.now() - lastPassiveCloudRefreshAt < 15000) return;
+    passiveCloudRefreshTimer = window.setTimeout(async () => {
+      passiveCloudRefreshTimer = null;
+      lastPassiveCloudRefreshAt = Date.now();
+      await pullCloudRecords({ silent: true });
+      if (state.activeTab !== "timer") render();
+    }, delay);
   }
 
   function registerOfflineSupport() {
@@ -2787,6 +2873,7 @@
         state.editMode = false;
         clearEditorDrafts();
         state.message = "";
+        if (["calendar", "records", "data"].includes(state.activeTab)) schedulePassiveCloudRefresh(200);
         render();
       });
     });
