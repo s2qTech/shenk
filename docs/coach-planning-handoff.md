@@ -267,6 +267,9 @@ Codex 根据摘要输出两部分：
 11. daily_plan_items 只写未来日期；不要覆盖已有实际训练记录。
 12. 不修改的实体字段请直接省略；空数组仅作为 no-op 兼容，绝不能表示清空。
 13. 删除必须逐条写 operation: "delete" 或 deletedAt；默认不要输出删除。
+14. 只有 dailyPlanItems 和 planAdjustments 会改变日历；routineTemplates 只改变计时器方案。
+15. 如果 effectiveTo 表示一段未来计划，请输出这段日期里所有需要改变的 dailyPlanItems 或 planAdjustments；缺失日期会保留原计划或本地建议。
+16. 不是用户本人训练的流程，例如孩子训练、测试流程、提示演示，routineTemplates 必须写 calendarVisible: false 和 countsTowardTraining: false。
 
 请输出顶层 schema 为 coach_plan_patch 的 JSON：
 - schema
@@ -279,6 +282,72 @@ Codex 根据摘要输出两部分：
 - dailyPlanItems 可选
 - planAdjustments 可选
 ```
+
+## 日历更新规则
+
+日历不会根据 `planTemplate` 或 `routineTemplates` 自动生成日期格。要让日历某天变成“计划”，必须写入：
+
+- `dailyPlanItems`：确认日计划快照。
+- `planAdjustments`：对某天的有效调整。
+
+只修改计时器方案时，不要附带空数组。例如：
+
+```json
+{
+  "schema": "coach_plan_patch",
+  "generatedAt": "2026-07-10T09:00:00+08:00",
+  "generatedBy": "coach",
+  "effectiveFrom": "2026-07-10",
+  "reason": "只更新恢复拉伸流程。",
+  "routineTemplates": [
+    {
+      "id": "routine_recovery_stretch_v2",
+      "title": "恢复拉伸",
+      "version": "2.0.0",
+      "trainingType": "recovery",
+      "timerVisible": true,
+      "needsTimer": true,
+      "calendarVisible": true,
+      "countsTowardTraining": true,
+      "steps": [
+        {
+          "stepId": "breathing_reset",
+          "name": "呼吸重置",
+          "phase": "recovery",
+          "durationSeconds": 90,
+          "dose": "鼻吸口呼，肩颈放松"
+        }
+      ]
+    }
+  ]
+}
+```
+
+临时调整某天计划时可以使用简写：
+
+```json
+{
+  "schema": "coach_plan_patch",
+  "generatedAt": "2026-07-10T09:00:00+08:00",
+  "generatedBy": "coach",
+  "effectiveFrom": "2026-07-10",
+  "effectiveTo": "2026-07-16",
+  "reason": "根据小腿疲劳降负荷。",
+  "planAdjustments": [
+    {
+      "date": "2026-07-10",
+      "title": "低压恢复",
+      "trainingType": "recovery",
+      "estimatedMinutes": 15,
+      "status": "planned",
+      "reason": "今天主动降负荷。",
+      "notes": "做恢复拉伸或完全休息；不补训练。"
+    }
+  ]
+}
+```
+
+如果 `effectiveTo` 到 2026-07-16，但只写了 2026-07-10 一天，身刻只会更新 2026-07-10，后续日期保持原计划或本地建议。
 
 ## dailyPlanItems 建议字段
 
@@ -294,6 +363,8 @@ Codex 根据摘要输出两部分：
   "estimatedMinutes": 15,
   "intensity": 2,
   "needsTimer": true,
+  "calendarVisible": true,
+  "countsTowardTraining": true,
   "routineId": "routine_recovery_stretch",
   "routineVersion": "1.0",
   "timerOptions": {

@@ -161,6 +161,7 @@ function routinePatch(overrides = {}) {
   const preview = api.previewPlanPatch(patch);
   assert.equal(preview.valid, true);
   assert.equal(preview.deleteCount, 0, "replaceMode must not create implicit deletes");
+  assert.match(preview.warnings.join("\n"), /不会改变日历格/);
   api.applyCoachPlanPatch(patch);
   assert.equal(record(api, "daily_plan_items", "daily_replace_guard").deletedAt, null);
 }
@@ -340,6 +341,37 @@ function routinePatch(overrides = {}) {
   const preview = api.previewPlanPatch(patch);
   assert.equal(preview.valid, true);
   assert.equal(preview.dailyPreviewCounts.add, 1);
+}
+
+{
+  const api = loadAppTestApi();
+  reset(api);
+  const patch = {
+    schema: "coach_plan_patch",
+    effectiveFrom: "2099-07-01",
+    effectiveTo: "2099-07-10",
+    planAdjustments: [{
+      date: "2099-07-01",
+      title: "低压恢复",
+      trainingType: "recovery",
+      estimatedMinutes: 15,
+      status: "planned",
+      reason: "主动降负荷。",
+      notes: "做恢复拉伸或完全休息。"
+    }]
+  };
+  const preview = api.previewPlanPatch(patch);
+  assert.equal(preview.valid, true);
+  assert.equal(preview.adjustmentPreview.add, 1);
+  assert.match(preview.warnings.join("\n"), /覆盖 2099-07-01 至 2099-07-01/);
+  assert.match(preview.warnings.join("\n"), /只到 2099-07-01/);
+  const result = api.applyCoachPlanPatch(patch);
+  assert.equal(result.calendarAdded, 1);
+  const stored = record(api, "plan_adjustments", "adjust_2099-07-01_effective").data;
+  assert.equal(stored.toSnapshot.title, "低压恢复");
+  assert.equal(stored.toSnapshot.trainingType, "recovery");
+  assert.equal(stored.toSnapshot.estimatedMinutes, 15);
+  assert.equal(JSON.stringify(stored.toSnapshot.notes), JSON.stringify(["做恢复拉伸或完全休息。"]));
 }
 
 console.log("coach-plan-patch tests passed");

@@ -121,6 +121,8 @@ Required / recommended fields for timer execution:
   "isDefault": false,
   "timerVisible": true,
   "needsTimer": true,
+  "calendarVisible": true,
+  "countsTowardTraining": true,
   "defaultOptions": {
     "voice": true,
     "wakeLock": true,
@@ -145,6 +147,9 @@ Rules:
 - `version` is kept for traceability but hidden from normal UI.
 - `timerVisible: true` means the routine appears in the timer's standalone selector.
 - A routine referenced by a daily plan may still be opened directly by `routineId` even if it is not visible in the standalone selector.
+- `calendarVisible: false` means completed timer sessions for this routine stay in timer history only and should not appear in the calendar detail.
+- `countsTowardTraining: false` means completed timer sessions for this routine must not become formal `training_logs` candidates.
+- Use `calendarVisible: false` and `countsTowardTraining: false` for child routines, test routines, cue-only flows, or other sessions that are not the user's own training.
 - `scene` controls timer grouping. Recommended values: `home`, `walk`, `recovery`, `travel`.
 - `sortOrder` controls order inside a scene. Lower numbers appear first.
 - `isDefault` marks the first-choice routine for a scene.
@@ -199,6 +204,42 @@ Timer runtime speech should use expanded labels such as `准备，小腿直膝�
 - Existing records may be deleted only when the incoming record explicitly includes `operation: "delete"` or `deletedAt`.
 - `replaceMode` must not be used as an implicit permission to clear records unless deletion records are explicit and shown in preview.
 - The import preview must show add/update/delete counts. Any non-zero delete count requires a second confirmation.
+
+Calendar updates are explicit:
+
+- `routineTemplates` changes timer-executable routines only. They do not populate or change calendar cells by themselves.
+- `dailyPlanItems` create or update confirmed daily plan snapshots.
+- `planAdjustments` create or update the effective instruction for a date without overwriting the original daily snapshot.
+- If a patch has no `dailyPlanItems` and no `planAdjustments`, the calendar must not change.
+- If `effectiveTo` is present, the patch should include daily plan items or adjustments covering every date that should change through that date. Missing dates keep existing plans or local fallback suggestions.
+
+`planAdjustments` may use either explicit snapshots or a short inline form. These two are equivalent after normalization:
+
+```json
+{
+  "date": "2026-07-10",
+  "title": "低压恢复",
+  "trainingType": "recovery",
+  "estimatedMinutes": 15,
+  "status": "planned",
+  "reason": "主动降负荷。",
+  "notes": "做恢复拉伸或完全休息。"
+}
+```
+
+```json
+{
+  "date": "2026-07-10",
+  "reason": "主动降负荷。",
+  "toSnapshot": {
+    "title": "低压恢复",
+    "trainingType": "recovery",
+    "estimatedMinutes": 15,
+    "status": "planned",
+    "notes": ["做恢复拉伸或完全休息。"]
+  }
+}
+```
 
 ### Completion Status
 

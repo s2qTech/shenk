@@ -642,6 +642,23 @@
       ?? data.is_timer_routine
     );
     const timerVisible = explicitVisible ?? Boolean(data.needsTimer ?? data.needs_timer ?? steps.length);
+    const explicitCalendarVisible = parseOptionalBoolean(
+      data.calendarVisible
+      ?? data.calendar_visible
+      ?? data.includeInCalendar
+      ?? data.include_in_calendar
+      ?? data.showInCalendar
+      ?? data.show_in_calendar
+    );
+    const explicitCountsTowardTraining = parseOptionalBoolean(
+      data.countsTowardTraining
+      ?? data.counts_toward_training
+      ?? data.trainingLogEligible
+      ?? data.training_log_eligible
+      ?? data.countsAsTraining
+      ?? data.counts_as_training
+    );
+    const calendarVisible = explicitCalendarVisible ?? true;
     const title = data.title || data.name || data.displayName || data.display_name || TYPE_META[toLegacyTrainingType(trainingType)]?.label || "训练方案";
     const defaultOptions = data.defaultOptions || data.default_options || data.timerOptions || data.timer_options || {};
     return {
@@ -658,6 +675,8 @@
       defaultOptions,
       timerVisible,
       needsTimer: Boolean(data.needsTimer ?? data.needs_timer ?? timerVisible),
+      calendarVisible,
+      countsTowardTraining: explicitCountsTowardTraining ?? calendarVisible,
       source: data.source || "coach",
       createdAt: data.createdAt || data.created_at || new Date().toISOString(),
       updatedAt: data.updatedAt || data.updated_at || new Date().toISOString()
@@ -758,7 +777,7 @@
       routineId: data.routineId || data.routine_id || null,
       routineVersion: data.routineVersion || data.routine_version || null,
       timerOptions: data.timerOptions || data.timer_options || {},
-      notes: Array.isArray(data.notes) ? data.notes : [],
+      notes: normalizeNotesArray(data.notes),
       snapshot: data.snapshot || {},
       status: data.status || "planned",
       sortOrder: Math.round(toNullableNumber(data.sortOrder ?? data.sort_order) || 0),
@@ -769,19 +788,61 @@
 
   function normalizePlanAdjustmentData(data) {
     if (!data || !isIsoDate(data.date)) return null;
+    const toSnapshotInput = getPlanAdjustmentToSnapshotInput(data);
     return {
       ...data,
-      id: data.id || `adjust_${data.date}_${makeId()}`,
+      id: data.id || `adjust_${data.date}_effective`,
       date: data.date,
       targetDailyPlanItemId: data.targetDailyPlanItemId || data.target_daily_plan_item_id || null,
       adjustedAt: data.adjustedAt || data.adjusted_at || new Date().toISOString(),
       adjustedBy: data.adjustedBy || data.adjusted_by || "coach",
       reason: data.reason || "",
       fromSnapshot: normalizePlanSnapshotData(data.fromSnapshot || data.from_snapshot || {}, data.date),
-      toSnapshot: normalizePlanSnapshotData(data.toSnapshot || data.to_snapshot || {}, data.date),
+      toSnapshot: normalizePlanSnapshotData(toSnapshotInput, data.date),
       createdAt: data.createdAt || data.created_at || new Date().toISOString(),
       updatedAt: data.updatedAt || data.updated_at || new Date().toISOString()
     };
+  }
+
+  function getPlanAdjustmentToSnapshotInput(data) {
+    const explicit = data.toSnapshot || data.to_snapshot;
+    if (explicit && typeof explicit === "object" && !Array.isArray(explicit)) return explicit;
+    if (!hasInlinePlanSnapshotFields(data)) return {};
+    return {
+      date: data.date,
+      title: data.title,
+      trainingType: data.trainingType || data.training_type || data.type,
+      estimatedMinutes: data.estimatedMinutes ?? data.estimated_minutes,
+      status: data.status,
+      goal: data.goal,
+      needsTimer: data.needsTimer ?? data.needs_timer,
+      routineId: data.routineId || data.routine_id,
+      routineVersion: data.routineVersion || data.routine_version,
+      timerOptions: data.timerOptions || data.timer_options,
+      notes: data.notes
+    };
+  }
+
+  function hasInlinePlanSnapshotFields(data) {
+    return [
+      "title",
+      "trainingType",
+      "training_type",
+      "type",
+      "estimatedMinutes",
+      "estimated_minutes",
+      "status",
+      "goal",
+      "needsTimer",
+      "needs_timer",
+      "routineId",
+      "routine_id",
+      "routineVersion",
+      "routine_version",
+      "timerOptions",
+      "timer_options",
+      "notes"
+    ].some((key) => data[key] !== undefined);
   }
 
   function normalizePlanSnapshotData(snapshot, date) {
@@ -797,9 +858,18 @@
       routineId: snapshot.routineId || snapshot.routine_id || null,
       routineVersion: snapshot.routineVersion || snapshot.routine_version || null,
       timerOptions: snapshot.timerOptions || snapshot.timer_options || {},
-      notes: Array.isArray(snapshot.notes) ? snapshot.notes : [],
+      notes: normalizeNotesArray(snapshot.notes),
       status: snapshot.status || "planned"
     };
+  }
+
+  function normalizeNotesArray(value) {
+    if (Array.isArray(value)) return value.map((item) => String(item || "").trim()).filter(Boolean);
+    if (typeof value === "string") {
+      const text = value.trim();
+      return text ? [text] : [];
+    }
+    return [];
   }
 
   function normalizeTimerSessionData(data) {
@@ -820,6 +890,8 @@
       endedAt: data.endedAt || data.ended_at || null,
       actualSeconds: toNullableNumber(data.actualSeconds ?? data.actual_seconds),
       completion: data.completion || "completed",
+      calendarVisible: parseOptionalBoolean(data.calendarVisible ?? data.calendar_visible ?? data.includeInCalendar ?? data.include_in_calendar),
+      countsTowardTraining: parseOptionalBoolean(data.countsTowardTraining ?? data.counts_toward_training ?? data.trainingLogEligible ?? data.training_log_eligible ?? data.countsAsTraining ?? data.counts_as_training),
       stepResults: Array.isArray(data.stepResults) ? data.stepResults : Array.isArray(data.step_results) ? data.step_results : [],
       notes: data.notes || "",
       source: data.source || "home_training_timer",
@@ -2091,8 +2163,7 @@
   }
 
   function calendarEntryFromPlanAdjustment(envelope) {
-    const data = envelope.data || {};
-    return calendarEntryFromPlanData(data.toSnapshot || data.to_snapshot || {}, "adjustment", "计划");
+    return calendarEntryFromPlanData(getPlanAdjustmentEffectiveData(envelope), "adjustment", "计划");
   }
 
   function calendarEntryFromPlanData(data, kind, marker) {
@@ -2195,7 +2266,10 @@
     const records = getWorkoutsByDate(date);
     const metric = getMetricByDate(date);
     const timerSessions = getTimerSessionsForDate(date);
-    const visibleTimerSessions = timerSessions.filter((session) => getTimerSessionHandling(session).action !== "logged");
+    const visibleTimerSessions = timerSessions.filter((session) => (
+      getTimerSessionHandling(session).action !== "logged" &&
+      isTimerSessionCalendarVisible(session.data || session)
+    ));
     const sections = [];
     const hasActualRecords = records.length > 0;
     const effectivePlan = getEffectivePlanForDate(date);
@@ -3477,7 +3551,9 @@
       const patch = extractCoachPlanPatch(state.planPatchText);
       const preview = previewPlanPatch(patch);
       state.planPatchPreview = { patch, error: null };
-      state.message = preview.valid ? "计划草案已通过校验" : "计划草案需要修正";
+      state.message = preview.valid
+        ? (preview.warnings.length ? "计划草案已通过校验，请查看提示" : "计划草案已通过校验")
+        : "计划草案需要修正";
     } catch (error) {
       state.planPatchPreview = { patch: null, error: error.message || "无法识别计划草案" };
       state.message = "计划草案解析失败";
@@ -3500,7 +3576,11 @@
     state.planPatchText = "";
     state.planPatchPreview = null;
     if (result.firstDate) state.visibleMonth = result.firstDate.slice(0, 7);
-    const message = `计划草案已写入：新增 ${result.added}，更新 ${result.updated}，删除 ${result.deleted}`;
+    const calendarChanged = result.calendarAdded + result.calendarUpdated + result.calendarDeleted;
+    const dailyMessage = calendarChanged
+      ? `，日历安排新增 ${result.calendarAdded}，更新 ${result.calendarUpdated}，删除 ${result.calendarDeleted}`
+      : "，日历安排未变化";
+    const message = `计划草案已写入：新增 ${result.added}，更新 ${result.updated}，删除 ${result.deleted}${dailyMessage}`;
     await saveSnapshot(message);
     await autoPushDirtyRecords(message);
     state.message = message;
@@ -3677,6 +3757,41 @@
     return `新增 ${counts.add}，更新 ${counts.update}，删除 ${counts.delete}`;
   }
 
+  function getPatchCalendarDateStats(patch) {
+    const dates = [
+      ...getPatchArray(patch, "dailyPlanItems"),
+      ...getPatchArray(patch, "planAdjustments")
+    ].filter((item) => !isPatchDeleteItem(item) && isIsoDate(item?.date))
+      .map((item) => item.date)
+      .sort();
+    return {
+      count: dates.length,
+      first: dates[0] || "",
+      last: dates[dates.length - 1] || ""
+    };
+  }
+
+  function buildPlanPatchCoverageWarnings(patch, dailyPreviewCounts, adjustmentPreview) {
+    const warnings = [];
+    const calendarStats = getPatchCalendarDateStats(patch);
+    const calendarChangeCount = dailyPreviewCounts.add + dailyPreviewCounts.update + adjustmentPreview.add + adjustmentPreview.update;
+    const hasNonCalendarChanges = getPatchPlanTemplates(patch).length || getPatchArray(patch, "routineTemplates").length;
+    if (!calendarStats.count && hasNonCalendarChanges) {
+      warnings.push("本次草案没有 dailyPlanItems 或 planAdjustments，不会改变日历格。");
+      return warnings;
+    }
+    if (calendarStats.count) {
+      warnings.push(`本次日历安排覆盖 ${calendarStats.first} 至 ${calendarStats.last}，未包含的日期保持现有计划或本地建议。`);
+    }
+    if (patch.effectiveTo && calendarStats.last && calendarStats.last < patch.effectiveTo) {
+      warnings.push(`草案有效期到 ${patch.effectiveTo}，但日历安排只到 ${calendarStats.last}；之后会继续显示现有计划或建议。`);
+    }
+    if (calendarStats.count && !calendarChangeCount) {
+      warnings.push("本次包含日历安排，但全部被跳过或无变化，请检查是否已有实际训练或日期已过。");
+    }
+    return warnings;
+  }
+
   function getAvailableRoutineIdsForPatch(patch) {
     const ids = new Set();
     const deletedIds = new Set();
@@ -3762,6 +3877,7 @@
       ...adjustmentPreview.rows
     ];
     previewRows.filter((row) => row.action === "无效" || row.action === "无效删除").forEach((row) => warnings.push(row.reason));
+    warnings.push(...buildPlanPatchCoverageWarnings(patch, dailyPreviewCounts, adjustmentPreview));
     return {
       valid: !errors.length && totals.invalid === 0,
       warnings,
@@ -3855,7 +3971,16 @@
     const preview = previewPlanPatch(patch);
     if (!preview.valid) throw new Error("计划草案未通过校验。");
     const now = new Date().toISOString();
-    const counters = { added: 0, updated: 0, deleted: 0, skipped: 0 };
+    const counters = {
+      added: 0,
+      updated: 0,
+      deleted: 0,
+      skipped: 0,
+      calendarAdded: 0,
+      calendarUpdated: 0,
+      calendarDeleted: 0,
+      calendarSkipped: 0
+    };
     let firstDate = null;
 
     getPatchPlanTemplates(patch).forEach((item) => {
@@ -3896,9 +4021,11 @@
       });
       if (!isPatchDeleteItem(item) && (!data || data.date < todayISO() || getWorkoutsByDate(data.date).length)) {
         counters.skipped += 1;
+        counters.calendarSkipped += 1;
         return;
       }
       const result = applyPatchEntityRecord("daily_plan_items", item, data, counters, now);
+      trackCalendarPatchResult(counters, result);
       if (result.applied && data?.date) firstDate = firstDate || data.date;
     });
 
@@ -3911,10 +4038,21 @@
         createdAt: adjustment.createdAt || now
       });
       const result = applyPatchEntityRecord("plan_adjustments", adjustment, data, counters, now);
+      trackCalendarPatchResult(counters, result);
       if (result.applied && data?.date) firstDate = firstDate || data.date;
     });
 
     return { ...counters, firstDate };
+  }
+
+  function trackCalendarPatchResult(counters, result) {
+    if (!result?.applied) {
+      counters.calendarSkipped += 1;
+      return;
+    }
+    if (result.action === "added") counters.calendarAdded += 1;
+    else if (result.action === "updated") counters.calendarUpdated += 1;
+    else if (result.action === "deleted") counters.calendarDeleted += 1;
   }
 
   function applyPatchEntityRecord(entity, rawItem, normalizedData, counters, now) {
@@ -5343,6 +5481,16 @@
         link: null
       };
     }
+    if (!isTimerSessionCalendarVisible(session) || !timerSessionCountsTowardTraining(session)) {
+      return {
+        action: "fact",
+        label: TIMER_LINK_ACTION_META.fact,
+        role: "note",
+        roleLabel: TIMER_LINK_ROLE_META.note,
+        targetTrainingLogId: null,
+        link: null
+      };
+    }
     if (isShortTimerSession(session)) {
       return {
         action: "short",
@@ -5380,6 +5528,7 @@
 
   function canConvertTimerSession(session) {
     if (!isConfirmableTimerSession(session)) return false;
+    if (!isTimerSessionCalendarVisible(session) || !timerSessionCountsTowardTraining(session)) return false;
     const seconds = toNullableNumber(session.actualSeconds) || 0;
     if (seconds < 60) return false;
     const meta = getTimerTypeMeta(session.trainingType);
@@ -5389,6 +5538,57 @@
 
   function canDraftTimerSessionTraining(session) {
     return canConvertTimerSession(session);
+  }
+
+  function getTimerSessionRoutineData(session) {
+    const routineId = session?.routineId || session?.routine_id;
+    if (!routineId) return null;
+    return findSharedRecordById("routine_templates", routineId)?.data || null;
+  }
+
+  function isTimerSessionCalendarVisible(session) {
+    const explicit = parseOptionalBoolean(
+      session?.calendarVisible
+      ?? session?.calendar_visible
+      ?? session?.includeInCalendar
+      ?? session?.include_in_calendar
+      ?? session?.showInCalendar
+      ?? session?.show_in_calendar
+    );
+    if (explicit !== null) return explicit;
+    const routine = getTimerSessionRoutineData(session);
+    const routineVisible = parseOptionalBoolean(
+      routine?.calendarVisible
+      ?? routine?.calendar_visible
+      ?? routine?.includeInCalendar
+      ?? routine?.include_in_calendar
+      ?? routine?.showInCalendar
+      ?? routine?.show_in_calendar
+    );
+    return routineVisible ?? true;
+  }
+
+  function timerSessionCountsTowardTraining(session) {
+    const explicit = parseOptionalBoolean(
+      session?.countsTowardTraining
+      ?? session?.counts_toward_training
+      ?? session?.trainingLogEligible
+      ?? session?.training_log_eligible
+      ?? session?.countsAsTraining
+      ?? session?.counts_as_training
+    );
+    if (explicit !== null) return explicit;
+    const routine = getTimerSessionRoutineData(session);
+    const routineValue = parseOptionalBoolean(
+      routine?.countsTowardTraining
+      ?? routine?.counts_toward_training
+      ?? routine?.trainingLogEligible
+      ?? routine?.training_log_eligible
+      ?? routine?.countsAsTraining
+      ?? routine?.counts_as_training
+    );
+    if (routineValue !== null) return routineValue;
+    return isTimerSessionCalendarVisible(session);
   }
 
   function dateWithinDays(date, endDate, days) {

@@ -216,6 +216,37 @@ function upsert(api, entity, data) {
 {
   const api = loadAppTestApi();
   reset(api);
+  upsert(api, "routine_templates", {
+    id: "routine_child_strength",
+    title: "儿童力量",
+    trainingType: "strength",
+    timerVisible: true,
+    calendarVisible: false,
+    countsTowardTraining: false,
+    steps: [{ stepId: "move", name: "活动", durationSeconds: 600 }]
+  });
+  upsert(api, "timer_sessions", {
+    id: "session_child_strength",
+    date: "2000-06-04",
+    routineId: "routine_child_strength",
+    routineTitle: "儿童力量",
+    trainingType: "strength",
+    actualSeconds: 900,
+    completion: "completed",
+    startedAt: "2000-06-04T08:00:00.000Z"
+  });
+  const timerEnvelope = api.state.records.timer_sessions.find((item) => item.id === "session_child_strength");
+  const handling = api.getTimerSessionHandling(timerEnvelope);
+  assert.equal(handling.action, "fact");
+  api.state.selectedDate = "2000-06-04";
+  const summary = api.renderSelectedSummary();
+  assert.doesNotMatch(summary, /儿童力量/);
+  assert.doesNotMatch(summary, /计时器记录/);
+}
+
+{
+  const api = loadAppTestApi();
+  reset(api);
   upsert(api, "timer_sessions", {
     id: "session_shenk_must_not_push",
     date: "2099-06-05",
