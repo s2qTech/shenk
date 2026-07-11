@@ -1,0 +1,59 @@
+{
+  "contractVersion": "1.0",
+  "recordEnvelope": {
+    "contractVersion": "1.0",
+    "entity": "timer_sessions",
+    "id": "session_fixture_001",
+    "revision": 1,
+    "deviceId": "fixture_timer_web",
+    "createdAt": "2026-07-11T08:00:00.000Z",
+    "updatedAt": "2026-07-11T08:05:00.000Z",
+    "deletedAt": null,
+    "data": {
+      "id": "session_fixture_001",
+      "contractVersion": "1.0",
+      "date": "2026-07-11",
+      "routineId": "routine_fixture_recovery_v1",
+      "routineTitle": "Fixture Recovery",
+      "trainingType": "recovery",
+      "startedAt": "2026-07-11T08:00:00.000Z",
+      "endedAt": "2026-07-11T08:05:00.000Z",
+      "actualSeconds": 240,
+      "elapsedSeconds": 300,
+      "pausedSeconds": 60,
+      "completion": "completed"
+    }
+  },
+  "coachPlanPatch": {
+    "schema": "coach_plan_patch",
+    "contractVersion": "1.0",
+    "effectiveFrom": "2026-07-12",
+    "routineTemplates": [
+      {
+        "id": "routine_fixture_recovery_v1",
+        "version": "1.0.0",
+        "title": "Fixture Recovery",
+        "trainingType": "recovery",
+        "timerVisible": true,
+        "needsTimer": true,
+        "calendarVisible": true,
+        "countsTowardTraining": true,
+        "steps": [
+          {
+            "stepId": "calf_stretch",
+            "name": "Calf stretch",
+            "phase": "stretch",
+            "durationSeconds": 30,
+            "execution": {
+              "mode": "bilateral_hold",
+              "prepareSeconds": 8,
+              "sideSeconds": 30,
+              "switchSeconds": 6,
+              "sides": ["left", "right"]
+            }
+          }
+        ]
+      }
+    ]
+  }
+}

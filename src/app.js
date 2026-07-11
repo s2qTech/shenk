@@ -13,6 +13,7 @@
   const DEFAULT_CLOUD_API_BASE = "https://shenke-cloud-db.sq-muyi.workers.dev/api";
   const DEFAULT_TIMER_URL = "https://s2qtech.github.io/home-training-timer/";
   const SHARED_SCHEMA_VERSION = "2026-06-19-001";
+  const SHARED_CONTRACT_VERSION = "1.0";
   const AUTO_PUSH_RETRY_DELAYS = [5000, 15000, 60000];
   const SHARED_ENTITIES = [
     "plan_templates",
@@ -448,7 +449,13 @@
       state.message = "本地缓存读取失败，已使用种子数据";
     }
 
-    return { schemaVersion: SHARED_SCHEMA_VERSION, workouts: seedWorkouts(), bodyMetrics: [], records: createEmptySharedRecords() };
+    return {
+      schemaVersion: SHARED_SCHEMA_VERSION,
+      contractVersion: SHARED_CONTRACT_VERSION,
+      workouts: seedWorkouts(),
+      bodyMetrics: [],
+      records: createEmptySharedRecords()
+    };
   }
 
   function openDatabase() {
@@ -511,6 +518,7 @@
     const includeLegacy = options.includeLegacy === true;
     return {
       schemaVersion: SHARED_SCHEMA_VERSION,
+      contractVersion: SHARED_CONTRACT_VERSION,
       dataSource: "shared_records",
       legacySchemaVersion: includeLegacy ? 1 : 2,
       updatedAt: new Date().toISOString(),
@@ -582,6 +590,7 @@
     return {
       id,
       entity: item.entity || entity,
+      contractVersion: item.contractVersion || rawData.contractVersion || SHARED_CONTRACT_VERSION,
       data,
       revision: Math.max(1, Math.round(toNullableNumber(item.revision) || toNullableNumber(data.revision) || 1)),
       deviceId: item.deviceId || data.deviceId || getDeviceId(),
@@ -596,7 +605,7 @@
 
   function stripEnvelopeFields(item) {
     const data = { ...item };
-    ["entity", "revision", "deviceId", "syncState", "lastSyncedAt", "conflict"].forEach((key) => delete data[key]);
+    ["entity", "contractVersion", "revision", "deviceId", "syncState", "lastSyncedAt", "conflict"].forEach((key) => delete data[key]);
     return data;
   }
 
@@ -794,7 +803,7 @@
     const toSnapshotInput = getPlanAdjustmentToSnapshotInput(data);
     return {
       ...data,
-      id: data.id || `adjust_${data.date}_effective`,
+      id: data.id || makePlanAdjustmentId(data, toSnapshotInput),
       date: data.date,
       targetDailyPlanItemId: data.targetDailyPlanItemId || data.target_daily_plan_item_id || null,
       adjustedAt: data.adjustedAt || data.adjusted_at || new Date().toISOString(),
@@ -805,6 +814,27 @@
       createdAt: data.createdAt || data.created_at || new Date().toISOString(),
       updatedAt: data.updatedAt || data.updated_at || new Date().toISOString()
     };
+  }
+
+  function makePlanAdjustmentId(data, snapshot = {}) {
+    const fingerprint = [
+      data.date,
+      data.adjustedAt || data.adjusted_at || "",
+      data.reason || "",
+      snapshot.title || data.title || "",
+      snapshot.trainingType || snapshot.training_type || data.trainingType || data.training_type || data.type || "",
+      snapshot.routineId || snapshot.routine_id || data.routineId || data.routine_id || ""
+    ].join("|");
+    return `adjust_${data.date}_${stableIdHash(fingerprint)}`;
+  }
+
+  function stableIdHash(value) {
+    let hash = 2166136261;
+    for (const char of String(value || "")) {
+      hash ^= char.charCodeAt(0);
+      hash = Math.imul(hash, 16777619);
+    }
+    return (hash >>> 0).toString(36);
   }
 
   function getPlanAdjustmentToSnapshotInput(data) {
@@ -1028,6 +1058,7 @@
     return {
       id,
       entity,
+      contractVersion: existing?.contractVersion || data.contractVersion || SHARED_CONTRACT_VERSION,
       data: normalized,
       revision: existing?.revision || Math.max(1, Math.round(toNullableNumber(data.revision) || 1)),
       deviceId: existing?.deviceId || data.deviceId || getDeviceId(),
@@ -3755,6 +3786,12 @@
           rows.push({ entity, id, action: "跳过", reason: "记录不存在或已删除。" });
           return;
         }
+        const deleteInvalidReason = options.deleteInvalidReason ? options.deleteInvalidReason(existing, item, index) : "";
+        if (deleteInvalidReason) {
+          counts.invalid += 1;
+          rows.push({ entity, id, action: "无效删除", reason: deleteInvalidReason });
+          return;
+        }
         counts.delete += 1;
         rows.push({ entity, id, action: "删除", reason: "" });
         return;
@@ -3862,6 +3899,21 @@
     return ids;
   }
 
+  function isPublishedTemplate(data) {
+    if (!data || typeof data !== "object") return false;
+    return data.immutable === true || data.lifecycle === "published" || Boolean(data.publishedAt || data.published_at);
+  }
+
+  function getPublishedTemplateMutationIssue(entity, normalizedData) {
+    const existing = findSharedRecordById(entity, normalizedData?.id, true);
+    if (!existing || existing.deletedAt || !isPublishedTemplate(existing.data)) return "";
+    return "已发布模板不可原地修改，请创建新 id 和新 version。";
+  }
+
+  function getPublishedTemplateDeleteIssue(existing) {
+    return isPublishedTemplate(existing?.data) ? "已发布模板不可删除，请创建替代模板并归档旧版本。" : "";
+  }
+
   function getDailyPlanRoutineIssue(item, availableRoutineIds) {
     if (!item) return "";
     const routineId = String(item.routineId || item.routine_id || "").trim();
@@ -3888,13 +3940,23 @@
         updatedAt: now,
         createdAt: item.createdAt || now
       }, "plan"),
-      { label: "planTemplates", requireInputId: true }
+      {
+        label: "planTemplates",
+        requireInputId: true,
+        invalidReason: (item) => getPublishedTemplateMutationIssue("plan_templates", item),
+        deleteInvalidReason: getPublishedTemplateDeleteIssue
+      }
     );
     const routinePreview = buildPatchEntityPreview(
       "routine_templates",
       getPatchArray(patch, "routineTemplates"),
       (item) => normalizeRoutineTemplateData({ ...item, updatedAt: now, createdAt: item.createdAt || now }),
-      { label: "routineTemplates", requireInputId: true }
+      {
+        label: "routineTemplates",
+        requireInputId: true,
+        invalidReason: (item) => getPublishedTemplateMutationIssue("routine_templates", item),
+        deleteInvalidReason: getPublishedTemplateDeleteIssue
+      }
     );
     const dailyPreviewCounts = buildPatchEntityPreview(
       "daily_plan_items",
@@ -3954,6 +4016,7 @@
     const errors = [];
     if (!patch || typeof patch !== "object") return ["计划草案不是有效对象。"];
     if (patch.schema !== "coach_plan_patch") errors.push("schema 必须是 coach_plan_patch。");
+    if (patch.contractVersion && patch.contractVersion !== SHARED_CONTRACT_VERSION) errors.push(`contractVersion 仅支持 ${SHARED_CONTRACT_VERSION}。`);
     if (!isIsoDate(patch.effectiveFrom)) errors.push("effectiveFrom 必须是 YYYY-MM-DD。");
     if (patch.effectiveTo && !isIsoDate(patch.effectiveTo)) errors.push("effectiveTo 必须是 YYYY-MM-DD。");
     const hasPlan = getPatchPlanTemplates(patch).length > 0;
@@ -5120,19 +5183,31 @@
   }
 
   async function doPullCloudRecords() {
-      const result = await syncRequest("/records/query", {
-      body: {
-        deviceId: getDeviceId(),
-        since: state.syncConfig.lastPullAt || null,
-        entities: SHARED_ENTITIES
-      }
-    });
-    const records = Array.isArray(result.records) ? result.records : [];
+    const records = [];
+    let cursor = null;
+    let result = null;
+    let pageCount = 0;
+    do {
+      result = await syncRequest("/records/query", {
+        body: {
+          contractVersion: SHARED_CONTRACT_VERSION,
+          deviceId: getDeviceId(),
+          since: state.syncConfig.lastPullAt || null,
+          entities: SHARED_ENTITIES,
+          limit: 200,
+          cursor
+        }
+      });
+      records.push(...(Array.isArray(result.records) ? result.records : []));
+      cursor = result.nextCursor || null;
+      pageCount += 1;
+      if (pageCount > 100 && cursor) throw new Error("云端增量记录过多，请稍后重试。");
+    } while (cursor);
     if (records.length) {
       state.records = mergeSharedRecords(state.records, recordsArrayToBucket(records), { source: "cloud" });
       refreshLegacyCachesFromSharedRecords();
     }
-    const now = result.serverTime || new Date().toISOString();
+    const now = result?.serverTime || new Date().toISOString();
     saveSyncConfig({ lastPullAt: now, lastSyncAt: now });
     const draftableTimers = countDraftableTimerSessions();
     state.syncStatus.lastResult = `已读取 ${records.length} 条云端记录${draftableTimers ? `，${draftableTimers} 条计时器记录可补训练` : ""}`;
@@ -5154,8 +5229,10 @@
     }
     const result = await syncRequest("/records/upsert", {
       body: {
+        contractVersion: SHARED_CONTRACT_VERSION,
         deviceId: getDeviceId(),
         records: records.map((item) => ({
+          contractVersion: item.contractVersion || SHARED_CONTRACT_VERSION,
           entity: item.entity,
           id: item.id,
           baseRevision: item.revision || 0,

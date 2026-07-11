@@ -47,11 +47,11 @@ Timer writes:
 
 ## Current Risks
 
-1. Worker entity validation covers the P0 shape and duration rules, but Contract v1 schema validation is still incomplete.
-2. Interrupted sessions are persisted as `stopped` on reset, configuration reset, and page exit; browser/process crashes still rely on local recovery and retry.
-3. Published template immutability is documented but not yet enforced end-to-end.
+1. Contract v1 has JSON Schema, OpenAPI, versioned requests and fixtures. Worker still uses deliberate hand-written validation rather than a full JSON Schema runtime, so every new field still needs a matching Worker validation review.
+2. In-progress timer sessions are persisted every 15 seconds and recovered as `stopped` using the last activity heartbeat. A process kill can still lose up to one heartbeat interval of active time.
+3. Published templates are protected when explicitly marked `lifecycle: "published"`, `publishedAt`, or `immutable: true`; legacy templates without a marker remain mutable for migration compatibility.
 4. Both frontends remain large single files; the first extracted timer-session core is only the start of modularization.
-5. CI, pagination, incremental sync and entity-store outbox remain unfinished.
+5. Pull pagination is available and both Web clients follow it. IndexedDB still stores a whole snapshot, so the entity-store outbox remains work package 4.
 
 ## Work Package Progress
 
@@ -62,14 +62,21 @@ Timer writes:
 - Both repositories run the same checks on push and pull request through GitHub Actions.
 - Broader end-to-end and fixture coverage remains part of later package-specific work.
 
-### Work Package 1: data correctness and security - in progress
+### Work Package 1: data correctness and security - completed
 
 - Cloud pulls preserve local dirty records and surface a conflict instead of replacing them.
 - Worker rejects stale blind writes, while identical retries remain idempotent.
 - Sync profile reads require authentication and an allowed role.
 - Timer cue/warning/plan text is rendered as text nodes instead of untrusted HTML.
 - Timer records active, elapsed and paused durations separately; reset, routine changes and page exit finalize active sessions as `stopped`.
-- Remaining: complete entity-level Contract v1 validation, expand recovery behavior after browser/process crash, and add CI coverage.
+- A 15-second local heartbeat recovers unexpected browser/process exits as one `stopped` session and retries cloud upload without generating a formal training log.
+
+### Work Package 2: shared Contract v1 and version governance - completed
+
+- Canonical schema, API description and sanitized fixtures live in `contracts/v1/`; timer keeps a matching schema/fixture test mirror.
+- New 身刻 and timer requests declare `contractVersion: "1.0"`; old clients that omit it remain compatible, while explicit unknown versions receive `unsupported_contract_version`.
+- Worker query responses include `contractVersion` and optional cursor pagination. 身刻 and timer follow `nextCursor` with the original `since` value.
+- Explicitly published plan/routine templates are immutable locally and in Worker. Daily plan snapshots stay independent and same-day adjustments now receive stable content IDs instead of a fixed date ID.
 
 ## Active Development Direction
 
@@ -95,4 +102,4 @@ Every completed package must report progress as `X / 7`, verification, compatibi
 
 ## Immediate Next Step
 
-Start work package 0, then work package 1. Do not begin Android business implementation before Contract v1 is frozen.
+Start work package 3: extract pure domain, sync, storage and timer-engine modules without changing the accepted Web UI. Do not begin Android business implementation before Contract v1 is frozen.

@@ -1,6 +1,6 @@
 # Shared Data Contract
 
-Last updated: 2026-06-30
+Last updated: 2026-07-11
 
 ## Purpose
 
@@ -18,6 +18,21 @@ Both sides may read all data. Write ownership is narrower:
 - `timer_sessions` are read-only execution facts in `身刻`; `身刻` must not modify them.
 - `timer_session_links` is a legacy compatibility entity. New Web flows should prefer `training_logs.timerSessionId` / `training_logs.timerSessionIds` and should not create new link-only handling records.
 - Routine templates are modified only through explicit plan updates, not by timer execution.
+
+## Contract v1
+
+The current shared contract version is `1.0`.
+
+- Canonical JSON Schema: `contracts/v1/contract.schema.json`.
+- Canonical API description: `contracts/v1/openapi.json`.
+- Sanitized compatibility fixture: `contracts/v1/contract-fixtures.json`.
+- New clients send `contractVersion: "1.0"` in record query/upsert bodies and newly created record envelopes.
+- Worker responses include `contractVersion: "1.0"`.
+- `POST /records/query` accepts optional `limit` (1-500) and an opaque `nextCursor`; clients must keep the original `since` value while following cursors, then persist the final `serverTime` only after the last page.
+- Legacy records and clients that omit `contractVersion` remain readable and writable during the v1 transition. Any explicit unsupported version is rejected with `unsupported_contract_version`.
+- The timer repository contains a byte-for-byte schema/fixture test mirror under `contracts/v1/`; the 身刻 copy remains canonical.
+
+`schemaVersion` is a storage or feature format marker. `contractVersion` is the cross-client business contract and must not be inferred from UI version strings.
 - Plans are modified only through explicit coach/user-confirmed updates, not automatically by the app.
 - `routine_templates` in Cloudflare D1 are the source of truth for timer-executable routines.
 - `home-training-timer` may cache `routine_templates` locally for offline execution, but cache is only a replica.
@@ -37,6 +52,16 @@ Both sides may read all data. Write ownership is narrower:
 11. Web, Android, and timer clients share the same business records; UI layout, colors, icons, and navigation state stay outside the shared data model.
 12. Tokens and API keys are local configuration, not shared business records. Multi-device setup uses encrypted sync profiles, not plaintext records.
 13. In 身刻, `cloud_records` envelopes are the canonical local model. Legacy `workouts` and `bodyMetrics` arrays are compatibility input/output and may be used as derived UI caches only.
+
+### Published Template Governance
+
+Templates may use `lifecycle: "draft" | "published" | "archived"`, `publishedAt`, or `immutable: true`.
+
+- A template is treated as published when `lifecycle` is `published`, `publishedAt` exists, or `immutable` is `true`.
+- Published `plan_templates` and `routine_templates` cannot be changed or deleted with the same `id`; create a new `id` and a new `version` instead.
+- Existing records without one of those published markers are legacy-compatible and can still be updated during the v1 transition.
+- A daily plan item is a snapshot: changing a template never rewrites it. Future-date guidance changes through a new daily item or a `plan_adjustment`.
+- `plan_adjustments` are append-only. Coach patches should give each adjustment an explicit `id`; when omitted, 身刻 derives a stable content ID so separate same-day adjustments do not overwrite one another.
 
 ## Platform Boundary
 

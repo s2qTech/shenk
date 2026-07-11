@@ -1,6 +1,9 @@
 const SCHEMA_VERSION = "2026-06-28-cloud-records-v2";
+const CONTRACT_VERSION = "1.0";
 const MAX_UPSERT_RECORDS = 100;
 const MAX_RECORD_DATA_BYTES = 256 * 1024;
+const DEFAULT_QUERY_LIMIT = 200;
+const MAX_QUERY_LIMIT = 500;
 
 const ENTITIES = [
   "plan_templates",
@@ -52,6 +55,7 @@ export default {
           ok: true,
           service: "shenke-cloud-db",
           schemaVersion: SCHEMA_VERSION,
+          contractVersion: CONTRACT_VERSION,
           time: new Date().toISOString()
         }, 200, request, env);
       }
@@ -73,6 +77,7 @@ export default {
           ok: true,
           serverTime: new Date().toISOString(),
           schemaVersion: SCHEMA_VERSION,
+          contractVersion: CONTRACT_VERSION,
           records: {
             plan_templates: [],
             routine_templates: [],
@@ -106,6 +111,7 @@ export default {
         const body = await readJson(request);
         const session = body.timerSession || body.data || body;
         return json(await upsertRecords(env, {
+          contractVersion: body.contractVersion || session.contractVersion,
           deviceId: body.deviceId || session.deviceId || "timer_web",
           records: [{
             entity: "timer_sessions",
@@ -124,6 +130,7 @@ export default {
         const body = await readJson(request);
         const log = body.trainingLog || body.data || body;
         return json(await upsertRecords(env, {
+          contractVersion: body.contractVersion || log.contractVersion,
           deviceId: body.deviceId || log.deviceId || "shenke_web",
           records: [{
             entity: "training_logs",
@@ -142,6 +149,7 @@ export default {
         const body = await readJson(request);
         const metric = body.bodyMetric || body.data || body;
         return json(await upsertRecords(env, {
+          contractVersion: body.contractVersion || metric.contractVersion,
           deviceId: body.deviceId || metric.deviceId || "shenke_web",
           records: [{
             entity: "body_metrics",
@@ -160,6 +168,7 @@ export default {
         const body = await readJson(request);
         const item = body.dailyPlanItem || body.data || body;
         return json(await upsertRecords(env, {
+          contractVersion: body.contractVersion || item.contractVersion,
           deviceId: body.deviceId || item.deviceId || "shenke_web",
           records: [{
             entity: "daily_plan_items",
@@ -182,10 +191,12 @@ export default {
 };
 
 async function queryRecords(env, body, client) {
+  assertSupportedContractVersion(body.contractVersion);
   const entities = sanitizeEntities(body.entities).filter(entity => canRead(client.role, entity));
   const since = body.since ? String(body.since) : null;
+  const page = normalizeQueryPage(body);
   if (!entities.length) {
-    return { ok: true, serverTime: new Date().toISOString(), records: [] };
+    return { ok: true, contractVersion: CONTRACT_VERSION, serverTime: new Date().toISOString(), records: [], nextCursor: null };
   }
   const placeholders = entities.map(() => "?").join(",");
   const where = [`entity IN (${placeholders})`];
@@ -194,22 +205,66 @@ async function queryRecords(env, body, client) {
     where.push("updated_at > ?");
     params.push(since);
   }
+  if (page.cursor) {
+    where.push("(updated_at > ? OR (updated_at = ? AND (entity > ? OR (entity = ? AND id > ?))))");
+    params.push(page.cursor.updatedAt, page.cursor.updatedAt, page.cursor.entity, page.cursor.entity, page.cursor.id);
+  }
+
+  const paginationSql = page.limit ? " LIMIT ?" : "";
+  if (page.limit) params.push(page.limit + 1);
 
   const result = await env.DB.prepare(
     `SELECT entity, id, revision, device_id, created_at, updated_at, deleted_at, data_json
      FROM cloud_records
      WHERE ${where.join(" AND ")}
-     ORDER BY updated_at ASC, entity ASC, id ASC`
+     ORDER BY updated_at ASC, entity ASC, id ASC${paginationSql}`
   ).bind(...params).all();
+
+  const rows = result.results || [];
+  const hasMore = Boolean(page.limit && rows.length > page.limit);
+  const visibleRows = hasMore ? rows.slice(0, page.limit) : rows;
+  const lastRow = visibleRows.at(-1);
 
   return {
     ok: true,
+    contractVersion: CONTRACT_VERSION,
     serverTime: new Date().toISOString(),
-    records: (result.results || []).map(rowToRecord)
+    records: visibleRows.map(rowToRecord),
+    nextCursor: hasMore && lastRow ? encodeQueryCursor(lastRow) : null
   };
 }
 
+function normalizeQueryPage(body) {
+  const paginationRequested = body.limit !== undefined || body.cursor !== undefined;
+  if (!paginationRequested) return { limit: null, cursor: null };
+  const requested = Number(body.limit ?? DEFAULT_QUERY_LIMIT);
+  if (!Number.isFinite(requested) || requested < 1 || requested > MAX_QUERY_LIMIT || Math.floor(requested) !== requested) {
+    const error = new Error("invalid_query_limit");
+    error.status = 400;
+    throw error;
+  }
+  return { limit: requested, cursor: decodeQueryCursor(body.cursor) };
+}
+
+function encodeQueryCursor(row) {
+  return encodeURIComponent(JSON.stringify({ updatedAt: row.updated_at, entity: row.entity, id: row.id }));
+}
+
+function decodeQueryCursor(value) {
+  if (value === undefined || value === null || value === "") return null;
+  try {
+    const parsed = JSON.parse(decodeURIComponent(String(value)));
+    if (!parsed || !parsed.updatedAt || !ENTITIES.includes(parsed.entity) || !parsed.id) throw new Error("invalid");
+    return { updatedAt: String(parsed.updatedAt), entity: String(parsed.entity), id: String(parsed.id) };
+  } catch (cause) {
+    const error = new Error("invalid_query_cursor");
+    error.status = 400;
+    throw error;
+  }
+}
+
 async function upsertRecords(env, body, client) {
+  assertSupportedContractVersion(body.contractVersion);
   const deviceId = String(body.deviceId || client.deviceId || "unknown_device");
   const records = Array.isArray(body.records) ? body.records : [];
   if (records.length > MAX_UPSERT_RECORDS) {
@@ -240,6 +295,17 @@ async function upsertRecords(env, body, client) {
     const existing = await env.DB.prepare(
       "SELECT entity, id, revision, device_id, created_at, updated_at, deleted_at, data_json FROM cloud_records WHERE entity = ? AND id = ?"
     ).bind(entity, id).first();
+
+    if (existing && isPublishedTemplateRecord(entity, existing) && !hasSameStoredPayload(existing, record.data, record.deletedAt || null)) {
+      conflicts.push({
+        entity,
+        id,
+        reason: "immutable_template_requires_new_id",
+        serverRecord: rowToRecord(existing),
+        clientRecord: record
+      });
+      continue;
+    }
 
     const baseRevision = Number(record.baseRevision ?? record.revision ?? 0);
     if (existing && baseRevision !== Number(existing.revision || 0)) {
@@ -289,6 +355,7 @@ async function upsertRecords(env, body, client) {
 
   return {
     ok: true,
+    contractVersion: CONTRACT_VERSION,
     serverTime: new Date().toISOString(),
     accepted,
     conflicts
@@ -296,6 +363,7 @@ async function upsertRecords(env, body, client) {
 }
 
 function validateRecordForUpsert(entity, id, data, deletedAt) {
+  if (data.contractVersion !== undefined && data.contractVersion !== CONTRACT_VERSION) return "unsupported_contract_version";
   if (String(id).length > 160 || /[\u0000-\u001f]/.test(String(id))) return "invalid_record_id";
   if (data.id !== undefined && String(data.id) !== String(id)) return "record_id_mismatch";
   let serialized = "";
@@ -321,9 +389,23 @@ function validateRecordForUpsert(entity, id, data, deletedAt) {
   return null;
 }
 
+function assertSupportedContractVersion(value) {
+  if (value === undefined || value === null || value === "") return;
+  if (String(value) === CONTRACT_VERSION) return;
+  const error = new Error("unsupported_contract_version");
+  error.status = 400;
+  throw error;
+}
+
 function hasSameStoredPayload(existing, data, deletedAt) {
   return String(existing.deleted_at || "") === String(deletedAt || "")
     && String(existing.data_json || "") === JSON.stringify(data);
+}
+
+function isPublishedTemplateRecord(entity, row) {
+  if (!["plan_templates", "routine_templates"].includes(entity) || row.deleted_at) return false;
+  const data = safeJson(row.data_json, {});
+  return data.immutable === true || data.lifecycle === "published" || Boolean(data.publishedAt || data.published_at);
 }
 
 function isIsoDate(value) {
@@ -433,6 +515,7 @@ function isValidEncryptedSyncProfile(profile) {
 
 function rowToRecord(row) {
   return {
+    contractVersion: CONTRACT_VERSION,
     entity: row.entity,
     id: row.id,
     revision: row.revision,

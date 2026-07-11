@@ -144,6 +144,19 @@ function routinePatch(overrides = {}) {
 {
   const api = loadAppTestApi();
   reset(api);
+  const preview = api.previewPlanPatch({
+    schema: "coach_plan_patch",
+    contractVersion: "9.9",
+    effectiveFrom: "2099-01-01",
+    routineTemplates: [routinePatch({ id: "routine_bad_contract" })]
+  });
+  assert.equal(preview.valid, false);
+  assert.match(preview.warnings.join("\n"), /contractVersion/);
+}
+
+{
+  const api = loadAppTestApi();
+  reset(api);
   upsert(api, "daily_plan_items", {
     id: "daily_replace_guard",
     date: "2099-02-01",
@@ -367,11 +380,42 @@ function routinePatch(overrides = {}) {
   assert.match(preview.warnings.join("\n"), /只到 2099-07-01/);
   const result = api.applyCoachPlanPatch(patch);
   assert.equal(result.calendarAdded, 1);
-  const stored = record(api, "plan_adjustments", "adjust_2099-07-01_effective").data;
+  const stored = api.state.records.plan_adjustments.find((item) => !item.deletedAt)?.data;
   assert.equal(stored.toSnapshot.title, "低压恢复");
   assert.equal(stored.toSnapshot.trainingType, "recovery");
   assert.equal(stored.toSnapshot.estimatedMinutes, 15);
   assert.equal(JSON.stringify(stored.toSnapshot.notes), JSON.stringify(["做恢复拉伸或完全休息。"]));
+}
+
+{
+  const api = loadAppTestApi();
+  reset(api);
+  const patch = {
+    schema: "coach_plan_patch",
+    effectiveFrom: "2099-08-01",
+    planAdjustments: [
+      { date: "2099-08-01", title: "Easy walk", trainingType: "easy_walk", reason: "First adjustment" },
+      { date: "2099-08-01", title: "Recovery", trainingType: "recovery", reason: "Second adjustment" }
+    ]
+  };
+  const result = api.applyCoachPlanPatch(patch);
+  assert.equal(result.added, 2);
+  const records = api.state.records.plan_adjustments.filter((item) => !item.deletedAt);
+  assert.equal(records.length, 2);
+  assert.notEqual(records[0].id, records[1].id);
+}
+
+{
+  const api = loadAppTestApi();
+  reset(api);
+  upsert(api, "routine_templates", routinePatch({ id: "routine_published", lifecycle: "published" }));
+  const preview = api.previewPlanPatch({
+    schema: "coach_plan_patch",
+    effectiveFrom: "2099-09-01",
+    routineTemplates: [routinePatch({ id: "routine_published", title: "Changed" })]
+  });
+  assert.equal(preview.valid, false);
+  assert.match(preview.warnings.join("\n"), /不可原地修改/);
 }
 
 console.log("coach-plan-patch tests passed");

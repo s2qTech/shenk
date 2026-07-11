@@ -6,6 +6,7 @@ Thumbs.db
 *.local
 data/
 exports/
+outputs/
 screenshots/
 *.zip
 node_modules/

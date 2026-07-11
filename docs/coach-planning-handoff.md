@@ -121,6 +121,7 @@ Codex 根据摘要输出两部分：
 ```json
 {
   "schema": "coach_plan_patch",
+  "contractVersion": "1.0",
   "schemaVersion": "1.0",
   "generatedAt": "2026-06-27T21:00:00+08:00",
   "generatedBy": "codex",
@@ -186,7 +187,7 @@ Codex 根据摘要输出两部分：
 - 计时器成功读取云端方案后，会缓存到本地；离线时使用最近一次缓存。
 - 程序内置流程只允许作为无云端、无缓存时的兜底，不作为正常方案来源。
 - 计划草案可以只修改一个 `routineTemplates` 条目，不要求提交完整计划。
-- 修改已有方案时保持相同 `id`，提高 `version`，只写需要替换的方案即可。
+- 修改尚未发布的方案时可以保持相同 `id` 并提高 `version`。一旦方案带有 `lifecycle: "published"`、`publishedAt` 或 `immutable: true`，必须创建新的 `id` 和 `version`，旧版本保留给历史快照。
 - 新增方案时使用新的稳定 `id`，并在对应 `dailyPlanItems.routineId` 引用它。
 
 计划草案应用规则：
@@ -256,7 +257,7 @@ Codex 根据摘要输出两部分：
 重要规则：
 1. 可以只修改某一个 routineTemplates，不要求输出完整计划。
 2. routine_templates 是计时器方案主源；计时器会从云端读取并缓存到本地。
-3. 如果是修改已有计时器方案，请保持相同 id，提高 version，只输出被修改的 routineTemplates 条目。
+3. 如果是修改尚未发布的计时器方案，可以保持相同 id 并提高 version；已发布方案必须创建新的 id 和 version，只输出需要替换的 routineTemplates 条目。
 4. 如果是新增方案，请给新的稳定 id，并在需要的 dailyPlanItems.routineId 中引用。
 5. 需要在计时器方案列表显示的 routine 必须写 timerVisible: true 和 needsTimer: true。
 6. routine title 使用用户侧中文名称，不要包含 routineId、英文下划线 ID、v1/v2/v3 版本号。
@@ -273,6 +274,7 @@ Codex 根据摘要输出两部分：
 
 请输出顶层 schema 为 coach_plan_patch 的 JSON：
 - schema
+- contractVersion: "1.0"
 - generatedAt
 - generatedBy
 - reason
