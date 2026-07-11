@@ -1,101 +1,81 @@
 # Project State
 
+Updated: 2026-07-11
+
 ## Product Boundary
 
-身刻 and `home-training-timer` remain separate applications.
+身刻 and `home-training-timer` remain separate applications and repositories.
 
-- 身刻 owns calendar, training logs, body metrics, plan records, weather records, media metadata, and feedback summaries.
-- `home-training-timer` owns training execution, voice prompts, wake lock, routine timing, and timer sessions.
-- Cloudflare Worker + D1 owns shared cloud database access, auth, role permissions, and conflict metadata.
+- 身刻 owns plans, calendar snapshots, plan adjustments, formal training logs, body metrics, trends, feedback summaries, and sync coordination.
+- `home-training-timer` owns routine execution, voice, wake lock, timing state, and `timer_sessions`.
+- Cloudflare Worker + D1 owns authentication, role permissions, validation, revisions, conflict metadata, and shared cloud storage.
 
-Do not merge timer execution code into 身刻. 身刻 can open timer by URL and read completed timer sessions from the shared database.
+Do not merge timer execution code into 身刻. Do not let either client write entities owned by the other client.
 
-## Data Ownership
+## Shared Data Ownership
 
-Both clients may read shared records. Writes are role-scoped:
-
-- `admin`: all entities.
-- `shenk`: `plan_templates`, `routine_templates`, `daily_plan_items`, `plan_adjustments`, `training_logs`, `body_metrics`, `weather_logs`, `media_assets`, `feedback_summaries`.
-- `timer`: `timer_sessions`.
-
-## Shared Entities
+身刻 writes:
 
 - `plan_templates`
 - `routine_templates`
 - `daily_plan_items`
 - `plan_adjustments`
-- `timer_sessions`
-- `timer_session_links`
 - `training_logs`
 - `body_metrics`
 - `weather_logs`
 - `media_assets`
 - `feedback_summaries`
 
-Phase 1 stores these entities as JSON envelopes in D1 table `cloud_records`. Entity-specific analytical tables can be added later.
+Timer writes:
 
-## Implemented Locally
+- `timer_sessions`
 
-- Static Web MVP for 身刻.
-- IndexedDB/localStorage persistence.
-- Calendar and day-detail recording UI.
-- Shared records are the canonical local data source. Legacy `workouts` and `bodyMetrics` are import/export compatibility and in-memory UI caches derived from `training_logs` and `body_metrics`.
-- Cloud database settings panel in `src/app.js`.
-- Cloud sync reads all shared entities and writes only 身刻-owned entities; `timer_sessions` is read-only in 身刻.
-- `routine_templates` are the timer routine source of truth; 身刻 writes them through confirmed plan patches, and `home-training-timer` reads cloud records then caches them locally for offline execution.
-- `coach_plan_patch` import is merge/upsert by default. Missing fields and empty arrays are no-op; deletion requires explicit `operation: "delete"` or `deletedAt`.
-- `tests/coach-plan-patch.test.js` locks the merge/upsert import rules: empty arrays are no-op, replaceMode does not clear records, explicit deletes create tombstones, and days with actual workouts are skipped.
-- `timer_sessions` are read-only execution facts in 身刻; formal training logs are created only when the user saves the editable training form.
-- Dedicated "计时器记录" page shows recent timer sessions with date/type/status filters, details, and a single eligible "补训练" action.
-- Day detail shows the effective daily plan, formal training logs, timer facts that have not already become logs, and body metrics.
-- Completed/stopped main timer sessions can prefill a training draft; warmups, stretch/cooldown, seat recovery, and very short tests remain timer facts by default.
-- Timer launch URLs are generated from daily plan items without putting timer tokens in the URL; `TIMER_TOKEN` is saved in settings and sent by `postMessage`.
-- Cloudflare Worker API in `cloudflare/worker.js`.
-- D1 migrations in `cloudflare/migrations/`.
-- Encrypted sync profiles use `sync_profiles` for multi-device configuration; the cloud stores ciphertext only, not plaintext tokens.
-- Deployment template in `wrangler.toml.example`.
-- Setup guide in `docs/cloudflare-cloud-db-setup.md`.
-- API contract in `docs/cloud-records-api.md`.
+`timer_session_links` is legacy compatibility only. New flows use an editable training draft and save `training_logs.timerSessionId` / `timerSessionIds` after user confirmation.
 
-## Cloud Database API
+## Implemented Baseline
 
-Preferred endpoints:
+- Static Web MVP for 身刻 with desktop calendar, day detail, records, metrics, settings, feedback export, and coach patch inbox.
+- IndexedDB/localStorage persistence and offline application shell.
+- Cloud sync through Cloudflare Worker + D1.
+- Encrypted multi-device sync profiles; cloud stores ciphertext, not plaintext tokens.
+- Merge/upsert `coach_plan_patch` import; missing fields and empty arrays are no-op; deletes are explicit.
+- Dynamic `routine_templates` source of truth with timer local cache and fallback warning.
+- Timer step `execution` expansion for preparation and bilateral actions.
+- `timer_sessions` read in 身刻 and used only to prefill editable formal-record drafts.
+- Routine `calendarVisible` and `countsTowardTraining` boundaries.
+- Desktop Web UI is currently the accepted product baseline.
 
-- `GET /api/health`
-- `POST /api/records/query`
-- `POST /api/records/upsert`
-- `POST /api/timer-sessions`
-- `POST /api/training-logs`
-- `POST /api/body-metrics`
-- `POST /api/daily-plan-items`
-- `GET /api/sync-profiles/:profileId`
-- `PUT /api/sync-profiles/:profileId`
+## Current Risks
 
-Legacy `/api/sync/pull` and `/api/sync/push` are kept only for compatibility.
+1. Sync merge can still silently replace local dirty records in some revision paths.
+2. Timer cloud text still needs complete safe-rendering enforcement.
+3. Timer `actualSeconds` and interrupted-session semantics need correction.
+4. Worker needs entity-level schema validation and bounded batch/pagination behavior.
+5. Published template immutability is documented but not yet enforced end-to-end.
+6. Both frontends remain large single files with insufficient automated coverage.
 
-## Training Logic
+## Active Development Direction
 
-Recommendations use a rolling cycle, not fixed weekly punishment:
+The canonical next-stage documents are:
 
-- 2 strength sessions per 7-day window.
-- 2 to 3 easy aerobic sessions per 7-day window.
-- 1 quality walk or controlled improvement session per 7-day window.
-- 1 recovery/rest/stretch day as needed.
+- `docs/next-stage-development-plan.md`
+- `docs/development-constraints.md`
+- `docs/data-contract.md`
+- `docs/system-design.md`
+- `docs/mobile-strategy.md`
 
-Rules:
+Work proceeds in seven packages:
 
-- No make-up punishment.
-- Actual completion updates the next recommendation.
-- Fatigue, poor sleep, pain, or unusual soreness should downshift the recommendation.
-- Avoid wrist-loaded pushups/planks because the user has wrist pain.
-- Protect low back because of old severe lumbar disc history.
-- Protect calf; downgrade if calf tightness or pain returns.
+0. Freeze baseline and fixtures.
+1. Data correctness and security.
+2. Shared Contract v1 and version governance.
+3. Modularization and CI.
+4. IndexedDB/outbox/sync v2.
+5. Web information architecture and accessibility.
+6. Android foundation with shared domain logic and independent mobile UI.
 
-## Next Steps
+Every completed package must report progress as `X / 7`, verification, compatibility, remaining risks, and next prerequisites.
 
-1. Deploy the updated Cloudflare Worker when `CLOUDFLARE_API_TOKEN` is available.
-2. Fill 身刻 settings with the Cloudflare Worker API base, `SHENK_TOKEN`, and optional `TIMER_TOKEN` locally.
-3. Pull `timer_sessions` from cloud and verify eligible sessions can prefill training drafts.
-4. Push 身刻-owned records with `/api/records/upsert`.
-5. Exercise conflict handling with "use cloud" and "use local override".
-6. Build the later feedback-summary export for Codex planning.
+## Immediate Next Step
+
+Start work package 0, then work package 1. Do not begin Android business implementation before Contract v1 is frozen.

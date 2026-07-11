@@ -2,41 +2,38 @@
 
 记录身体变化，掌控生活节奏。
 
-身刻是训练与身体状态记录工具。它负责日历、训练记录、身体指标、状态反馈、截图识别占位、天气和趋势查看。`home-training-timer` 继续作为独立计时器项目存在，负责训练执行、动作提示、常亮和训练会话输出。
+身刻是训练计划、训练记录和身体状态工具。它与独立项目 `home-training-timer` 共用 Cloudflare Worker + D1 和同一套数据契约，但保持不同职责与部署。
 
-## 架构边界
+## 产品边界
 
-- 身刻：计划、日历、记录、身体指标、反馈摘要。
-- home-training-timer：计时器、动作流程执行、timer session。
-- Cloudflare Worker + D1：统一云数据库 API，按角色控制读写。
+- 身刻：计划、日历、正式训练记录、身体状态、趋势、反馈摘要和同步协调。
+- home-training-timer：routine 执行、动作提示、语音、常亮和 `timer_sessions`。
+- Worker + D1：认证、角色权限、实体校验、冲突元数据和共享云端副本。
 
-两个前端不合并代码，也不互相擅自修改对方负责的数据；它们通过同一套数据结构和同一个 D1 数据库协作。
+两个前端不合并仓库。双方可读取共享记录，但只写自己拥有的实体。
 
-## 当前形态
+## 当前技术形态
 
-- 前端：静态 HTML/CSS/JS。
-- 本地存储：IndexedDB，失败时回退到 localStorage。
-- 本地建议：滚动训练规则在浏览器内计算，不依赖云端或 AI 在线。
-- 离线使用：成功打开一次后缓存应用外壳；断网时仍可查看、记录和生成建议，恢复联网后再同步。
-- 云端：Cloudflare Worker + D1，使用通用 `cloud_records` JSON envelope。
-- 部署：可放 GitHub Pages / Cloudflare Pages。
-- Android：后续可用 WebView 壳封装。
+- Web：静态 HTML/CSS/JavaScript，后续渐进迁移到 Vite + TypeScript 模块。
+- 本地：IndexedDB 第一写入点，离线可查看、记录和执行缓存 routine。
+- 云端：Cloudflare Worker + D1，使用通用 record envelope。
+- 部署：GitHub Pages。
+- Android：后续使用共享领域层和独立移动 UI，不缩放桌面版页面。
 
-## 云数据库
+## 关键文档
 
-Worker API 位于 `cloudflare/worker.js`，D1 migration 位于 `cloudflare/migrations/0001_cloud_records.sql`。
-
-角色令牌：
-
-- `ADMIN_TOKEN`: 维护用，全量读写。
-- `SHENK_TOKEN`: 身刻写计划、日志、身体指标等记录。
-- `TIMER_TOKEN`: timer 写训练执行会话。
-
-详细部署见 [Cloudflare D1 cloud database setup](docs/cloudflare-cloud-db-setup.md)。
+- [共享数据契约](docs/data-contract.md)
+- [系统设计](docs/system-design.md)
+- [下一阶段开发方案](docs/next-stage-development-plan.md)
+- [开发约束边界](docs/development-constraints.md)
+- [移动端策略](docs/mobile-strategy.md)
+- [云数据库部署](docs/cloudflare-cloud-db-setup.md)
+- [Cloud Records API](docs/cloud-records-api.md)
 
 ## 开发原则
 
-- 本地记录优先，云端失败不能阻塞记录。
-- 计划、调整和实际完成分层保存。
-- 旧日期保留当时的计划快照，不被后续计划变化重写。
-- 真实健康数据、截图、导出文件、token 不提交到仓库。
+- 本地优先，云端失败不能阻止记录。
+- 计划、调整、计时事实和正式训练记录分层保存。
+- 历史日期保存当时快照，不被后续模板升级重写。
+- token、真实健康导出、截图和临时文件不得提交仓库。
+- 所有跨端字段先进入数据契约，再进入实现。
