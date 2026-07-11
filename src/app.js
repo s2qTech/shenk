@@ -356,6 +356,11 @@
   async function handleTimerSessionMessage(event) {
     const data = event?.data;
     if (!data || typeof data !== "object") return;
+    if (data.type === "shenke.timer.ready") {
+      if (data.source && data.source !== "home-training-timer") return;
+      respondToTimerReady(event);
+      return;
+    }
     if (![
       "shenke.timerSession.completed",
       "shenke.timerSession.finished"
@@ -366,6 +371,13 @@
     const accepted = await acceptTimerSessionFromTimer(session);
     if (!accepted) return;
     scheduleTimerSessionCloudRefresh();
+  }
+
+  function respondToTimerReady(event) {
+    if (!isTrustedTimerMessageOrigin(event.origin)) return;
+    const timerFrame = app.querySelector("[data-timer-frame]");
+    if (!timerFrame || event.source !== timerFrame.contentWindow) return;
+    sendTimerConfigToFrame(timerFrame);
   }
 
   function isTrustedTimerMessageOrigin(origin) {
@@ -3024,7 +3036,9 @@
     if (timerFrame) {
       const sendConfig = () => sendTimerConfigToFrame(timerFrame);
       timerFrame.addEventListener("load", sendConfig);
-      window.setTimeout(sendConfig, 250);
+      [50, 250, 900, 1800].forEach((delay) => window.setTimeout(() => {
+        if (timerFrame.isConnected) sendConfig();
+      }, delay));
     }
 
     app.querySelectorAll("[data-action='sync-health']").forEach((button) => {
@@ -4928,7 +4942,7 @@
   }
 
   function sendTimerConfigToFrame(frame) {
-    if (!frame?.contentWindow || !state.syncConfig?.timerToken) return;
+    if (!frame?.contentWindow) return;
     frame.contentWindow.postMessage({
       type: "shenke.timer.config",
       payload: getTimerConfigPayload()

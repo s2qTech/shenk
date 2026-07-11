@@ -375,4 +375,10 @@ function upsert(api, entity, data) {
   assert.equal(handling.targetTrainingLogId, trainingLog.id);
 }
 
+const appSource = fs.readFileSync(path.join(__dirname, "..", "src", "app.js"), "utf8");
+assert.match(appSource, /data\.type === "shenke\.timer\.ready"/);
+assert.match(appSource, /function respondToTimerReady\(/);
+assert.match(appSource, /event\.source !== timerFrame\.contentWindow/);
+assert.match(appSource, /\[50, 250, 900, 1800\]/);
+
 console.log("integration-flow tests passed");
