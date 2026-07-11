@@ -4,6 +4,7 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 const vm = require("node:vm");
+const nodeCrypto = require("node:crypto");
 
 function loadWorker() {
   const workerPath = path.join(__dirname, "..", "cloudflare", "worker.js");
@@ -15,7 +16,7 @@ function loadWorker() {
     Response,
     Headers,
     TextEncoder,
-    crypto: { randomUUID: () => "event_test" },
+    crypto: { randomUUID: () => "event_test", subtle: nodeCrypto.webcrypto.subtle },
     globalThis: null
   };
   context.globalThis = context;
@@ -37,6 +38,52 @@ async function run() {
   );
   assert.equal(response.status, 401);
   assert.equal((await response.json()).error, "unauthorized");
+}
+
+{
+  const worker = loadWorker();
+  const response = await worker.fetch(
+    request("https://worker.example/api/health", {
+      headers: { Origin: "https://s2qtech.github.io" }
+    }),
+    { SHENK_TOKEN: "valid", ALLOWED_ORIGINS: "https://s2qtech.github.io" }
+  );
+  assert.match(response.headers.get("Access-Control-Allow-Headers") || "", /X-Shenke-Profile-Key/);
+}
+
+{
+  const worker = loadWorker();
+  const profileAccessKey = "fixture_profile_access_key_1234567890";
+  const accessKeyHash = nodeCrypto.createHash("sha256").update(profileAccessKey).digest("hex");
+  const row = {
+    id: "profile_fixture",
+    revision: 1,
+    device_id: "desktop",
+    created_at: "2099-01-01T00:00:00.000Z",
+    updated_at: "2099-01-01T00:00:00.000Z",
+    profile_json: JSON.stringify({ schema: "shenk_sync_profile/v1", cipher: "AES-GCM" }),
+    access_key_hash: accessKeyHash
+  };
+  const db = {
+    prepare(sql) {
+      if (sql.includes("SELECT id, revision, device_id")) {
+        return { bind() { return { first: async () => row }; } };
+      }
+      return {
+        bind() { return { run: async () => ({}) }; },
+        run: async () => ({})
+      };
+    }
+  };
+  const response = await worker.fetch(
+    request("https://worker.example/api/sync-profiles/profile_fixture", {
+      headers: { "X-Shenke-Profile-Key": profileAccessKey }
+    }),
+    { SHENK_TOKEN: "valid", DB: db }
+  );
+  const body = await response.json();
+  assert.equal(response.status, 200);
+  assert.equal(body.id, "profile_fixture");
 }
 
 {

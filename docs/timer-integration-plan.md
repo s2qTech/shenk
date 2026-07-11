@@ -61,7 +61,7 @@ timer_sessions
 The timer startup order is:
 
 1. Read `routine_templates` from the cloud API.
-2. Normalize and display only routines with `timerVisible: true`.
+2. Normalize and display executable routines by default. `timerVisible: false` or `needsTimer: false` explicitly hides a routine from the standalone selector.
 3. Save the normalized routine catalog to local browser storage.
 4. If cloud read fails, use the last successful local cache.
 5. If both cloud and cache are unavailable, show an explicit fallback/debug state. Built-in routines are not the normal source of truth.
@@ -73,7 +73,7 @@ Routine grouping and ordering:
 - `scene`: `home` / `walk` / `recovery` / `travel`.
 - `sortOrder`: lower values appear earlier.
 - `isDefault`: preferred routine for a scene.
-- `timerVisible`: whether the routine appears in the timer selector.
+- `timerVisible`: whether the routine appears in the timer selector. Omit it for the compatible default of visible; set it to `false` to hide the routine.
 
 `身刻` writes or updates routines only through user-confirmed `coach_plan_patch.routineTemplates`. Timer execution never mutates `routine_templates`.
 

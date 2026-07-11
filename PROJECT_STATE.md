@@ -37,7 +37,7 @@ Timer writes:
 - Static Web MVP for 身刻 with desktop calendar, day detail, records, metrics, settings, feedback export, and coach patch inbox.
 - IndexedDB/localStorage persistence and offline application shell.
 - Cloud sync through Cloudflare Worker + D1.
-- Encrypted multi-device sync profiles; cloud stores ciphertext, not plaintext tokens.
+- Encrypted multi-device sync profiles; one migration code derives the opaque profile ID, decrypts locally, and authorizes ciphertext download. Cloud stores ciphertext and a code hash only.
 - Merge/upsert `coach_plan_patch` import; missing fields and empty arrays are no-op; deletes are explicit.
 - Dynamic `routine_templates` source of truth with timer local cache and fallback warning.
 - Timer step `execution` expansion for preparation and bilateral actions.

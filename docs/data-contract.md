@@ -77,13 +77,12 @@ Each client maps shared business values into its own UI:
 
 Manual entry of multiple keys does not scale across devices. The long-term setup path is:
 
-1. A configured 身刻 client creates an encrypted sync profile locally.
+1. A configured 身刻 client generates a high-entropy migration code and creates an encrypted sync profile locally.
 2. The encrypted profile is stored in Cloudflare D1 as `sync_profiles`.
-3. The cloud stores only ciphertext plus crypto metadata. It does not store plaintext tokens.
-4. A new device uses a config string containing `apiBase` and `profileId`, then the user enters the profile password locally.
-5. The client downloads the encrypted profile, decrypts it locally, and stores the resulting local config.
+3. The cloud stores only ciphertext plus crypto metadata. It does not store plaintext tokens, migration codes, user-selected profile IDs, or passwords.
+4. A new device pastes the migration code. The client derives the opaque profile ID locally, downloads the ciphertext, decrypts it locally with the same code, and stores the resulting local config.
 
-The password must never be sent to the Worker or committed to Git. `sync_profiles` is configuration metadata, not a shared health/training entity, so it is intentionally separate from `cloud_records`.
+The migration code is both the local encryption secret and the authorization secret for retrieving the ciphertext. The Worker stores only its SHA-256 hash. It must never be added to a URL, committed to Git, logged, or shared outside the user's own devices. `sync_profiles` is configuration metadata, not a shared health/training entity, so it is intentionally separate from `cloud_records`.
 
 ## Naming
 

@@ -7,8 +7,6 @@
   const FALLBACK_KEY = "training-assistant-v2:snapshot";
   const DEVICE_KEY = "training-assistant-v2:device-id";
   const SYNC_CONFIG_KEY = "training-assistant-v2:sync-config";
-  const SYNC_CONFIG_PACKAGE_PREFIX = "shenke-config-v1:";
-  const SYNC_PROFILE_PACKAGE_PREFIX = "shenk-profile-v1:";
   const SYNC_PROFILE_KDF_ITERATIONS = 210000;
   const DEFAULT_CLOUD_API_BASE = "https://shenke-cloud-db.sq-muyi.workers.dev/api";
   const DEFAULT_TIMER_URL = "https://s2qtech.github.io/home-training-timer/";
@@ -2969,52 +2967,18 @@
         <details class="settings-block sync-transfer sync-profile-block" open>
           <summary>
             <strong>多端配置</strong>
-            <span>用一个加密档案连接自己的新设备</span>
+            <span>用一段迁移码连接新浏览器</span>
           </summary>
-          <p>云端只保存加密后的配置档案；密码只在当前设备用于加密和解密，不上传云端。</p>
-          <div class="settings-form-grid">
-            <label>
-              <span>配置档案 ID</span>
-              <input type="text" name="configProfileId" data-sync-profile-id placeholder="例如 shenk_qi_main" value="${escapeHtml(configProfileId)}">
-            </label>
-            <label>
-              <span>配置密码</span>
-              <input type="password" data-sync-profile-password autocomplete="new-password" placeholder="用于加密或解密，不会保存">
-            </label>
+          <p>旧浏览器生成迁移码；新浏览器粘贴后即可读取配置。云端只保存加密数据和迁移码哈希，不保存明文密钥。</p>
+          <label class="sync-transfer-code">
+            <span>迁移码</span>
+            <input type="text" data-sync-transfer-code autocomplete="off" spellcheck="false" placeholder="在旧浏览器生成，或粘贴已有迁移码" value="${escapeHtml(configProfileId ? state.syncConfig.profileAccessKey || "" : "")}">
+          </label>
+          <div class="button-row settings-actions secondary-actions sync-profile-actions sync-migration-actions">
+            <button type="button" class="primary" data-action="save-sync-profile">生成迁移码</button>
+            <button type="button" data-action="load-sync-profile">读取迁移码</button>
           </div>
-          <section class="settings-subsection sync-profile-action-block">
-            <div class="settings-subsection-head">
-              <strong>档案操作</strong>
-              <span>保存当前配置，或在新设备上读取已有档案。</span>
-            </div>
-            <div class="button-row settings-actions secondary-actions sync-profile-actions">
-              <button type="button" class="primary" data-action="save-sync-profile">保存加密档案</button>
-              <button type="button" data-action="load-sync-profile">读取加密档案</button>
-            </div>
-          </section>
-          <section class="settings-subsection sync-profile-export">
-            <div class="settings-subsection-head">
-              <strong>新设备迁移</strong>
-              <span>需要换设备时再复制，不参与日常同步。</span>
-            </div>
-            <button type="button" data-action="copy-sync-profile-package">复制配置字符串</button>
-          </section>
-          <details class="sync-advanced sync-legacy-config">
-            <summary>明文配置包（过渡）</summary>
-            <div class="settings-subsection-head">
-              <strong>旧方式导入导出</strong>
-              <span>包含访问密钥，只给自己的设备临时使用。</span>
-            </div>
-            <p>长期建议使用加密档案；这里保留给旧设备迁移和兜底排障。</p>
-            <div class="button-row settings-actions secondary-actions">
-              <button type="button" data-action="copy-sync-config-package">复制明文配置包</button>
-              <button type="button" data-action="paste-sync-config-package">从剪贴板导入</button>
-            </div>
-            <textarea id="sync-config-package" rows="3" placeholder="也可以把配置包粘贴到这里，然后点击导入。"></textarea>
-            <div class="button-row settings-actions secondary-actions">
-              <button type="button" data-action="import-sync-config-package">导入明文配置包</button>
-            </div>
-          </details>
+          <p class="sync-transfer-note">迁移码等同于新设备的钥匙，请只粘贴到自己的浏览器。</p>
         </details>
       </form>
     `;
@@ -3079,28 +3043,12 @@
       button.addEventListener("click", syncNow);
     });
 
-    app.querySelectorAll("[data-action='copy-sync-config-package']").forEach((button) => {
-      button.addEventListener("click", copySyncConfigPackage);
-    });
-
-    app.querySelectorAll("[data-action='paste-sync-config-package']").forEach((button) => {
-      button.addEventListener("click", pasteSyncConfigPackage);
-    });
-
-    app.querySelectorAll("[data-action='import-sync-config-package']").forEach((button) => {
-      button.addEventListener("click", importSyncConfigPackage);
-    });
-
     app.querySelectorAll("[data-action='save-sync-profile']").forEach((button) => {
       button.addEventListener("click", saveEncryptedSyncProfile);
     });
 
     app.querySelectorAll("[data-action='load-sync-profile']").forEach((button) => {
       button.addEventListener("click", loadEncryptedSyncProfile);
-    });
-
-    app.querySelectorAll("[data-action='copy-sync-profile-package']").forEach((button) => {
-      button.addEventListener("click", copySyncProfilePackage);
     });
 
     app.querySelectorAll("[data-timer-filter]").forEach((input) => {
@@ -4689,12 +4637,13 @@
         token: config.token || "",
         timerToken: config.timerToken || "",
         configProfileId: normalizeSyncProfileId(config.configProfileId || ""),
+        profileAccessKey: normalizeSyncProfileAccessKey(config.profileAccessKey || ""),
         lastPullAt: config.lastPullAt || null,
         lastPushAt: config.lastPushAt || null,
         lastSyncAt: config.lastSyncAt || null
       };
     } catch (error) {
-      return { apiBase: DEFAULT_CLOUD_API_BASE, timerUrl: DEFAULT_TIMER_URL, token: "", timerToken: "", configProfileId: "", lastPullAt: null, lastPushAt: null, lastSyncAt: null };
+      return { apiBase: DEFAULT_CLOUD_API_BASE, timerUrl: DEFAULT_TIMER_URL, token: "", timerToken: "", configProfileId: "", profileAccessKey: "", lastPullAt: null, lastPushAt: null, lastSyncAt: null };
     }
   }
 
@@ -4704,7 +4653,8 @@
       ...config,
       apiBase: normalizeSyncApiBase(config.apiBase ?? state.syncConfig.apiBase),
       timerUrl: normalizeTimerUrl(config.timerUrl ?? state.syncConfig.timerUrl),
-      configProfileId: normalizeSyncProfileId(config.configProfileId ?? state.syncConfig.configProfileId ?? "")
+      configProfileId: normalizeSyncProfileId(config.configProfileId ?? state.syncConfig.configProfileId ?? ""),
+      profileAccessKey: normalizeSyncProfileAccessKey(config.profileAccessKey ?? state.syncConfig.profileAccessKey ?? "")
     };
     state.syncConfig = next;
     window.localStorage.setItem(SYNC_CONFIG_KEY, JSON.stringify(next));
@@ -4726,33 +4676,22 @@
     return String(value || "").trim();
   }
 
-  function assertSyncProfileId(value) {
-    const id = normalizeSyncProfileId(value);
-    if (!/^[a-zA-Z0-9_-]{6,80}$/.test(id)) {
-      throw new Error("配置档案 ID 只能包含英文、数字、下划线和短横线，长度 6-80。");
+  function normalizeSyncProfileAccessKey(value) {
+    return String(value || "").trim();
+  }
+
+  function assertSyncProfileAccessKey(value) {
+    const key = normalizeSyncProfileAccessKey(value);
+    if (!/^[A-Za-z0-9_-]{20,200}$/.test(key)) {
+      throw new Error("请粘贴有效迁移码，或在旧浏览器重新生成迁移码。");
     }
-    return id;
+    return key;
   }
 
-  function generateSyncProfileId() {
-    return `shenk_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
-  }
-
-  function encodeBase64Url(value) {
-    const bytes = new TextEncoder().encode(value);
-    let binary = "";
-    bytes.forEach((byte) => {
-      binary += String.fromCharCode(byte);
-    });
-    return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
-  }
-
-  function decodeBase64Url(value) {
-    const base64 = String(value || "").replace(/-/g, "+").replace(/_/g, "/");
-    const padded = base64.padEnd(base64.length + ((4 - base64.length % 4) % 4), "=");
-    const binary = atob(padded);
-    const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0));
-    return new TextDecoder().decode(bytes);
+  function generateSyncProfileAccessKey() {
+    ensureWebCrypto();
+    const bytes = window.crypto.getRandomValues(new Uint8Array(32));
+    return bytesToBase64Url(bytes);
   }
 
   function bytesToBase64Url(bytes) {
@@ -4776,11 +4715,11 @@
     }
   }
 
-  async function deriveSyncProfileKey(password, salt) {
+  async function deriveSyncProfileKey(migrationCode, salt) {
     ensureWebCrypto();
     const material = await window.crypto.subtle.importKey(
       "raw",
-      new TextEncoder().encode(password),
+      new TextEncoder().encode(migrationCode),
       "PBKDF2",
       false,
       ["deriveKey"]
@@ -4794,11 +4733,11 @@
     );
   }
 
-  async function encryptSyncProfilePayload(payload, password) {
+  async function encryptSyncProfilePayload(payload, migrationCode) {
     ensureWebCrypto();
     const salt = window.crypto.getRandomValues(new Uint8Array(16));
     const iv = window.crypto.getRandomValues(new Uint8Array(12));
-    const key = await deriveSyncProfileKey(password, salt);
+    const key = await deriveSyncProfileKey(migrationCode, salt);
     const encoded = new TextEncoder().encode(JSON.stringify(payload));
     const ciphertext = new Uint8Array(await window.crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, encoded));
     return {
@@ -4813,42 +4752,21 @@
     };
   }
 
-  async function decryptSyncProfilePayload(profile, password) {
+  async function decryptSyncProfilePayload(profile, migrationCode) {
     ensureWebCrypto();
     if (!profile || profile.schema !== "shenk_sync_profile/v1") throw new Error("配置档案格式不正确");
     const salt = base64UrlToBytes(profile.salt);
     const iv = base64UrlToBytes(profile.iv);
     const ciphertext = base64UrlToBytes(profile.ciphertext);
-    const key = await deriveSyncProfileKey(password, salt);
+    const key = await deriveSyncProfileKey(migrationCode, salt);
     let plaintext = null;
     try {
       plaintext = await window.crypto.subtle.decrypt({ name: "AES-GCM", iv }, key, ciphertext);
     } catch (error) {
-      throw new Error("配置密码不正确，或配置档案已损坏。");
+      throw new Error("迁移码不正确，或加密配置档案已损坏。");
     }
     const payload = JSON.parse(new TextDecoder().decode(new Uint8Array(plaintext)));
     return parseSyncConfigPayload(payload);
-  }
-
-  function createSyncConfigPackage() {
-    const payload = {
-      schema: "shenke_config_v1",
-      exportedAt: new Date().toISOString(),
-      apiBase: state.syncConfig.apiBase || DEFAULT_CLOUD_API_BASE,
-      timerUrl: state.syncConfig.timerUrl || DEFAULT_TIMER_URL,
-      token: state.syncConfig.token || "",
-      timerToken: state.syncConfig.timerToken || ""
-    };
-    return `${SYNC_CONFIG_PACKAGE_PREFIX}${encodeBase64Url(JSON.stringify(payload))}`;
-  }
-
-  function createSyncProfilePackage(profileId) {
-    const payload = {
-      schema: "shenk_profile_pointer/v1",
-      apiBase: state.syncConfig.apiBase || DEFAULT_CLOUD_API_BASE,
-      profileId
-    };
-    return `${SYNC_PROFILE_PACKAGE_PREFIX}${encodeBase64Url(JSON.stringify(payload))}`;
   }
 
   function createSyncProfilePayload() {
@@ -4870,20 +4788,6 @@
     return Boolean(state.syncConfig?.apiBase && state.syncConfig?.token);
   }
 
-  function parseSyncConfigPackage(rawValue) {
-    const raw = String(rawValue || "").trim();
-    if (!raw) throw new Error("请先粘贴配置包");
-    const body = raw.startsWith(SYNC_CONFIG_PACKAGE_PREFIX) ? raw.slice(SYNC_CONFIG_PACKAGE_PREFIX.length) : raw;
-    let payload = null;
-    try {
-      payload = body.trim().startsWith("{") ? JSON.parse(body) : JSON.parse(decodeBase64Url(body));
-    } catch (error) {
-      throw new Error("配置包格式不正确");
-    }
-    if (!payload || typeof payload !== "object") throw new Error("配置包内容无效");
-    return parseSyncConfigPayload(payload);
-  }
-
   function parseSyncConfigPayload(payload) {
     const config = {
       apiBase: normalizeSyncApiBase(payload.apiBase || payload.cloudApiBase || ""),
@@ -4897,17 +4801,6 @@
     return config;
   }
 
-  function parseSyncProfilePackage(rawValue) {
-    const raw = String(rawValue || "").trim();
-    if (!raw) return null;
-    if (!raw.startsWith(SYNC_PROFILE_PACKAGE_PREFIX)) return null;
-    const payload = JSON.parse(decodeBase64Url(raw.slice(SYNC_PROFILE_PACKAGE_PREFIX.length)));
-    if (!payload || payload.schema !== "shenk_profile_pointer/v1") throw new Error("配置字符串格式不正确");
-    return {
-      apiBase: normalizeSyncApiBase(payload.apiBase || DEFAULT_CLOUD_API_BASE),
-      profileId: assertSyncProfileId(payload.profileId)
-    };
-  }
 
   function setSyncPanelMessage(message, isError = false) {
     state.syncStatus.lastResult = isError ? "" : message;
@@ -4940,7 +4833,7 @@
       timerUrl: String(data.get("timerUrl") || ""),
       token: String(data.get("token") || ""),
       timerToken: String(data.get("timerToken") || ""),
-      configProfileId: String(data.get("configProfileId") || "")
+      configProfileId: state.syncConfig.configProfileId || ""
     });
     const message = "云数据库配置已保存";
     state.syncStatus.lastResult = message;
@@ -4951,26 +4844,24 @@
     render();
   }
 
-  function readSyncProfileFields(options = {}) {
-    const idInput = app.querySelector("[data-sync-profile-id]");
-    const passwordInput = app.querySelector("[data-sync-profile-password]");
-    let rawId = String(idInput?.value || state.syncConfig.configProfileId || "").trim();
-    const pointer = parseSyncProfilePackage(rawId);
-    if (pointer) {
-      rawId = pointer.profileId;
-      saveSyncConfig({ apiBase: pointer.apiBase, configProfileId: pointer.profileId });
-      if (idInput) idInput.value = pointer.profileId;
-    }
-    if (!rawId && options.generateId) {
-      rawId = generateSyncProfileId();
-      if (idInput) idInput.value = rawId;
-    }
-    const profileId = assertSyncProfileId(rawId);
-    const password = String(passwordInput?.value || "");
-    if (options.requirePassword !== false && password.length < 8) {
-      throw new Error("配置密码至少 8 位。");
-    }
-    return { profileId, password };
+  async function deriveSyncProfileIdFromTransferCode(transferCode) {
+    ensureWebCrypto();
+    const digest = new Uint8Array(await window.crypto.subtle.digest(
+      "SHA-256",
+      new TextEncoder().encode(transferCode)
+    ));
+    return `profile_${bytesToBase64Url(digest).slice(0, 48)}`;
+  }
+
+  async function readSyncTransferCode(options = {}) {
+    const input = app.querySelector("[data-sync-transfer-code]");
+    const transferCode = options.generate
+      ? generateSyncProfileAccessKey()
+      : assertSyncProfileAccessKey(input?.value || state.syncConfig.profileAccessKey);
+    return {
+      transferCode,
+      profileId: await deriveSyncProfileIdFromTransferCode(transferCode)
+    };
   }
 
   async function saveEncryptedSyncProfile() {
@@ -4978,14 +4869,14 @@
       if (!hasCompleteSyncConfig()) {
         throw new Error("请先保存 API 地址、身刻访问密钥和计时器访问密钥。");
       }
-      const { profileId, password } = readSyncProfileFields({ generateId: true });
-      const profile = await encryptSyncProfilePayload(createSyncProfilePayload(), password);
+      const { profileId, transferCode } = await readSyncTransferCode({ generate: true });
+      const profile = await encryptSyncProfilePayload(createSyncProfilePayload(), transferCode);
       await syncRequest(`/sync-profiles/${encodeURIComponent(profileId)}`, {
         method: "PUT",
-        body: { profile }
+        body: { profile, profileAccessKey: transferCode }
       });
-      saveSyncConfig({ configProfileId: profileId });
-      setSyncPanelMessage("加密配置档案已保存到云端。新设备可用配置字符串和密码读取。");
+      saveSyncConfig({ configProfileId: profileId, profileAccessKey: transferCode });
+      setSyncPanelMessage("迁移码已生成，复制这段码到新浏览器后点击“读取迁移码”。");
     } catch (error) {
       setSyncPanelMessage(error.message || "加密配置档案保存失败", true);
     }
@@ -4994,85 +4885,28 @@
 
   async function loadEncryptedSyncProfile() {
     try {
-      const { profileId, password } = readSyncProfileFields();
+      const { profileId, transferCode } = await readSyncTransferCode();
       const result = await syncRequest(`/sync-profiles/${encodeURIComponent(profileId)}`, {
         method: "GET",
-        auth: false
+        auth: false,
+        headers: { "X-Shenke-Profile-Key": transferCode }
       });
-      const config = await decryptSyncProfilePayload(result.profile, password);
+      const config = await decryptSyncProfilePayload(result.profile, transferCode);
       saveSyncConfig({
         ...config,
         configProfileId: profileId,
+        profileAccessKey: transferCode,
         lastPullAt: null,
         lastPushAt: null,
         lastSyncAt: null
       });
-      setSyncPanelMessage("加密配置档案已读取。现在可以进行云端同步。");
+      setSyncPanelMessage("迁移码已验证，配置已读取。现在可以进行云端同步。");
     } catch (error) {
       setSyncPanelMessage(error.message || "加密配置档案读取失败", true);
     }
     render();
   }
 
-  async function copySyncProfilePackage() {
-    try {
-      const { profileId } = readSyncProfileFields({ requirePassword: false });
-      const packageText = createSyncProfilePackage(profileId);
-      try {
-        await navigator.clipboard.writeText(packageText);
-        setSyncPanelMessage("配置字符串已复制。新设备粘贴配置字符串并输入密码即可读取加密档案。");
-      } catch (error) {
-        window.prompt("复制这段配置字符串到新设备：", packageText);
-        setSyncPanelMessage("浏览器没有允许自动复制，已弹出配置字符串。");
-      }
-    } catch (error) {
-      setSyncPanelMessage(error.message || "配置字符串生成失败", true);
-    }
-    render();
-  }
-
-  async function copySyncConfigPackage() {
-    if (!hasCompleteSyncConfig()) {
-      setSyncPanelMessage("请先保存 API 地址、身刻访问密钥和计时器访问密钥，再复制配置包。", true);
-      render();
-      return;
-    }
-    const packageText = createSyncConfigPackage();
-    try {
-      await navigator.clipboard.writeText(packageText);
-      setSyncPanelMessage("配置包已复制。到新设备的身刻设置页点击“从剪贴板导入”即可。");
-    } catch (error) {
-      window.prompt("复制这段配置包到新设备：", packageText);
-      setSyncPanelMessage("浏览器没有允许自动复制，已弹出配置包。");
-    }
-    render();
-  }
-
-  async function pasteSyncConfigPackage() {
-    try {
-      const text = await navigator.clipboard.readText();
-      applySyncConfigPackage(text);
-    } catch (error) {
-      setSyncPanelMessage("浏览器没有允许读取剪贴板，请手动粘贴配置包后点击导入。", true);
-      render();
-    }
-  }
-
-  function importSyncConfigPackage() {
-    const input = app.querySelector("#sync-config-package");
-    applySyncConfigPackage(input?.value || "");
-  }
-
-  function applySyncConfigPackage(rawValue) {
-    try {
-      const config = parseSyncConfigPackage(rawValue);
-      saveSyncConfig(config);
-      setSyncPanelMessage("配置包已导入，新设备可以直接使用云数据库和计时器。");
-    } catch (error) {
-      setSyncPanelMessage(error.message || "配置包导入失败", true);
-    }
-    render();
-  }
 
   function getTimerConfigPayload() {
     return {
@@ -5281,6 +5115,7 @@
       if (!state.syncConfig.token) throw new Error("请先填写身刻访问密钥");
       headers.Authorization = `Bearer ${state.syncConfig.token}`;
     }
+    Object.assign(headers, options.headers || {});
     headers["X-Shenke-Device-Id"] = getDeviceId();
     const response = await fetch(`${apiBase}${path}`, {
       method: options.method || "POST",

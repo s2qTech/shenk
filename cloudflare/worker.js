@@ -60,12 +60,15 @@ export default {
         }, 200, request, env);
       }
 
-      const client = requireAuth(request, env);
       const syncProfileMatch = url.pathname.match(/^\/api\/sync-profiles\/([^/]+)$/);
       if (syncProfileMatch && request.method === "GET") {
-        assertCanManageSyncProfiles(client.role);
-        return json(await getSyncProfile(env, syncProfileMatch[1]), 200, request, env);
+        return json(await getSyncProfile(env, syncProfileMatch[1], {
+          client: getOptionalAuthClient(request, env),
+          profileAccessKey: request.headers.get("X-Shenke-Profile-Key") || ""
+        }), 200, request, env);
       }
+
+      const client = requireAuth(request, env);
 
       if (syncProfileMatch && request.method === "PUT") {
         const body = await readJson(request);
@@ -415,15 +418,33 @@ function isIsoDate(value) {
   return !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === text;
 }
 
-async function getSyncProfile(env, rawId) {
+async function getSyncProfile(env, rawId, options = {}) {
+  const client = options.client || null;
+  const profileAccessKey = String(options.profileAccessKey || "");
+  const canManage = Boolean(client && ["admin", "shenk"].includes(client.role));
+  if (!canManage && !isValidProfileAccessKey(profileAccessKey)) {
+    const error = new Error("unauthorized");
+    error.status = 401;
+    throw error;
+  }
   await ensureSyncProfilesTable(env);
   const id = normalizeSyncProfileId(rawId);
   const row = await env.DB.prepare(
-    "SELECT id, revision, device_id, created_at, updated_at, profile_json FROM sync_profiles WHERE id = ?"
+    "SELECT id, revision, device_id, created_at, updated_at, profile_json, access_key_hash FROM sync_profiles WHERE id = ?"
   ).bind(id).first();
   if (!row) {
     const error = new Error("sync_profile_not_found");
     error.status = 404;
+    throw error;
+  }
+  if (!canManage && !row.access_key_hash) {
+    const error = new Error("sync_profile_access_key_required");
+    error.status = 401;
+    throw error;
+  }
+  if (!canManage && (await hashProfileAccessKey(profileAccessKey)) !== row.access_key_hash) {
+    const error = new Error("unauthorized");
+    error.status = 401;
     throw error;
   }
   return {
@@ -447,26 +468,35 @@ async function upsertSyncProfile(env, rawId, body, client) {
     error.status = 400;
     throw error;
   }
+  const profileAccessKey = String(body.profileAccessKey || "");
+  if (!isValidProfileAccessKey(profileAccessKey)) {
+    const error = new Error("invalid_sync_profile_access_key");
+    error.status = 400;
+    throw error;
+  }
+  const accessKeyHash = await hashProfileAccessKey(profileAccessKey);
   const existing = await env.DB.prepare(
     "SELECT revision, created_at FROM sync_profiles WHERE id = ?"
   ).bind(id).first();
   const now = new Date().toISOString();
   const nextRevision = existing ? Number(existing.revision || 0) + 1 : 1;
   await env.DB.prepare(
-    `INSERT INTO sync_profiles(id, revision, device_id, created_at, updated_at, profile_json)
-     VALUES (?, ?, ?, ?, ?, ?)
+    `INSERT INTO sync_profiles(id, revision, device_id, created_at, updated_at, profile_json, access_key_hash)
+     VALUES (?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(id) DO UPDATE SET
        revision = excluded.revision,
        device_id = excluded.device_id,
        updated_at = excluded.updated_at,
-       profile_json = excluded.profile_json`
+       profile_json = excluded.profile_json,
+       access_key_hash = excluded.access_key_hash`
   ).bind(
     id,
     nextRevision,
     client.deviceId || String(body.deviceId || "shenke_web"),
     existing?.created_at || now,
     now,
-    JSON.stringify(profile)
+    JSON.stringify(profile),
+    accessKeyHash
   ).run();
   return { ok: true, id, revision: nextRevision, updatedAt: now };
 }
@@ -486,7 +516,8 @@ async function ensureSyncProfilesTable(env) {
       device_id TEXT,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL,
-      profile_json TEXT NOT NULL DEFAULT '{}'
+      profile_json TEXT NOT NULL DEFAULT '{}',
+      access_key_hash TEXT
     )`
   ).run();
   await env.DB.prepare(
@@ -511,6 +542,15 @@ function isValidEncryptedSyncProfile(profile) {
   if (profile.cipher !== "AES-GCM") return false;
   if (!Number.isFinite(Number(profile.iterations)) || Number(profile.iterations) < 100000) return false;
   return ["salt", "iv", "ciphertext"].every((key) => typeof profile[key] === "string" && profile[key].length >= 12);
+}
+
+function isValidProfileAccessKey(value) {
+  return /^[A-Za-z0-9_-]{20,200}$/.test(String(value || ""));
+}
+
+async function hashProfileAccessKey(value) {
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(String(value)));
+  return Array.from(new Uint8Array(digest)).map((byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
 function rowToRecord(row) {
@@ -558,6 +598,14 @@ function requireAuth(request, env) {
     role,
     deviceId: request.headers.get("X-Shenke-Device-Id") || null
   };
+}
+
+function getOptionalAuthClient(request, env) {
+  const auth = request.headers.get("Authorization") || "";
+  const bearer = auth.startsWith("Bearer ") ? auth.slice(7) : "";
+  const token = bearer || request.headers.get("X-Shenke-Cloud-Key") || request.headers.get("X-Shenke-Sync-Key") || "";
+  const role = resolveTokenRole(token, env);
+  return role ? { role, deviceId: request.headers.get("X-Shenke-Device-Id") || null } : null;
 }
 
 function resolveTokenRole(token, env) {
@@ -612,7 +660,7 @@ function corsHeaders(request, env) {
   return {
     "Access-Control-Allow-Origin": allowedOrigin,
     "Access-Control-Allow-Methods": "GET, POST, PUT, OPTIONS",
-    "Access-Control-Allow-Headers": "Authorization, Content-Type, X-Shenke-Cloud-Key, X-Shenke-Device-Id, X-Shenke-Sync-Key",
+    "Access-Control-Allow-Headers": "Authorization, Content-Type, X-Shenke-Cloud-Key, X-Shenke-Device-Id, X-Shenke-Sync-Key, X-Shenke-Profile-Key",
     "Access-Control-Max-Age": "86400",
     "Vary": "Origin"
   };
