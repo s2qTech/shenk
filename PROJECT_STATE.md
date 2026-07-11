@@ -55,11 +55,12 @@ Timer writes:
 
 ## Work Package Progress
 
-### Work Package 0: baseline and fixtures - in progress
+### Work Package 0: baseline and fixtures - completed
 
 - 身刻：coach patch、integration flow、recommendation engine、Worker security tests are runnable with Node.
 - 计时器：session timing core and page contract tests are runnable with Node.
-- Remaining: add CI and broader end-to-end/fixture coverage.
+- Both repositories run the same checks on push and pull request through GitHub Actions.
+- Broader end-to-end and fixture coverage remains part of later package-specific work.
 
 ### Work Package 1: data correctness and security - in progress
 
