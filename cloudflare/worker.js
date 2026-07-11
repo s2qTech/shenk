@@ -1,4 +1,6 @@
 const SCHEMA_VERSION = "2026-06-28-cloud-records-v2";
+const MAX_UPSERT_RECORDS = 100;
+const MAX_RECORD_DATA_BYTES = 256 * 1024;
 
 const ENTITIES = [
   "plan_templates",
@@ -54,12 +56,12 @@ export default {
         }, 200, request, env);
       }
 
+      const client = requireAuth(request, env);
       const syncProfileMatch = url.pathname.match(/^\/api\/sync-profiles\/([^/]+)$/);
       if (syncProfileMatch && request.method === "GET") {
+        assertCanManageSyncProfiles(client.role);
         return json(await getSyncProfile(env, syncProfileMatch[1]), 200, request, env);
       }
-
-      const client = requireAuth(request, env);
 
       if (syncProfileMatch && request.method === "PUT") {
         const body = await readJson(request);
@@ -210,6 +212,11 @@ async function queryRecords(env, body, client) {
 async function upsertRecords(env, body, client) {
   const deviceId = String(body.deviceId || client.deviceId || "unknown_device");
   const records = Array.isArray(body.records) ? body.records : [];
+  if (records.length > MAX_UPSERT_RECORDS) {
+    const error = new Error("too_many_records");
+    error.status = 413;
+    throw error;
+  }
   const accepted = [];
   const conflicts = [];
 
@@ -224,17 +231,31 @@ async function upsertRecords(env, body, client) {
       conflicts.push({ entity, id, reason: "forbidden_entity_for_role", role: client.role });
       continue;
     }
+    const validationError = validateRecordForUpsert(entity, id, record.data, record.deletedAt);
+    if (validationError) {
+      conflicts.push({ entity, id, reason: validationError });
+      continue;
+    }
 
     const existing = await env.DB.prepare(
       "SELECT entity, id, revision, device_id, created_at, updated_at, deleted_at, data_json FROM cloud_records WHERE entity = ? AND id = ?"
     ).bind(entity, id).first();
 
     const baseRevision = Number(record.baseRevision ?? record.revision ?? 0);
-    if (existing && baseRevision > 0 && existing.revision > baseRevision) {
+    if (existing && baseRevision !== Number(existing.revision || 0)) {
+      if (hasSameStoredPayload(existing, record.data, record.deletedAt || null)) {
+        accepted.push({
+          entity,
+          id,
+          revision: Number(existing.revision || 0),
+          updatedAt: existing.updated_at
+        });
+        continue;
+      }
       conflicts.push({
         entity,
         id,
-        reason: "server_revision_newer",
+        reason: "server_revision_mismatch",
         serverRecord: rowToRecord(existing),
         clientRecord: record
       });
@@ -274,6 +295,44 @@ async function upsertRecords(env, body, client) {
   };
 }
 
+function validateRecordForUpsert(entity, id, data, deletedAt) {
+  if (String(id).length > 160 || /[\u0000-\u001f]/.test(String(id))) return "invalid_record_id";
+  if (data.id !== undefined && String(data.id) !== String(id)) return "record_id_mismatch";
+  let serialized = "";
+  try {
+    serialized = JSON.stringify(data);
+  } catch (error) {
+    return "record_data_not_serializable";
+  }
+  if (!serialized || serialized.length > MAX_RECORD_DATA_BYTES) return "record_payload_too_large";
+  if (deletedAt) return null;
+  if (data.date !== undefined && !isIsoDate(data.date)) return "invalid_record_date";
+  if (["daily_plan_items", "plan_adjustments", "training_logs", "body_metrics", "weather_logs", "timer_sessions"].includes(entity) && !isIsoDate(data.date)) {
+    return "missing_record_date";
+  }
+  if (entity === "routine_templates" && data.steps !== undefined && !Array.isArray(data.steps)) return "invalid_routine_steps";
+  if (entity === "timer_sessions") {
+    const completion = String(data.completion || "");
+    if (!["in_progress", "completed", "stopped"].includes(completion)) return "invalid_timer_completion";
+    if (!["actualSeconds", "elapsedSeconds", "pausedSeconds", "plannedSeconds"].every((key) => data[key] === undefined || (Number.isFinite(Number(data[key])) && Number(data[key]) >= 0))) {
+      return "invalid_timer_duration";
+    }
+  }
+  return null;
+}
+
+function hasSameStoredPayload(existing, data, deletedAt) {
+  return String(existing.deleted_at || "") === String(deletedAt || "")
+    && String(existing.data_json || "") === JSON.stringify(data);
+}
+
+function isIsoDate(value) {
+  const text = String(value || "");
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(text)) return false;
+  const date = new Date(`${text}T00:00:00.000Z`);
+  return !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === text;
+}
+
 async function getSyncProfile(env, rawId) {
   await ensureSyncProfilesTable(env);
   const id = normalizeSyncProfileId(rawId);
@@ -298,11 +357,7 @@ async function getSyncProfile(env, rawId) {
 
 async function upsertSyncProfile(env, rawId, body, client) {
   await ensureSyncProfilesTable(env);
-  if (!["admin", "shenk"].includes(client.role)) {
-    const error = new Error("forbidden_sync_profile_role");
-    error.status = 403;
-    throw error;
-  }
+  assertCanManageSyncProfiles(client.role);
   const id = normalizeSyncProfileId(rawId);
   const profile = body.profile || body.data || body;
   if (!isValidEncryptedSyncProfile(profile)) {
@@ -332,6 +387,13 @@ async function upsertSyncProfile(env, rawId, body, client) {
     JSON.stringify(profile)
   ).run();
   return { ok: true, id, revision: nextRevision, updatedAt: now };
+}
+
+function assertCanManageSyncProfiles(role) {
+  if (["admin", "shenk"].includes(role)) return;
+  const error = new Error("forbidden_sync_profile_role");
+  error.status = 403;
+  throw error;
 }
 
 async function ensureSyncProfilesTable(env) {

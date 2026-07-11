@@ -357,7 +357,10 @@
   async function handleTimerSessionMessage(event) {
     const data = event?.data;
     if (!data || typeof data !== "object") return;
-    if (data.type !== "shenke.timerSession.completed") return;
+    if (![
+      "shenke.timerSession.completed",
+      "shenke.timerSession.finished"
+    ].includes(data.type)) return;
     if (data.source && data.source !== "home-training-timer") return;
     if (!isTrustedTimerMessageOrigin(event.origin)) return;
     const session = data.payload || data.timerSession || data.session;
@@ -1199,14 +1202,26 @@
     return SHARED_ENTITIES.some((entity) => Array.isArray(payload[entity]));
   }
 
-  function mergeSharedRecords(current, incoming) {
+  function mergeSharedRecords(current, incoming, options = {}) {
     const next = normalizeSharedRecords(current);
     const add = normalizeSharedRecords(incoming);
     SHARED_ENTITIES.forEach((entity) => {
       const map = new Map(next[entity].map((item) => [item.id, item]));
       add[entity].forEach((item) => {
         const existing = map.get(item.id);
-        if (!existing || compareIncomingRecord(existing, item) <= 0) {
+        if (!existing) {
+          map.set(item.id, item);
+          return;
+        }
+        if (options.source === "cloud" && shouldPreserveLocalRecord(existing, item)) {
+          map.set(item.id, buildPullConflict(existing, item));
+          return;
+        }
+        if (options.source === "cloud" && existing.syncState === "conflict") {
+          map.set(item.id, updatePullConflict(existing, item));
+          return;
+        }
+        if (compareIncomingRecord(existing, item) <= 0) {
           map.set(item.id, item);
         }
       });
@@ -1220,6 +1235,44 @@
       return (existing.revision || 0) - (incoming.revision || 0);
     }
     return String(existing.updatedAt || "").localeCompare(String(incoming.updatedAt || ""));
+  }
+
+  function hasSameSharedPayload(left, right) {
+    return JSON.stringify(left?.data || {}) === JSON.stringify(right?.data || {})
+      && String(left?.deletedAt || "") === String(right?.deletedAt || "");
+  }
+
+  function shouldPreserveLocalRecord(localRecord, cloudRecord) {
+    if (localRecord.syncState !== "dirty") return false;
+    if (hasSameSharedPayload(localRecord, cloudRecord)) return false;
+    return compareIncomingRecord(localRecord, cloudRecord) <= 0;
+  }
+
+  function buildPullConflict(localRecord, cloudRecord) {
+    return {
+      ...localRecord,
+      syncState: "conflict",
+      conflict: {
+        reason: "cloud_changed_while_local_dirty",
+        serverRecord: cloneJson(cloudRecord),
+        happenedAt: new Date().toISOString()
+      }
+    };
+  }
+
+  function updatePullConflict(localRecord, cloudRecord) {
+    const previousServerRecord = localRecord.conflict?.serverRecord;
+    const serverRecord = !previousServerRecord || compareIncomingRecord(previousServerRecord, cloudRecord) <= 0
+      ? cloneJson(cloudRecord)
+      : previousServerRecord;
+    return {
+      ...localRecord,
+      conflict: {
+        ...(localRecord.conflict || {}),
+        serverRecord,
+        happenedAt: new Date().toISOString()
+      }
+    };
   }
 
   function mergeWorkoutsByDate(current, incoming) {
@@ -5076,7 +5129,7 @@
     });
     const records = Array.isArray(result.records) ? result.records : [];
     if (records.length) {
-      state.records = mergeSharedRecords(state.records, recordsArrayToBucket(records));
+      state.records = mergeSharedRecords(state.records, recordsArrayToBucket(records), { source: "cloud" });
       refreshLegacyCachesFromSharedRecords();
     }
     const now = result.serverTime || new Date().toISOString();

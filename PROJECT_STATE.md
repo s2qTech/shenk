@@ -47,12 +47,28 @@ Timer writes:
 
 ## Current Risks
 
-1. Sync merge can still silently replace local dirty records in some revision paths.
-2. Timer cloud text still needs complete safe-rendering enforcement.
-3. Timer `actualSeconds` and interrupted-session semantics need correction.
-4. Worker needs entity-level schema validation and bounded batch/pagination behavior.
-5. Published template immutability is documented but not yet enforced end-to-end.
-6. Both frontends remain large single files with insufficient automated coverage.
+1. Worker entity validation covers the P0 shape and duration rules, but Contract v1 schema validation is still incomplete.
+2. Interrupted sessions are persisted as `stopped` on reset, configuration reset, and page exit; browser/process crashes still rely on local recovery and retry.
+3. Published template immutability is documented but not yet enforced end-to-end.
+4. Both frontends remain large single files; the first extracted timer-session core is only the start of modularization.
+5. CI, pagination, incremental sync and entity-store outbox remain unfinished.
+
+## Work Package Progress
+
+### Work Package 0: baseline and fixtures - in progress
+
+- 身刻：coach patch、integration flow、recommendation engine、Worker security tests are runnable with Node.
+- 计时器：session timing core and page contract tests are runnable with Node.
+- Remaining: add CI and broader end-to-end/fixture coverage.
+
+### Work Package 1: data correctness and security - in progress
+
+- Cloud pulls preserve local dirty records and surface a conflict instead of replacing them.
+- Worker rejects stale blind writes, while identical retries remain idempotent.
+- Sync profile reads require authentication and an allowed role.
+- Timer cue/warning/plan text is rendered as text nodes instead of untrusted HTML.
+- Timer records active, elapsed and paused durations separately; reset, routine changes and page exit finalize active sessions as `stopped`.
+- Remaining: complete entity-level Contract v1 validation, expand recovery behavior after browser/process crash, and add CI coverage.
 
 ## Active Development Direction
 

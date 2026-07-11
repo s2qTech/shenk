@@ -23,7 +23,8 @@ function loadAppTestApi() {
     renderSelectedSummary,
     refreshLegacyCachesFromSharedRecords,
     normalizeDailyPlanItemData,
-    normalizeRoutineTemplateData
+    normalizeRoutineTemplateData,
+    mergeSharedRecords
   };
 `;
   const instrumented = source.replace(/\}\)\(\);\s*$/, `${hook}\n})();`);
@@ -149,6 +150,36 @@ function upsert(api, entity, data) {
   assert.equal(timerUrl.searchParams.get("cloudApiBase"), "https://example.workers.dev/api");
   assert.equal(timerUrl.searchParams.has("token"), false);
   assert.equal(timerUrl.searchParams.has("timerToken"), false);
+}
+
+{
+  const api = loadAppTestApi();
+  reset(api);
+  upsert(api, "training_logs", {
+    id: "log_dirty_conflict",
+    date: "2099-06-06",
+    type: "easy_walk",
+    status: "completed",
+    notes: "本地补充的备注"
+  });
+  const local = api.state.records.training_logs[0];
+  local.revision = 2;
+  local.syncState = "dirty";
+  const cloud = {
+    training_logs: [{
+      ...local,
+      revision: 3,
+      updatedAt: "2099-06-06T18:00:00.000Z",
+      syncState: "clean",
+      data: { ...local.data, notes: "云端其他设备的备注" }
+    }]
+  };
+  api.state.records = api.mergeSharedRecords(api.state.records, cloud, { source: "cloud" });
+  const merged = api.state.records.training_logs[0];
+  assert.equal(merged.data.notes, "本地补充的备注");
+  assert.equal(merged.syncState, "conflict");
+  assert.equal(merged.conflict.reason, "cloud_changed_while_local_dirty");
+  assert.equal(merged.conflict.serverRecord.data.notes, "云端其他设备的备注");
 }
 
 {
