@@ -104,6 +104,15 @@ function routinePatch(overrides = {}) {
 {
   const api = loadAppTestApi();
   reset(api);
+  const archived = api.normalizeRoutineTemplateData(routinePatch({ lifecycle: "archived", timerVisible: true }));
+  assert.equal(archived.lifecycle, "archived");
+  assert.equal(archived.timerVisible, false);
+  assert.equal(archived.needsTimer, false);
+}
+
+{
+  const api = loadAppTestApi();
+  reset(api);
   upsert(api, "daily_plan_items", {
     id: "daily_keep",
     date: "2099-01-03",

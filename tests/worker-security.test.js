@@ -137,6 +137,97 @@ async function run() {
 
 {
   const worker = loadWorker();
+  const existing = {
+    entity: "routine_templates",
+    id: "routine_published_lifecycle",
+    revision: 1,
+    device_id: "coach",
+    created_at: "2099-01-01T00:00:00.000Z",
+    updated_at: "2099-01-01T00:00:00.000Z",
+    deleted_at: null,
+    data_json: JSON.stringify({ id: "routine_published_lifecycle", lifecycle: "published", title: "Original", steps: [] })
+  };
+  const writes = [];
+  const db = {
+    prepare(sql) {
+      if (sql.startsWith("SELECT entity, id, revision")) {
+        return { bind() { return { first: async () => existing }; } };
+      }
+      return { bind(...args) { writes.push({ sql, args }); return { run: async () => ({}) }; } };
+    }
+  };
+  const response = await worker.fetch(
+    request("https://worker.example/api/records/upsert", {
+      method: "POST",
+      headers: { Authorization: "Bearer valid", "Content-Type": "application/json" },
+      body: JSON.stringify({
+        records: [{
+          entity: "routine_templates",
+          id: "routine_published_lifecycle",
+          baseRevision: 1,
+          data: {
+            id: "routine_published_lifecycle",
+            lifecycle: "archived",
+            timerVisible: false,
+            title: "Original",
+            steps: []
+          }
+        }]
+      })
+    }),
+    { SHENK_TOKEN: "valid", DB: db }
+  );
+  const body = await response.json();
+  assert.equal(body.conflicts.length, 0);
+  assert.equal(body.accepted.length, 1);
+  assert.equal(writes.length, 2);
+}
+
+{
+  const worker = loadWorker();
+  const existing = {
+    entity: "routine_templates",
+    id: "routine_published_delete",
+    revision: 1,
+    device_id: "coach",
+    created_at: "2099-01-01T00:00:00.000Z",
+    updated_at: "2099-01-01T00:00:00.000Z",
+    deleted_at: null,
+    data_json: JSON.stringify({ id: "routine_published_delete", lifecycle: "published", title: "Original", steps: [] })
+  };
+  const writes = [];
+  const db = {
+    prepare(sql) {
+      if (sql.startsWith("SELECT entity, id, revision")) {
+        return { bind() { return { first: async () => existing }; } };
+      }
+      return { bind(...args) { writes.push({ sql, args }); return { run: async () => ({}) }; } };
+    }
+  };
+  const response = await worker.fetch(
+    request("https://worker.example/api/records/upsert", {
+      method: "POST",
+      headers: { Authorization: "Bearer valid", "Content-Type": "application/json" },
+      body: JSON.stringify({
+        records: [{
+          entity: "routine_templates",
+          id: "routine_published_delete",
+          baseRevision: 1,
+          deletedAt: "2099-01-02T00:00:00.000Z",
+          data: { id: "routine_published_delete", lifecycle: "published", title: "Original", steps: [] }
+        }]
+      })
+    }),
+    { SHENK_TOKEN: "valid", DB: db }
+  );
+  const body = await response.json();
+  assert.equal(body.conflicts.length, 0);
+  assert.equal(body.accepted.length, 1);
+  assert.equal(writes.length, 2);
+}
+
+{
+  const worker = loadWorker();
   const response = await worker.fetch(
     request("https://worker.example/api/records/query", {
       method: "POST",

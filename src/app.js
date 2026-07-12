@@ -647,6 +647,13 @@
     "bilateral_reps"
   ]);
 
+  function normalizeRoutineTemplateLifecycle(value) {
+    const lifecycle = String(value || "active").trim().toLowerCase();
+    return ["archived", "retired", "inactive", "disabled", "deleted"].includes(lifecycle)
+      ? "archived"
+      : lifecycle || "active";
+  }
+
   function normalizeRoutineTemplateData(data) {
     if (!data || typeof data !== "object") return null;
     const id = data.id || data.routineId || data.routine_id || `routine_${makeId()}`;
@@ -663,7 +670,10 @@
       ?? data.isTimerRoutine
       ?? data.is_timer_routine
     );
-    const timerVisible = explicitVisible ?? Boolean(data.needsTimer ?? data.needs_timer ?? steps.length);
+    const lifecycle = normalizeRoutineTemplateLifecycle(data.lifecycle || data.status);
+    const timerVisible = lifecycle === "archived"
+      ? false
+      : (explicitVisible ?? Boolean(data.needsTimer ?? data.needs_timer ?? steps.length));
     const explicitCalendarVisible = parseOptionalBoolean(
       data.calendarVisible
       ?? data.calendar_visible
@@ -695,8 +705,10 @@
       estimatedMinutes: toNullableNumber(data.estimatedMinutes ?? data.estimated_minutes),
       steps: normalizedSteps.length ? normalizedSteps : data.steps,
       defaultOptions,
+      lifecycle,
+      archivedAt: lifecycle === "archived" ? (data.archivedAt || data.archived_at || new Date().toISOString()) : null,
       timerVisible,
-      needsTimer: Boolean(data.needsTimer ?? data.needs_timer ?? timerVisible),
+      needsTimer: lifecycle !== "archived" && Boolean(data.needsTimer ?? data.needs_timer ?? timerVisible),
       calendarVisible,
       countsTowardTraining: explicitCountsTowardTraining ?? calendarVisible,
       source: data.source || "coach",
@@ -1254,6 +1266,19 @@
           map.set(item.id, item);
           return;
         }
+        // A remote tombstone is authoritative. Keeping a dirty local copy here
+        // would make deleted plans and routines reappear after the next pull.
+        const incomingDeletedAt = item.deletedAt || item.data?.deletedAt || null;
+        if (options.source === "cloud" && incomingDeletedAt) {
+          map.set(item.id, {
+            ...item,
+            deletedAt: incomingDeletedAt,
+            data: { ...(item.data || {}), deletedAt: incomingDeletedAt },
+            syncState: "clean",
+            conflict: null
+          });
+          return;
+        }
         if (options.source === "cloud" && shouldPreserveLocalRecord(existing, item)) {
           map.set(item.id, buildPullConflict(existing, item));
           return;
@@ -1284,6 +1309,7 @@
   }
 
   function shouldPreserveLocalRecord(localRecord, cloudRecord) {
+    if (cloudRecord.deletedAt) return false;
     if (localRecord.syncState !== "dirty") return false;
     if (hasSameSharedPayload(localRecord, cloudRecord)) return false;
     return compareIncomingRecord(localRecord, cloudRecord) <= 0;
@@ -2738,6 +2764,7 @@
         </div>
         ${invalid ? `<div class="empty-state compact danger-text">${escapeHtml(preview.error)}</div>` : ""}
         ${result ? renderPlanPatchPreview(result) : `<div class="empty-state compact">草案不会自动生效，必须先预览再确认。</div>`}
+        ${renderRoutineLibrary()}
       </div>
     `;
   }
@@ -2769,6 +2796,75 @@
           </div>
         ` : ""}
       </div>
+    `;
+  }
+
+  function getRoutineTemplateLifecycle(envelope) {
+    if (envelope?.deletedAt) return "deleted";
+    return normalizeRoutineTemplateLifecycle(envelope?.data?.lifecycle || envelope?.data?.status);
+  }
+
+  function getRoutineTemplateLifecycleMeta(lifecycle) {
+    if (lifecycle === "archived") return { label: "已停用", className: "archived" };
+    if (lifecycle === "deleted") return { label: "已删除", className: "deleted" };
+    return { label: "现行", className: "active" };
+  }
+
+  function getRoutineLibraryEntries() {
+    const order = { active: 0, archived: 1, deleted: 2 };
+    return [...(state.records.routine_templates || [])].sort((left, right) => {
+      const lifecycleOrder = (order[getRoutineTemplateLifecycle(left)] ?? 3) - (order[getRoutineTemplateLifecycle(right)] ?? 3);
+      if (lifecycleOrder) return lifecycleOrder;
+      return getPlanItemDisplayTitle(left.data || {}).localeCompare(getPlanItemDisplayTitle(right.data || {}), "zh-Hans-CN");
+    });
+  }
+
+  function renderRoutineLibrary() {
+    const entries = getRoutineLibraryEntries();
+    const counts = entries.reduce((result, item) => {
+      result[getRoutineTemplateLifecycle(item)] += 1;
+      return result;
+    }, { active: 0, archived: 0, deleted: 0 });
+    return `
+      <section class="routine-library" aria-label="方案库">
+        <div class="settings-subsection-head">
+          <div>
+            <strong>方案库</strong>
+            <span>现行方案会显示在计时器中；停用和删除的方案保留历史，不会再作为可选流程。</span>
+          </div>
+          <div class="routine-library-counts">
+            <span>现行 ${counts.active}</span>
+            <span>已停用 ${counts.archived}</span>
+            <span>已删除 ${counts.deleted}</span>
+          </div>
+        </div>
+        ${entries.length ? `
+          <div class="routine-library-list">
+            ${entries.map((envelope) => {
+              const data = envelope.data || {};
+              const lifecycle = getRoutineTemplateLifecycle(envelope);
+              const meta = getRoutineTemplateLifecycleMeta(lifecycle);
+              const type = getTimerTypeMeta(data.trainingType || data.type).label;
+              const title = getPlanItemDisplayTitle(data) || "未命名方案";
+              const minutes = toNullableNumber(data.estimatedMinutes);
+              const visibility = data.timerVisible === false || lifecycle !== "active" ? "不显示在计时器" : "计时器可用";
+              return `
+                <div class="routine-library-row is-${meta.className}">
+                  <div class="routine-library-main">
+                    <div class="routine-library-title"><strong>${escapeHtml(title)}</strong><span class="routine-lifecycle-tag ${meta.className}">${meta.label}</span></div>
+                    <span>${escapeHtml(type)}${minutes ? ` · ${minutes} 分` : ""} · ${visibility}</span>
+                  </div>
+                  <div class="routine-library-actions">
+                    ${lifecycle === "active" ? `<button type="button" data-action="archive-routine-template" data-routine-id="${escapeHtml(envelope.id)}">停用</button>` : ""}
+                    ${lifecycle === "archived" ? `<button type="button" data-action="activate-routine-template" data-routine-id="${escapeHtml(envelope.id)}">启用</button>` : ""}
+                    ${lifecycle !== "deleted" ? `<button type="button" class="danger subtle-danger" data-action="delete-routine-template" data-routine-id="${escapeHtml(envelope.id)}">删除</button>` : ""}
+                  </div>
+                </div>
+              `;
+            }).join("")}
+          </div>
+        ` : `<div class="empty-state compact">还没有导入训练方案。</div>`}
+      </section>
     `;
   }
 
@@ -3166,6 +3262,9 @@
     bindAction("parse-plan-patch", parsePlanPatchFromInput);
     bindAction("apply-plan-patch", applyPlanPatchFromPreview);
     bindAction("clear-plan-patch", clearPlanPatchInput);
+    bindAction("activate-routine-template", (button) => setRoutineTemplateLifecycle(button.dataset.routineId, "active"));
+    bindAction("archive-routine-template", (button) => setRoutineTemplateLifecycle(button.dataset.routineId, "archived"));
+    bindAction("delete-routine-template", (button) => deleteRoutineTemplate(button.dataset.routineId));
     bindAction("resolve-conflicts-cloud", resolveConflictsWithCloud);
     bindAction("resolve-conflicts-local", resolveConflictsWithLocal);
   }
@@ -4175,6 +4274,39 @@
       .concat(envelope)
       .sort(compareSharedEnvelopes);
     return true;
+  }
+
+  async function setRoutineTemplateLifecycle(id, lifecycle) {
+    const existing = findSharedRecordById("routine_templates", id, true);
+    if (!existing || existing.deletedAt) return;
+    const nextLifecycle = lifecycle === "archived" ? "archived" : "active";
+    const now = new Date().toISOString();
+    const data = normalizeRoutineTemplateData({
+      ...(existing.data || {}),
+      id: existing.id,
+      lifecycle: nextLifecycle,
+      timerVisible: nextLifecycle === "active",
+      needsTimer: nextLifecycle === "active",
+      archivedAt: nextLifecycle === "archived" ? now : null,
+      updatedAt: now
+    });
+    upsertSharedEnvelope(state.records, "routine_templates", data, existing);
+    refreshLegacyCachesFromSharedRecords();
+    await saveSnapshot();
+    await autoPushDirtyRecords(nextLifecycle === "active" ? "方案已启用" : "方案已停用");
+    render();
+  }
+
+  async function deleteRoutineTemplate(id) {
+    const existing = findSharedRecordById("routine_templates", id, true);
+    if (!existing || existing.deletedAt) return;
+    const title = getPlanItemDisplayTitle(existing.data || {}) || "该方案";
+    if (!window.confirm(`删除“${title}”？历史训练记录不会受影响。`)) return;
+    if (!markSharedRecordDeleted("routine_templates", { id }, new Date().toISOString())) return;
+    refreshLegacyCachesFromSharedRecords();
+    await saveSnapshot();
+    await autoPushDirtyRecords("方案已删除");
+    render();
   }
 
   function previousDate(date) {

@@ -186,6 +186,34 @@ function upsert(api, entity, data) {
   const api = loadAppTestApi();
   reset(api);
   upsert(api, "daily_plan_items", {
+    id: "daily_cloud_deleted",
+    date: "2099-06-07",
+    trainingType: "easy_walk",
+    title: "Will be deleted",
+    estimatedMinutes: 30
+  });
+  const local = api.state.records.daily_plan_items[0];
+  local.revision = 1;
+  local.syncState = "dirty";
+  const cloud = {
+    daily_plan_items: [{
+      ...local,
+      revision: 2,
+      updatedAt: "2099-06-07T18:00:00.000Z",
+      deletedAt: "2099-06-07T18:00:00.000Z",
+      syncState: "clean",
+      data: { ...local.data, deletedAt: "2099-06-07T18:00:00.000Z" }
+    }]
+  };
+  api.state.records = api.mergeSharedRecords(api.state.records, cloud, { source: "cloud" });
+  assert.equal(api.state.records.daily_plan_items[0].deletedAt, "2099-06-07T18:00:00.000Z");
+  assert.equal(api.state.records.daily_plan_items[0].syncState, "clean");
+}
+
+{
+  const api = loadAppTestApi();
+  reset(api);
+  upsert(api, "daily_plan_items", {
     id: "daily_hidden_when_actual",
     date: "2099-06-02",
     trainingType: "easy_walk",

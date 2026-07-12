@@ -424,6 +424,109 @@ textarea {
   gap: 10px;
 }
 
+.routine-library {
+  display: grid;
+  gap: 10px;
+  margin-top: 6px;
+  border-top: 1px solid var(--line);
+  padding-top: 14px;
+}
+
+.routine-library-counts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.routine-library-counts span,
+.routine-lifecycle-tag {
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface-2);
+  padding: 3px 8px;
+}
+
+.routine-library-list {
+  display: grid;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.routine-library-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--line);
+  background: var(--surface);
+}
+
+.routine-library-row:last-child {
+  border-bottom: 0;
+}
+
+.routine-library-row.is-archived {
+  background: #f5f6f2;
+}
+
+.routine-library-row.is-deleted {
+  color: var(--muted);
+  background: #f5f5f3;
+}
+
+.routine-library-main {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.routine-library-title {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  color: var(--ink);
+}
+
+.routine-lifecycle-tag {
+  color: var(--green-dark);
+  font-size: 11px;
+}
+
+.routine-lifecycle-tag.archived {
+  color: #806421;
+  background: #fbf4df;
+}
+
+.routine-lifecycle-tag.deleted {
+  color: var(--muted);
+  background: #f0f1ee;
+}
+
+.routine-library-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.routine-library-actions button {
+  min-height: 32px;
+  padding: 5px 10px;
+  font-size: 12px;
+}
+
+.subtle-danger {
+  color: #a1483d;
+  background: #fff;
+}
+
 .plan-patch-input {
   min-height: 132px;
   resize: vertical;
@@ -3042,6 +3145,14 @@ textarea {
   .settings-danger-zone button {
     flex: 1 1 100%;
     width: 100%;
+  }
+
+  .routine-library-row {
+    grid-template-columns: 1fr;
+  }
+
+  .routine-library-actions {
+    justify-content: flex-start;
   }
 
   .sync-profile-actions,

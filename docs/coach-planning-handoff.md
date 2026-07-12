@@ -185,9 +185,9 @@ Codex 根据摘要输出两部分：
 计时器方案的数据源规则：
 - Cloudflare D1 的 `routine_templates` 是计时器方案主源。
 - 计时器成功读取云端方案后，会缓存到本地；离线时使用最近一次缓存。
-- 程序内置流程只允许作为无云端、无缓存时的兜底，不作为正常方案来源。
+- 程序内置流程不是用户侧兜底来源。无云端、无版本匹配缓存时，计时器必须明确提示无法读取方案，不能静默运行旧内置流程。
 - 计划草案可以只修改一个 `routineTemplates` 条目，不要求提交完整计划。
-- 修改尚未发布的方案时可以保持相同 `id` 并提高 `version`。一旦方案带有 `lifecycle: "published"`、`publishedAt` 或 `immutable: true`，必须创建新的 `id` 和 `version`，旧版本保留给历史快照。
+- 修改尚未发布的方案时可以保持相同 `id` 并提高 `version`。一旦方案带有 `lifecycle: "published"`、`publishedAt` 或 `immutable: true`，训练定义（标题、版本、动作）必须创建新的 `id` 和 `version`，旧版本保留给历史快照；但可用同一 `id` 更新 `lifecycle`、`timerVisible`、`needsTimer` 等管理字段。
 - 新增方案时使用新的稳定 `id`，并在对应 `dailyPlanItems.routineId` 引用它。
 
 计划草案应用规则：
@@ -205,6 +205,7 @@ Codex 根据摘要输出两部分：
 - `trainingType`：`strength` / `indoor_cardio` / `warmup` / `stretch` / `recovery` / `travel_strength` / `seat_recovery`。
 - `estimatedMinutes`：预计分钟数。
 - `timerVisible`：是否进入计时器方案列表。
+- `lifecycle`：`active` / `published` / `archived`。`archived` 表示历史停用，身刻会强制从计时器选择器移除；不要用空数组清空历史方案。
 - `scene`：计时器分组，建议 `home` / `walk` / `recovery` / `travel`。
 - `sortOrder`：同组排序，数字越小越靠前。
 - `isDefault`：是否作为同组首选流程。

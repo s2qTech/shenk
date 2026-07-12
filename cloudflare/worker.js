@@ -299,7 +299,12 @@ async function upsertRecords(env, body, client) {
       "SELECT entity, id, revision, device_id, created_at, updated_at, deleted_at, data_json FROM cloud_records WHERE entity = ? AND id = ?"
     ).bind(entity, id).first();
 
-    if (existing && isPublishedTemplateRecord(entity, existing) && !hasSameStoredPayload(existing, record.data, record.deletedAt || null)) {
+    if (
+      existing
+      && isPublishedTemplateRecord(entity, existing)
+      && !record.deletedAt
+      && !hasSameTemplateDefinition(existing, record.data)
+    ) {
       conflicts.push({
         entity,
         id,
@@ -403,6 +408,36 @@ function assertSupportedContractVersion(value) {
 function hasSameStoredPayload(existing, data, deletedAt) {
   return String(existing.deleted_at || "") === String(deletedAt || "")
     && String(existing.data_json || "") === JSON.stringify(data);
+}
+
+const TEMPLATE_MANAGEMENT_FIELDS = new Set([
+  "lifecycle",
+  "status",
+  "timerVisible",
+  "timer_visible",
+  "needsTimer",
+  "needs_timer",
+  "calendarVisible",
+  "calendar_visible",
+  "countsTowardTraining",
+  "counts_toward_training",
+  "archivedAt",
+  "archived_at",
+  "updatedAt",
+  "updated_at",
+  "deletedAt",
+  "deleted_at"
+]);
+
+function hasSameTemplateDefinition(existing, data) {
+  return JSON.stringify(templateDefinitionPayload(safeJson(existing.data_json, {})))
+    === JSON.stringify(templateDefinitionPayload(data));
+}
+
+function templateDefinitionPayload(value) {
+  const copy = { ...((value && typeof value === "object") ? value : {}) };
+  TEMPLATE_MANAGEMENT_FIELDS.forEach((field) => delete copy[field]);
+  return copy;
 }
 
 function isPublishedTemplateRecord(entity, row) {

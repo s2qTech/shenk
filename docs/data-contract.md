@@ -48,7 +48,7 @@ The current shared contract version is `1.0`.
 7. Local IndexedDB remains the first write target; cloud sync mirrors data.
 8. All records must be exportable as JSON.
 9. Timer routine selection is driven by `routine_templates.timerVisible === true`.
-10. Built-in timer routines are fallback/debug only; they must not be treated as the normal plan source.
+10. Timer routines come only from cloud-synced `routine_templates` or the timer's versioned local cache. If neither is available, the timer must show a clear unavailable state and must not silently run an old built-in routine.
 11. Web, Android, and timer clients share the same business records; UI layout, colors, icons, and navigation state stay outside the shared data model.
 12. Tokens and API keys are local configuration, not shared business records. Multi-device setup uses encrypted sync profiles, not plaintext records.
 13. In 身刻, `cloud_records` envelopes are the canonical local model. Legacy `workouts` and `bodyMetrics` arrays are compatibility input/output and may be used as derived UI caches only.
@@ -58,7 +58,8 @@ The current shared contract version is `1.0`.
 Templates may use `lifecycle: "draft" | "published" | "archived"`, `publishedAt`, or `immutable: true`.
 
 - A template is treated as published when `lifecycle` is `published`, `publishedAt` exists, or `immutable` is `true`.
-- Published `plan_templates` and `routine_templates` cannot be changed or deleted with the same `id`; create a new `id` and a new `version` instead.
+- Published `plan_templates` and `routine_templates` cannot change their training definition (title, version, steps, or training content) with the same `id`; create a new `id` and a new `version` instead.
+- Published templates may change lifecycle and visibility metadata (`lifecycle`, `timerVisible`, `needsTimer`, `calendarVisible`, `countsTowardTraining`) and may be tombstone-deleted. This supports archiving or retiring a historical routine without rewriting training history.
 - Existing records without one of those published markers are legacy-compatible and can still be updated during the v1 transition.
 - A daily plan item is a snapshot: changing a template never rewrites it. Future-date guidance changes through a new daily item or a `plan_adjustment`.
 - `plan_adjustments` are append-only. Coach patches should give each adjustment an explicit `id`; when omitted, 身刻 derives a stable content ID so separate same-day adjustments do not overwrite one another.
@@ -170,7 +171,8 @@ Rules:
 - `title` is user-facing. Do not put internal IDs or version text in the title.
 - `version` is kept for traceability but hidden from normal UI.
 - `timerVisible: true` means the routine appears in the timer's standalone selector.
-- A routine referenced by a daily plan may still be opened directly by `routineId` even if it is not visible in the standalone selector.
+- `lifecycle: "archived"` forces `timerVisible: false` and `needsTimer: false`; archived routines are retained for history but cannot be selected or opened as new timer flows.
+- A routine referenced by a daily plan may be opened by `routineId` only while it remains active and timer-visible.
 - `calendarVisible: false` means completed timer sessions for this routine stay in timer history only and should not appear in the calendar detail.
 - `countsTowardTraining: false` means completed timer sessions for this routine must not become formal `training_logs` candidates.
 - Use `calendarVisible: false` and `countsTowardTraining: false` for child routines, test routines, cue-only flows, or other sessions that are not the user's own training.
