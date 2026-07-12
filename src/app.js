@@ -3148,9 +3148,15 @@
             <span>迁移码</span>
             <input type="text" data-sync-transfer-code autocomplete="off" spellcheck="false" placeholder="在旧浏览器生成，或粘贴已有迁移码" value="${escapeHtml(configProfileId ? state.syncConfig.profileAccessKey || "" : "")}">
           </label>
-          <div class="button-row settings-actions secondary-actions sync-profile-actions sync-migration-actions">
-            <button type="button" class="primary" data-action="save-sync-profile">生成迁移码</button>
-            <button type="button" data-action="load-sync-profile">读取迁移码</button>
+          <div class="sync-migration-actions">
+            <div class="sync-migration-action">
+              <span>旧浏览器</span>
+              <button type="button" class="primary" data-action="save-sync-profile">生成迁移码</button>
+            </div>
+            <div class="sync-migration-action">
+              <span>新浏览器</span>
+              <button type="button" data-action="load-sync-profile">读取迁移码</button>
+            </div>
           </div>
           <p class="sync-transfer-note">迁移码等同于新设备的钥匙，请只粘贴到自己的浏览器。</p>
         </details>
