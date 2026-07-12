@@ -141,7 +141,6 @@ Required / recommended fields for timer execution:
   "version": "2.0.0",
   "trainingType": "recovery",
   "scene": "recovery",
-  "planBranch": "个人训练",
   "estimatedMinutes": 18,
   "sortOrder": 30,
   "isDefault": false,
@@ -178,7 +177,6 @@ Rules:
 - `countsTowardTraining: false` means completed timer sessions for this routine must not become formal `training_logs` candidates.
 - Use `calendarVisible: false` and `countsTowardTraining: false` for child routines, test routines, cue-only flows, or other sessions that are not the user's own training.
 - `scene` controls timer grouping. Recommended values: `home`, `walk`, `recovery`, `travel`.
-- `planBranch` identifies the plan branch or training audience, for example `个人训练`, `儿童训练`, or `辅助流程`. The web settings library groups routines by `planBranch` and then by `scene`; coaches should write it explicitly for new templates.
 - `sortOrder` controls order inside a scene. Lower numbers appear first.
 - `isDefault` marks the first-choice routine for a scene.
 - `steps` are required for timer execution.

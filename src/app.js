@@ -664,15 +664,6 @@
     return "home";
   }
 
-  function normalizeRoutinePlanBranch(data, title = "") {
-    const explicit = String(data?.planBranch || data?.plan_branch || data?.branch || data?.program || "").trim();
-    if (explicit) return explicit;
-    const audience = String(data?.audience || data?.userGroup || data?.user_group || "").trim().toLowerCase();
-    if (["child", "children", "kid", "kids"].includes(audience) || /孩子|儿童/.test(title)) return "儿童训练";
-    if (data?.calendarVisible === false && data?.countsTowardTraining === false) return "辅助流程";
-    return "个人训练";
-  }
-
   function normalizeRoutineTemplateData(data) {
     if (!data || typeof data !== "object") return null;
     const id = data.id || data.routineId || data.routine_id || `routine_${makeId()}`;
@@ -713,7 +704,6 @@
     const title = data.title || data.name || data.displayName || data.display_name || TYPE_META[toLegacyTrainingType(trainingType)]?.label || "训练方案";
     const scene = normalizeRoutineScene(data.scene, trainingType);
     const countsTowardTraining = explicitCountsTowardTraining ?? calendarVisible;
-    const planBranch = normalizeRoutinePlanBranch({ ...data, calendarVisible, countsTowardTraining }, title);
     const defaultOptions = data.defaultOptions || data.default_options || data.timerOptions || data.timer_options || {};
     return {
       ...data,
@@ -725,7 +715,6 @@
       variant: data.variant || data.routineVariant || data.routine_variant || "",
       trainingType,
       scene,
-      planBranch,
       estimatedMinutes: toNullableNumber(data.estimatedMinutes ?? data.estimated_minutes),
       steps: normalizedSteps.length ? normalizedSteps : data.steps,
       defaultOptions,
@@ -2848,22 +2837,16 @@
   }
 
   function getRoutineLibraryGroups(entries) {
-    const branchOrder = ["个人训练", "儿童训练", "辅助流程"];
     const sceneOrder = ["home", "walk", "recovery", "travel"];
     const groups = new Map();
     entries.forEach((envelope) => {
       const data = envelope.data || {};
-      const branch = normalizeRoutinePlanBranch(data, getPlanItemDisplayTitle(data));
       const scene = normalizeRoutineScene(data.scene, data.trainingType || data.type);
-      const key = `${branch}|${scene}`;
-      if (!groups.has(key)) groups.set(key, { branch, scene, entries: [] });
-      groups.get(key).entries.push(envelope);
+      if (!groups.has(scene)) groups.set(scene, { scene, entries: [] });
+      groups.get(scene).entries.push(envelope);
     });
     return Array.from(groups.values()).sort((left, right) => {
-      const branchRank = (branchOrder.indexOf(left.branch) + 1 || branchOrder.length + 1) - (branchOrder.indexOf(right.branch) + 1 || branchOrder.length + 1);
-      if (branchRank) return branchRank;
-      const sceneRank = (sceneOrder.indexOf(left.scene) + 1 || sceneOrder.length + 1) - (sceneOrder.indexOf(right.scene) + 1 || sceneOrder.length + 1);
-      return sceneRank || left.branch.localeCompare(right.branch, "zh-Hans-CN");
+      return (sceneOrder.indexOf(left.scene) + 1 || sceneOrder.length + 1) - (sceneOrder.indexOf(right.scene) + 1 || sceneOrder.length + 1);
     });
   }
 
@@ -2901,7 +2884,7 @@
         <div class="settings-subsection-head">
           <div>
             <strong>方案库</strong>
-            <span>按计划分支和训练场景整理。现行方案会显示在计时器中；停用和删除的方案保留历史，不会再作为可选流程。</span>
+            <span>按计时器场景整理。现行方案会显示在计时器中；停用和删除的方案保留历史，不会再作为可选流程。</span>
           </div>
           <div class="routine-library-counts">
             <span>现行 ${counts.active}</span>
@@ -2913,7 +2896,7 @@
           <div class="routine-library-groups">
             ${getRoutineLibraryGroups(entries).map((group) => `
               <section class="routine-library-group">
-                <div class="routine-library-group-head"><strong>${escapeHtml(group.branch)}</strong><span>${getRoutineSceneLabel(group.scene)} · ${group.entries.length} 项</span></div>
+                <div class="routine-library-group-head"><strong>${getRoutineSceneLabel(group.scene)}</strong><span>${group.entries.length} 项</span></div>
                 <div class="routine-library-list">${group.entries.map(renderRoutineLibraryRow).join("")}</div>
               </section>
             `).join("")}
