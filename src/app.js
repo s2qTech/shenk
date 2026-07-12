@@ -2804,8 +2804,10 @@
   }
 
   function getRoutineLibraryEntries() {
-    const order = { active: 0, archived: 1, deleted: 2 };
-    return [...(state.records.routine_templates || [])].sort((left, right) => {
+    const order = { active: 0, archived: 1 };
+    return (state.records.routine_templates || [])
+      .filter((item) => !item.deletedAt && !item.data?.deletedAt)
+      .sort((left, right) => {
       const lifecycleOrder = (order[getRoutineTemplateLifecycle(left)] ?? 3) - (order[getRoutineTemplateLifecycle(right)] ?? 3);
       if (lifecycleOrder) return lifecycleOrder;
       return getPlanItemDisplayTitle(left.data || {}).localeCompare(getPlanItemDisplayTitle(right.data || {}), "zh-Hans-CN");
@@ -2870,7 +2872,7 @@
     const counts = entries.reduce((result, item) => {
       result[getRoutineTemplateLifecycle(item)] += 1;
       return result;
-    }, { active: 0, archived: 0, deleted: 0 });
+    }, { active: 0, archived: 0 });
     return `
       <section class="routine-library" aria-label="方案库">
         <div class="settings-subsection-head">
@@ -2881,7 +2883,6 @@
           <div class="routine-library-counts">
             <span>现行 ${counts.active}</span>
             <span>已停用 ${counts.archived}</span>
-            <span>已删除 ${counts.deleted}</span>
           </div>
         </div>
         ${entries.length ? `

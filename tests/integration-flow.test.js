@@ -28,7 +28,8 @@ function loadAppTestApi() {
     refreshLegacyCachesFromSharedRecords,
     normalizeDailyPlanItemData,
     normalizeRoutineTemplateData,
-    mergeSharedRecords
+    mergeSharedRecords,
+    getRoutineLibraryEntries
   };
 `;
   const instrumented = source.replace(/\}\)\(\);\s*$/, `${hook}\n})();`);
@@ -114,6 +115,34 @@ function reset(api) {
 
 function upsert(api, entity, data) {
   api.upsertSharedEnvelope(api.state.records, entity, data);
+}
+
+{
+  const api = loadAppTestApi();
+  reset(api);
+  upsert(api, "routine_templates", {
+    id: "routine_active",
+    title: "Active routine",
+    trainingType: "strength",
+    scene: "home",
+    steps: [{ stepId: "move", durationSeconds: 60 }]
+  });
+  upsert(api, "routine_templates", {
+    id: "routine_deleted",
+    title: "Deleted routine",
+    trainingType: "recovery",
+    scene: "recovery",
+    steps: [{ stepId: "move", durationSeconds: 60 }],
+    deletedAt: "2099-06-01T00:00:00.000Z"
+  });
+  const deleted = api.state.records.routine_templates.find((item) => item.id === "routine_deleted");
+  deleted.deletedAt = "2099-06-01T00:00:00.000Z";
+  deleted.data.deletedAt = "2099-06-01T00:00:00.000Z";
+
+  assert.deepEqual(
+    JSON.parse(JSON.stringify(api.getRoutineLibraryEntries().map((item) => item.id))),
+    ["routine_active"]
+  );
 }
 
 {
