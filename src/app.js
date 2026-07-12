@@ -654,7 +654,21 @@
       : lifecycle || "active";
   }
 
-  function normalizeRoutineScene(value, trainingType) {
+  function inferRoutineTrainingType(value, title = "", routineId = "") {
+    const text = `${title} ${routineId}`.toLowerCase();
+    if (/热身/.test(text)) return "warmup";
+    if (/拉伸/.test(text) && !/恢复|低压/.test(text)) return "stretch";
+    if (/恢复|低压|座位/.test(text)) return "recovery";
+    if (/提高走|跑跳/.test(text)) return "quality_walk";
+    if (/普通走|健走|慢走/.test(text)) return "easy_walk";
+    return normalizeTimerTrainingType(value || inferTrainingTypeFromRoutineId(routineId));
+  }
+
+  function normalizeRoutineScene(value, trainingType, title = "", routineId = "") {
+    const text = `${title} ${routineId}`.toLowerCase();
+    if (/热身|拉伸|提高走|普通走|健走|慢走|公园/.test(text)) return "walk";
+    if (/恢复|低压|座位/.test(text)) return "recovery";
+    if (/外出|旅行|酒店/.test(text)) return "travel";
     const scene = String(value || "").trim().toLowerCase();
     if (["home", "walk", "recovery", "travel"].includes(scene)) return scene;
     const type = normalizeTimerTrainingType(trainingType);
@@ -667,7 +681,8 @@
   function normalizeRoutineTemplateData(data) {
     if (!data || typeof data !== "object") return null;
     const id = data.id || data.routineId || data.routine_id || `routine_${makeId()}`;
-    const trainingType = normalizeTimerTrainingType(data.trainingType || data.training_type || data.type || inferTrainingTypeFromRoutineId(id));
+    const sourceTitle = data.title || data.name || data.displayName || data.display_name || "";
+    const trainingType = inferRoutineTrainingType(data.trainingType || data.training_type || data.type, sourceTitle, id);
     const steps = Array.isArray(data.steps) ? data.steps : parseJsonArrayValue(data.stepsJson || data.steps_json);
     const normalizedSteps = steps.map(normalizeRoutineStepData).filter(Boolean);
     const explicitVisible = parseOptionalBoolean(
@@ -702,7 +717,7 @@
     );
     const calendarVisible = explicitCalendarVisible ?? true;
     const title = data.title || data.name || data.displayName || data.display_name || TYPE_META[toLegacyTrainingType(trainingType)]?.label || "训练方案";
-    const scene = normalizeRoutineScene(data.scene, trainingType);
+    const scene = normalizeRoutineScene(data.scene, trainingType, title, id);
     const countsTowardTraining = explicitCountsTowardTraining ?? calendarVisible;
     const defaultOptions = data.defaultOptions || data.default_options || data.timerOptions || data.timer_options || {};
     return {
@@ -2841,7 +2856,7 @@
     const groups = new Map();
     entries.forEach((envelope) => {
       const data = envelope.data || {};
-      const scene = normalizeRoutineScene(data.scene, data.trainingType || data.type);
+      const scene = normalizeRoutineScene(data.scene, data.trainingType || data.type, getPlanItemDisplayTitle(data), data.routineId || data.id);
       if (!groups.has(scene)) groups.set(scene, { scene, entries: [] });
       groups.get(scene).entries.push(envelope);
     });
@@ -2850,12 +2865,24 @@
     });
   }
 
-  function renderRoutineLibraryRow(envelope) {
+  function getRoutineLibraryTitle(data, peers) {
+    const title = getPlanItemDisplayTitle(data) || "未命名方案";
+    const variant = getRoutineVariantLabel(data);
+    if (variant) return `${title} · ${variant}`;
+    const sameTitleCount = peers.filter((item) => getPlanItemDisplayTitle(item.data || {}) === title).length;
+    if (sameTitleCount < 2) return title;
+    const minutes = toNullableNumber(data.estimatedMinutes);
+    if (minutes && minutes <= 8) return `${title} · 简版`;
+    if (minutes && minutes >= 11) return `${title} · 完整版`;
+    return `${title} · ${minutes ? `${minutes} 分钟版` : "不同版本"}`;
+  }
+
+  function renderRoutineLibraryRow(envelope, peers = []) {
     const data = envelope.data || {};
     const lifecycle = getRoutineTemplateLifecycle(envelope);
     const meta = getRoutineTemplateLifecycleMeta(lifecycle);
-    const type = getTimerTypeMeta(data.trainingType || data.type).label;
-    const title = getPlanItemDisplayTitle(data) || "未命名方案";
+    const type = getTimerTypeMeta(inferRoutineTrainingType(data.trainingType || data.type, getPlanItemDisplayTitle(data), data.routineId || data.id)).label;
+    const title = getRoutineLibraryTitle(data, peers);
     const minutes = toNullableNumber(data.estimatedMinutes);
     const visibility = data.timerVisible === false || lifecycle !== "active" ? "不显示在计时器" : "计时器可用";
     return `
@@ -2897,7 +2924,7 @@
             ${getRoutineLibraryGroups(entries).map((group) => `
               <section class="routine-library-group">
                 <div class="routine-library-group-head"><strong>${getRoutineSceneLabel(group.scene)}</strong><span>${group.entries.length} 项</span></div>
-                <div class="routine-library-list">${group.entries.map(renderRoutineLibraryRow).join("")}</div>
+                <div class="routine-library-list">${group.entries.map((entry) => renderRoutineLibraryRow(entry, group.entries)).join("")}</div>
               </section>
             `).join("")}
           </div>

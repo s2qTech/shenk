@@ -110,6 +110,9 @@ function routinePatch(overrides = {}) {
   assert.equal(archived.needsTimer, false);
   const walk = api.normalizeRoutineTemplateData(routinePatch({ trainingType: "stretch" }));
   assert.equal(walk.scene, "walk");
+  const misclassifiedWarmup = api.normalizeRoutineTemplateData(routinePatch({ title: "健走前热身", trainingType: "recovery", scene: "recovery" }));
+  assert.equal(misclassifiedWarmup.trainingType, "warmup");
+  assert.equal(misclassifiedWarmup.scene, "walk");
 }
 
 {

@@ -177,6 +177,8 @@ Rules:
 - `countsTowardTraining: false` means completed timer sessions for this routine must not become formal `training_logs` candidates.
 - Use `calendarVisible: false` and `countsTowardTraining: false` for child routines, test routines, cue-only flows, or other sessions that are not the user's own training.
 - `scene` controls timer grouping. Recommended values: `home`, `walk`, `recovery`, `travel`.
+- Same-title variants must provide a user-facing `variant` such as `简版`, `完整版`, or `公园版`; duration alone is not a sufficient variant label.
+- `trainingType` must match the routine title: walk warmups use `warmup`, post-walk stretches use `stretch`, and recovery stretches use `recovery`.
 - `sortOrder` controls order inside a scene. Lower numbers appear first.
 - `isDefault` marks the first-choice routine for a scene.
 - `steps` are required for timer execution.

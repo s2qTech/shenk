@@ -208,6 +208,8 @@ Codex 根据摘要输出两部分：
 - `lifecycle`：`active` / `published` / `archived`。`archived` 表示历史停用，身刻会强制从计时器选择器移除；不要用空数组清空历史方案。
 - `scene`：计时器分组，建议 `home` / `walk` / `recovery` / `travel`。
 - `sortOrder`：同组排序，数字越小越靠前。
+- 同名流程的不同长度必须显式给 `variant`，例如 `简版`、`完整版`、`公园版`；不要只用同一个标题和不同分钟数区分。
+- `trainingType` 与标题语义必须一致：走前热身用 `warmup`，走后拉伸用 `stretch`，恢复拉伸或低压恢复用 `recovery`。
 - `isDefault`：是否作为同组首选流程。
 - `steps`：计时器动作数组。
 
