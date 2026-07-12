@@ -13,6 +13,28 @@
   const SHARED_SCHEMA_VERSION = "2026-06-19-001";
   const SHARED_CONTRACT_VERSION = "1.0";
   const AUTO_PUSH_RETRY_DELAYS = [5000, 15000, 60000];
+  const SyncProfile = window.ShenkeSyncProfileCore?.create({
+    defaultApiBase: DEFAULT_CLOUD_API_BASE,
+    defaultTimerUrl: DEFAULT_TIMER_URL,
+    iterations: SYNC_PROFILE_KDF_ITERATIONS,
+    crypto: window.crypto
+  });
+
+  if (!SyncProfile) {
+    throw new Error("ShenkeSyncProfileCore is required before app.js");
+  }
+  const SnapshotStorage = window.ShenkeSnapshotStorage?.create({
+    window,
+    dbName: DB_NAME,
+    dbVersion: DB_VERSION,
+    storeName: "kv",
+    snapshotKey: SNAPSHOT_KEY,
+    fallbackKey: FALLBACK_KEY
+  });
+
+  if (!SnapshotStorage) {
+    throw new Error("ShenkeSnapshotStorage is required before app.js");
+  }
   const SHARED_ENTITIES = [
     "plan_templates",
     "routine_templates",
@@ -258,7 +280,6 @@
   const SEED_WORKOUTS = [];
 
   const app = document.getElementById("app");
-  let db = null;
   let messageTimer = null;
   let autoPushRetryTimer = null;
   let passiveCloudRefreshTimer = null;
@@ -442,22 +463,12 @@
   }
 
   async function loadSnapshot() {
-    try {
-      db = await openDatabase();
-      state.storageMode = "IndexedDB";
-      const idbSnapshot = await idbGet(SNAPSHOT_KEY);
-      if (idbSnapshot) return idbSnapshot;
-    } catch (error) {
-      db = null;
-      state.storageMode = "localStorage";
+    const result = await SnapshotStorage.load();
+    state.storageMode = result.mode;
+    if (result.fallbackReadError) {
+      state.message = "\u672c\u5730\u7f13\u5b58\u8bfb\u53d6\u5931\u8d25\uff0c\u5df2\u4f7f\u7528\u79cd\u5b50\u6570\u636e";
     }
-
-    try {
-      const raw = window.localStorage.getItem(FALLBACK_KEY);
-      if (raw) return JSON.parse(raw);
-    } catch (error) {
-      state.message = "本地缓存读取失败，已使用种子数据";
-    }
+    if (result.snapshot) return result.snapshot;
 
     return {
       schemaVersion: SHARED_SCHEMA_VERSION,
@@ -468,59 +479,12 @@
     };
   }
 
-  function openDatabase() {
-    return new Promise((resolve, reject) => {
-      if (!("indexedDB" in window)) {
-        reject(new Error("IndexedDB unavailable"));
-        return;
-      }
-      const request = window.indexedDB.open(DB_NAME, DB_VERSION);
-      request.onupgradeneeded = () => {
-        const nextDb = request.result;
-        if (!nextDb.objectStoreNames.contains("kv")) {
-          nextDb.createObjectStore("kv");
-        }
-      };
-      request.onsuccess = () => resolve(request.result);
-      request.onerror = () => reject(request.error || new Error("IndexedDB open failed"));
-    });
-  }
-
-  function idbGet(key) {
-    return new Promise((resolve, reject) => {
-      const tx = db.transaction("kv", "readonly");
-      const request = tx.objectStore("kv").get(key);
-      request.onsuccess = () => resolve(request.result || null);
-      request.onerror = () => reject(request.error || new Error("IndexedDB read failed"));
-    });
-  }
-
-  function idbSet(key, value) {
-    return new Promise((resolve, reject) => {
-      const tx = db.transaction("kv", "readwrite");
-      tx.objectStore("kv").put(value, key);
-      tx.oncomplete = () => resolve();
-      tx.onerror = () => reject(tx.error || new Error("IndexedDB write failed"));
-    });
-  }
-
   async function saveSnapshot(message) {
     const snapshot = buildSnapshot();
-
-    try {
-      if (db) {
-        await idbSet(SNAPSHOT_KEY, snapshot);
-        state.storageMode = "IndexedDB";
-      } else {
-        window.localStorage.setItem(FALLBACK_KEY, JSON.stringify(snapshot));
-        state.storageMode = "localStorage";
-      }
-      if (message) state.message = message;
-    } catch (error) {
-      window.localStorage.setItem(FALLBACK_KEY, JSON.stringify(snapshot));
-      state.storageMode = "localStorage";
-      state.message = message || "已保存到 localStorage";
-    }
+    const result = await SnapshotStorage.save(snapshot);
+    state.storageMode = result.mode;
+    if (message) state.message = message;
+    else if (result.fallbackWriteError) state.message = "\u5df2\u4fdd\u5b58\u5230 localStorage";
   }
 
   function buildSnapshot(options = {}) {
@@ -4879,112 +4843,35 @@
   }
 
   function normalizeSyncApiBase(value) {
-    const next = String(value || "").trim().replace(/\/+$/, "");
-    if (!next) return "";
-    return next.endsWith("/api") ? next : `${next}/api`;
+    return SyncProfile.normalizeApiBase(value);
   }
 
   function normalizeTimerUrl(value) {
-    const next = String(value || "").trim();
-    if (!next) return DEFAULT_TIMER_URL;
-    return next;
+    return SyncProfile.normalizeTimerUrl(value);
   }
 
   function normalizeSyncProfileId(value) {
-    return String(value || "").trim();
+    return SyncProfile.normalizeProfileId(value);
   }
 
   function normalizeSyncProfileAccessKey(value) {
-    return String(value || "").trim();
+    return SyncProfile.normalizeAccessKey(value);
   }
 
   function assertSyncProfileAccessKey(value) {
-    const key = normalizeSyncProfileAccessKey(value);
-    if (!/^[A-Za-z0-9_-]{20,200}$/.test(key)) {
-      throw new Error("请粘贴有效迁移码，或在旧浏览器重新生成迁移码。");
-    }
-    return key;
+    return SyncProfile.assertAccessKey(value);
   }
 
   function generateSyncProfileAccessKey() {
-    ensureWebCrypto();
-    const bytes = window.crypto.getRandomValues(new Uint8Array(32));
-    return bytesToBase64Url(bytes);
-  }
-
-  function bytesToBase64Url(bytes) {
-    let binary = "";
-    bytes.forEach((byte) => {
-      binary += String.fromCharCode(byte);
-    });
-    return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
-  }
-
-  function base64UrlToBytes(value) {
-    const base64 = String(value || "").replace(/-/g, "+").replace(/_/g, "/");
-    const padded = base64.padEnd(base64.length + ((4 - base64.length % 4) % 4), "=");
-    const binary = atob(padded);
-    return Uint8Array.from(binary, (char) => char.charCodeAt(0));
-  }
-
-  function ensureWebCrypto() {
-    if (!window.crypto?.subtle) {
-      throw new Error("当前浏览器不支持本地加密配置档案，请使用 HTTPS 页面或现代浏览器。");
-    }
-  }
-
-  async function deriveSyncProfileKey(migrationCode, salt) {
-    ensureWebCrypto();
-    const material = await window.crypto.subtle.importKey(
-      "raw",
-      new TextEncoder().encode(migrationCode),
-      "PBKDF2",
-      false,
-      ["deriveKey"]
-    );
-    return window.crypto.subtle.deriveKey(
-      { name: "PBKDF2", salt, iterations: SYNC_PROFILE_KDF_ITERATIONS, hash: "SHA-256" },
-      material,
-      { name: "AES-GCM", length: 256 },
-      false,
-      ["encrypt", "decrypt"]
-    );
+    return SyncProfile.generateAccessKey();
   }
 
   async function encryptSyncProfilePayload(payload, migrationCode) {
-    ensureWebCrypto();
-    const salt = window.crypto.getRandomValues(new Uint8Array(16));
-    const iv = window.crypto.getRandomValues(new Uint8Array(12));
-    const key = await deriveSyncProfileKey(migrationCode, salt);
-    const encoded = new TextEncoder().encode(JSON.stringify(payload));
-    const ciphertext = new Uint8Array(await window.crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, encoded));
-    return {
-      schema: "shenk_sync_profile/v1",
-      cipher: "AES-GCM",
-      kdf: "PBKDF2-SHA256",
-      iterations: SYNC_PROFILE_KDF_ITERATIONS,
-      salt: bytesToBase64Url(salt),
-      iv: bytesToBase64Url(iv),
-      ciphertext: bytesToBase64Url(ciphertext),
-      updatedAt: new Date().toISOString()
-    };
+    return SyncProfile.encrypt(payload, migrationCode);
   }
 
   async function decryptSyncProfilePayload(profile, migrationCode) {
-    ensureWebCrypto();
-    if (!profile || profile.schema !== "shenk_sync_profile/v1") throw new Error("配置档案格式不正确");
-    const salt = base64UrlToBytes(profile.salt);
-    const iv = base64UrlToBytes(profile.iv);
-    const ciphertext = base64UrlToBytes(profile.ciphertext);
-    const key = await deriveSyncProfileKey(migrationCode, salt);
-    let plaintext = null;
-    try {
-      plaintext = await window.crypto.subtle.decrypt({ name: "AES-GCM", iv }, key, ciphertext);
-    } catch (error) {
-      throw new Error("迁移码不正确，或加密配置档案已损坏。");
-    }
-    const payload = JSON.parse(new TextDecoder().decode(new Uint8Array(plaintext)));
-    return parseSyncConfigPayload(payload);
+    return SyncProfile.decrypt(profile, migrationCode);
   }
 
   function createSyncProfilePayload() {
@@ -5007,18 +4894,8 @@
   }
 
   function parseSyncConfigPayload(payload) {
-    const config = {
-      apiBase: normalizeSyncApiBase(payload.apiBase || payload.cloudApiBase || ""),
-      timerUrl: normalizeTimerUrl(payload.timerUrl || DEFAULT_TIMER_URL),
-      token: String(payload.token || payload.shenkToken || ""),
-      timerToken: String(payload.timerToken || "")
-    };
-    if (!config.apiBase || !config.token || !config.timerToken) {
-      throw new Error("配置包缺少 API、身刻密钥或计时器密钥");
-    }
-    return config;
+    return SyncProfile.parseConfigPayload(payload);
   }
-
 
   function setSyncPanelMessage(message, isError = false) {
     state.syncStatus.lastResult = isError ? "" : message;
@@ -5063,12 +4940,7 @@
   }
 
   async function deriveSyncProfileIdFromTransferCode(transferCode) {
-    ensureWebCrypto();
-    const digest = new Uint8Array(await window.crypto.subtle.digest(
-      "SHA-256",
-      new TextEncoder().encode(transferCode)
-    ));
-    return `profile_${bytesToBase64Url(digest).slice(0, 48)}`;
+    return SyncProfile.deriveProfileId(transferCode);
   }
 
   async function readSyncTransferCode(options = {}) {

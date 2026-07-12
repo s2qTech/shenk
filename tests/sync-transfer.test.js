@@ -8,7 +8,11 @@ const { webcrypto } = require("node:crypto");
 
 function loadSyncTransferApi() {
   const appPath = path.join(__dirname, "..", "src", "app.js");
+  const corePath = path.join(__dirname, "..", "src", "sync-profile-core.js");
+  const storagePath = path.join(__dirname, "..", "src", "snapshot-storage.js");
   const source = fs.readFileSync(appPath, "utf8");
+  const coreSource = fs.readFileSync(corePath, "utf8");
+  const storageSource = fs.readFileSync(storagePath, "utf8");
   const hook = `
   globalThis.__shenkeSyncTransferTest = {
     deriveSyncProfileIdFromTransferCode,
@@ -44,6 +48,8 @@ function loadSyncTransferApi() {
     atob(value) { return Buffer.from(value, "base64").toString("binary"); },
     window: {
       localStorage: { getItem() { return null; }, setItem() {}, removeItem() {} },
+      btoa(value) { return Buffer.from(value, "binary").toString("base64"); },
+      atob(value) { return Buffer.from(value, "base64").toString("binary"); },
       crypto: {
         randomUUID: () => "uuid_fixture",
         getRandomValues: webcrypto.getRandomValues.bind(webcrypto),
@@ -70,6 +76,8 @@ function loadSyncTransferApi() {
   };
   context.globalThis = context;
   vm.createContext(context);
+  vm.runInContext(coreSource, context, { filename: corePath });
+  vm.runInContext(storageSource, context, { filename: storagePath });
   vm.runInContext(instrumented, context, { filename: appPath });
   return context.__shenkeSyncTransferTest;
 }

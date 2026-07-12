@@ -7,7 +7,11 @@ const vm = require("node:vm");
 
 function loadAppTestApi() {
   const appPath = path.join(__dirname, "..", "src", "app.js");
+  const corePath = path.join(__dirname, "..", "src", "sync-profile-core.js");
+  const storagePath = path.join(__dirname, "..", "src", "snapshot-storage.js");
   const source = fs.readFileSync(appPath, "utf8");
+  const coreSource = fs.readFileSync(corePath, "utf8");
+  const storageSource = fs.readFileSync(storagePath, "utf8");
   const hook = `
   globalThis.__shenkeAppTest = {
     state,
@@ -72,6 +76,8 @@ function loadAppTestApi() {
   };
   context.globalThis = context;
   vm.createContext(context);
+  vm.runInContext(coreSource, context, { filename: corePath });
+  vm.runInContext(storageSource, context, { filename: storagePath });
   vm.runInContext(instrumented, context, { filename: appPath });
   return context.__shenkeAppTest;
 }

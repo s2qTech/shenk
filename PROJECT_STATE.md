@@ -78,6 +78,14 @@ Timer writes:
 - Worker query responses include `contractVersion` and optional cursor pagination. 身刻 and timer follow `nextCursor` with the original `since` value.
 - Explicitly published plan/routine templates are immutable locally and in Worker. Daily plan snapshots stay independent and same-day adjustments now receive stable content IDs instead of a fixed date ID.
 
+### Work Package 3: modularization and CI - completed
+
+- Shenk now separates recommendation, encrypted sync-profile, and snapshot-storage cores from the Web UI shell.
+- Timer separates runtime execution expansion, preview grouping/action progress, and session timing from its page shell.
+- The extracted cores have direct Node tests; existing plan import, integration, sync-transfer, contract, and security tests continue to run against the composed page application.
+- Both apps retain static deployment, existing browser storage, cloud ownership boundaries, and accepted UI behavior.
+- Module boundaries are documented in `docs/module-boundaries.md` and `PROJECT_BOUNDARIES.md`.
+
 ## Active Development Direction
 
 The canonical next-stage documents are:
@@ -102,4 +110,4 @@ Every completed package must report progress as `X / 7`, verification, compatibi
 
 ## Immediate Next Step
 
-Start work package 3: extract pure domain, sync, storage and timer-engine modules without changing the accepted Web UI. Do not begin Android business implementation before Contract v1 is frozen.
+Start work package 4: design an entity-store IndexedDB migration and durable outbox. This requires an explicit migration preview, local backup, compatibility read path, and rollback plan before any user data is changed.
