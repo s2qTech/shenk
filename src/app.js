@@ -666,14 +666,15 @@
 
   function normalizeRoutineScene(value, trainingType, title = "", routineId = "") {
     const text = `${title} ${routineId}`.toLowerCase();
-    if (/热身|拉伸|提高走|普通走|健走|慢走|公园/.test(text)) return "walk";
+    if (/座位|外出|旅行|酒店/.test(text)) return "travel";
     if (/恢复|低压|座位/.test(text)) return "recovery";
-    if (/外出|旅行|酒店/.test(text)) return "travel";
+    if (/热身|拉伸|提高走|普通走|健走|慢走|公园/.test(text)) return "walk";
+    const type = normalizeTimerTrainingType(trainingType);
+    if (type === "seat_recovery") return "travel";
     const scene = String(value || "").trim().toLowerCase();
     if (["home", "walk", "recovery", "travel"].includes(scene)) return scene;
-    const type = normalizeTimerTrainingType(trainingType);
     if (["warmup", "stretch"].includes(type)) return "walk";
-    if (["recovery", "seat_recovery"].includes(type)) return "recovery";
+    if (type === "recovery") return "recovery";
     if (type === "travel_strength") return "travel";
     return "home";
   }
