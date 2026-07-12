@@ -455,6 +455,34 @@ textarea {
   overflow: hidden;
 }
 
+.routine-library-groups {
+  display: grid;
+  gap: 14px;
+}
+
+.routine-library-group {
+  display: grid;
+  gap: 7px;
+}
+
+.routine-library-group-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 0 2px;
+}
+
+.routine-library-group-head strong {
+  color: var(--ink);
+  font-size: 14px;
+}
+
+.routine-library-group-head span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
 .routine-library-row {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;

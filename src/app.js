@@ -654,6 +654,25 @@
       : lifecycle || "active";
   }
 
+  function normalizeRoutineScene(value, trainingType) {
+    const scene = String(value || "").trim().toLowerCase();
+    if (["home", "walk", "recovery", "travel"].includes(scene)) return scene;
+    const type = normalizeTimerTrainingType(trainingType);
+    if (["warmup", "stretch"].includes(type)) return "walk";
+    if (["recovery", "seat_recovery"].includes(type)) return "recovery";
+    if (type === "travel_strength") return "travel";
+    return "home";
+  }
+
+  function normalizeRoutinePlanBranch(data, title = "") {
+    const explicit = String(data?.planBranch || data?.plan_branch || data?.branch || data?.program || "").trim();
+    if (explicit) return explicit;
+    const audience = String(data?.audience || data?.userGroup || data?.user_group || "").trim().toLowerCase();
+    if (["child", "children", "kid", "kids"].includes(audience) || /孩子|儿童/.test(title)) return "儿童训练";
+    if (data?.calendarVisible === false && data?.countsTowardTraining === false) return "辅助流程";
+    return "个人训练";
+  }
+
   function normalizeRoutineTemplateData(data) {
     if (!data || typeof data !== "object") return null;
     const id = data.id || data.routineId || data.routine_id || `routine_${makeId()}`;
@@ -692,6 +711,9 @@
     );
     const calendarVisible = explicitCalendarVisible ?? true;
     const title = data.title || data.name || data.displayName || data.display_name || TYPE_META[toLegacyTrainingType(trainingType)]?.label || "训练方案";
+    const scene = normalizeRoutineScene(data.scene, trainingType);
+    const countsTowardTraining = explicitCountsTowardTraining ?? calendarVisible;
+    const planBranch = normalizeRoutinePlanBranch({ ...data, calendarVisible, countsTowardTraining }, title);
     const defaultOptions = data.defaultOptions || data.default_options || data.timerOptions || data.timer_options || {};
     return {
       ...data,
@@ -702,6 +724,8 @@
       name: data.name || title,
       variant: data.variant || data.routineVariant || data.routine_variant || "",
       trainingType,
+      scene,
+      planBranch,
       estimatedMinutes: toNullableNumber(data.estimatedMinutes ?? data.estimated_minutes),
       steps: normalizedSteps.length ? normalizedSteps : data.steps,
       defaultOptions,
@@ -710,7 +734,7 @@
       timerVisible,
       needsTimer: lifecycle !== "archived" && Boolean(data.needsTimer ?? data.needs_timer ?? timerVisible),
       calendarVisible,
-      countsTowardTraining: explicitCountsTowardTraining ?? calendarVisible,
+      countsTowardTraining,
       source: data.source || "coach",
       createdAt: data.createdAt || data.created_at || new Date().toISOString(),
       updatedAt: data.updatedAt || data.updated_at || new Date().toISOString()
@@ -2819,6 +2843,53 @@
     });
   }
 
+  function getRoutineSceneLabel(value) {
+    return ({ home: "居家", walk: "健走", recovery: "恢复", travel: "外出" })[value] || "其他";
+  }
+
+  function getRoutineLibraryGroups(entries) {
+    const branchOrder = ["个人训练", "儿童训练", "辅助流程"];
+    const sceneOrder = ["home", "walk", "recovery", "travel"];
+    const groups = new Map();
+    entries.forEach((envelope) => {
+      const data = envelope.data || {};
+      const branch = normalizeRoutinePlanBranch(data, getPlanItemDisplayTitle(data));
+      const scene = normalizeRoutineScene(data.scene, data.trainingType || data.type);
+      const key = `${branch}|${scene}`;
+      if (!groups.has(key)) groups.set(key, { branch, scene, entries: [] });
+      groups.get(key).entries.push(envelope);
+    });
+    return Array.from(groups.values()).sort((left, right) => {
+      const branchRank = (branchOrder.indexOf(left.branch) + 1 || branchOrder.length + 1) - (branchOrder.indexOf(right.branch) + 1 || branchOrder.length + 1);
+      if (branchRank) return branchRank;
+      const sceneRank = (sceneOrder.indexOf(left.scene) + 1 || sceneOrder.length + 1) - (sceneOrder.indexOf(right.scene) + 1 || sceneOrder.length + 1);
+      return sceneRank || left.branch.localeCompare(right.branch, "zh-Hans-CN");
+    });
+  }
+
+  function renderRoutineLibraryRow(envelope) {
+    const data = envelope.data || {};
+    const lifecycle = getRoutineTemplateLifecycle(envelope);
+    const meta = getRoutineTemplateLifecycleMeta(lifecycle);
+    const type = getTimerTypeMeta(data.trainingType || data.type).label;
+    const title = getPlanItemDisplayTitle(data) || "未命名方案";
+    const minutes = toNullableNumber(data.estimatedMinutes);
+    const visibility = data.timerVisible === false || lifecycle !== "active" ? "不显示在计时器" : "计时器可用";
+    return `
+      <div class="routine-library-row is-${meta.className}">
+        <div class="routine-library-main">
+          <div class="routine-library-title"><strong>${escapeHtml(title)}</strong><span class="routine-lifecycle-tag ${meta.className}">${meta.label}</span></div>
+          <span>${escapeHtml(type)}${minutes ? ` · ${minutes} 分` : ""} · ${visibility}</span>
+        </div>
+        <div class="routine-library-actions">
+          ${lifecycle === "active" ? `<button type="button" data-action="archive-routine-template" data-routine-id="${escapeHtml(envelope.id)}">停用</button>` : ""}
+          ${lifecycle === "archived" ? `<button type="button" data-action="activate-routine-template" data-routine-id="${escapeHtml(envelope.id)}">启用</button>` : ""}
+          ${lifecycle !== "deleted" ? `<button type="button" class="danger subtle-danger" data-action="delete-routine-template" data-routine-id="${escapeHtml(envelope.id)}">删除</button>` : ""}
+        </div>
+      </div>
+    `;
+  }
+
   function renderRoutineLibrary() {
     const entries = getRoutineLibraryEntries();
     const counts = entries.reduce((result, item) => {
@@ -2830,7 +2901,7 @@
         <div class="settings-subsection-head">
           <div>
             <strong>方案库</strong>
-            <span>现行方案会显示在计时器中；停用和删除的方案保留历史，不会再作为可选流程。</span>
+            <span>按计划分支和训练场景整理。现行方案会显示在计时器中；停用和删除的方案保留历史，不会再作为可选流程。</span>
           </div>
           <div class="routine-library-counts">
             <span>现行 ${counts.active}</span>
@@ -2839,29 +2910,13 @@
           </div>
         </div>
         ${entries.length ? `
-          <div class="routine-library-list">
-            ${entries.map((envelope) => {
-              const data = envelope.data || {};
-              const lifecycle = getRoutineTemplateLifecycle(envelope);
-              const meta = getRoutineTemplateLifecycleMeta(lifecycle);
-              const type = getTimerTypeMeta(data.trainingType || data.type).label;
-              const title = getPlanItemDisplayTitle(data) || "未命名方案";
-              const minutes = toNullableNumber(data.estimatedMinutes);
-              const visibility = data.timerVisible === false || lifecycle !== "active" ? "不显示在计时器" : "计时器可用";
-              return `
-                <div class="routine-library-row is-${meta.className}">
-                  <div class="routine-library-main">
-                    <div class="routine-library-title"><strong>${escapeHtml(title)}</strong><span class="routine-lifecycle-tag ${meta.className}">${meta.label}</span></div>
-                    <span>${escapeHtml(type)}${minutes ? ` · ${minutes} 分` : ""} · ${visibility}</span>
-                  </div>
-                  <div class="routine-library-actions">
-                    ${lifecycle === "active" ? `<button type="button" data-action="archive-routine-template" data-routine-id="${escapeHtml(envelope.id)}">停用</button>` : ""}
-                    ${lifecycle === "archived" ? `<button type="button" data-action="activate-routine-template" data-routine-id="${escapeHtml(envelope.id)}">启用</button>` : ""}
-                    ${lifecycle !== "deleted" ? `<button type="button" class="danger subtle-danger" data-action="delete-routine-template" data-routine-id="${escapeHtml(envelope.id)}">删除</button>` : ""}
-                  </div>
-                </div>
-              `;
-            }).join("")}
+          <div class="routine-library-groups">
+            ${getRoutineLibraryGroups(entries).map((group) => `
+              <section class="routine-library-group">
+                <div class="routine-library-group-head"><strong>${escapeHtml(group.branch)}</strong><span>${getRoutineSceneLabel(group.scene)} · ${group.entries.length} 项</span></div>
+                <div class="routine-library-list">${group.entries.map(renderRoutineLibraryRow).join("")}</div>
+              </section>
+            `).join("")}
           </div>
         ` : `<div class="empty-state compact">还没有导入训练方案。</div>`}
       </section>

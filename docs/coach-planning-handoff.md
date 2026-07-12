@@ -206,6 +206,7 @@ Codex 根据摘要输出两部分：
 - `estimatedMinutes`：预计分钟数。
 - `timerVisible`：是否进入计时器方案列表。
 - `lifecycle`：`active` / `published` / `archived`。`archived` 表示历史停用，身刻会强制从计时器选择器移除；不要用空数组清空历史方案。
+- `planBranch`：计划分支或训练对象，例如 `个人训练`、`儿童训练`、`辅助流程`。新 routine 必须显式写入，身刻方案库会先按此字段、再按 `scene` 分组。
 - `scene`：计时器分组，建议 `home` / `walk` / `recovery` / `travel`。
 - `sortOrder`：同组排序，数字越小越靠前。
 - `isDefault`：是否作为同组首选流程。

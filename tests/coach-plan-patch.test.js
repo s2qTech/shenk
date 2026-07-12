@@ -108,6 +108,9 @@ function routinePatch(overrides = {}) {
   assert.equal(archived.lifecycle, "archived");
   assert.equal(archived.timerVisible, false);
   assert.equal(archived.needsTimer, false);
+  const child = api.normalizeRoutineTemplateData(routinePatch({ title: "孩子力量", calendarVisible: false, countsTowardTraining: false }));
+  assert.equal(child.planBranch, "儿童训练");
+  assert.equal(child.scene, "home");
 }
 
 {
