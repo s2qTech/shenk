@@ -31,7 +31,9 @@ function loadAppTestApi() {
     normalizeDailyPlanItemData,
     normalizeRoutineTemplateData,
     mergeSharedRecords,
-    getRoutineLibraryEntries
+    getRoutineLibraryEntries,
+    getOutboxRecordsToPush,
+    buildOutboxEntries
   };
 `;
   const instrumented = source.replace(/\}\)\(\);\s*$/, `${hook}\n})();`);
@@ -146,6 +148,25 @@ function upsert(api, entity, data) {
     JSON.parse(JSON.stringify(api.getRoutineLibraryEntries().map((item) => item.id))),
     ["routine_active"]
   );
+}
+
+{
+  const api = loadAppTestApi();
+  reset(api);
+  upsert(api, "training_logs", {
+    id: "outbox_log",
+    date: "2099-06-02",
+    trainingType: "strength",
+    status: "completed"
+  });
+  const record = api.state.records.training_logs[0];
+  api.state.outbox = api.buildOutboxEntries();
+  assert.deepEqual(
+    JSON.parse(JSON.stringify(api.getOutboxRecordsToPush().map((item) => item.id))),
+    ["outbox_log"]
+  );
+  record.syncState = "clean";
+  assert.deepEqual(JSON.parse(JSON.stringify(api.getOutboxRecordsToPush())), []);
 }
 
 {

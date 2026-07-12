@@ -143,17 +143,22 @@
       const outboxRows = await getAll(outboxStoreName);
       const recordResult = await replaceRows(recordStoreName, toRecordRows(records));
       const outboxResult = await replaceRows(outboxStoreName, toOutboxRows(outboxEntries, outboxRows || []));
-      return { available: recordResult.available, recordResult, outboxResult };
+      return {
+        available: recordResult.available,
+        recordResult,
+        outboxResult,
+        outbox: recordResult.available ? await loadOutbox() : null
+      };
     }
 
-    async function initializeFromSnapshot(snapshotRecords, outboxEntries) {
+    async function initializeFromSnapshot(snapshotRecords, outboxEntries, backupPayload) {
       const database = await open();
       if (!database) return { available: false, migrated: false, records: null, outbox: null };
       const marker = await getOne(metaStoreName, migrationKey);
       if (!marker) {
         const backup = {
           createdAt: new Date().toISOString(),
-          records: clone(snapshotRecords || [])
+          snapshot: clone(backupPayload || { records: snapshotRecords || [] })
         };
         try {
           browser.localStorage?.setItem(`${backupKeyPrefix}${backup.createdAt}`, JSON.stringify(backup));

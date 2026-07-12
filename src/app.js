@@ -334,7 +334,8 @@
       lastResult: "",
       lastError: "",
       retryAt: ""
-    }
+    },
+    outbox: []
   };
 
   document.addEventListener("DOMContentLoaded", init);
@@ -345,8 +346,9 @@
     render();
     registerOfflineSupport();
     const snapshot = normalizeSnapshot(await loadSnapshot());
-    const migrated = await initializeEntityStore(snapshot.records);
+    const migrated = await initializeEntityStore(snapshot);
     if (migrated.records) snapshot.records = bucketSharedRecords(migrated.records);
+    state.outbox = Array.isArray(migrated.outbox) ? migrated.outbox : [];
     state.records = normalizeSharedRecords(snapshot.records);
     refreshLegacyCachesFromSharedRecords();
     if (!state.workouts.length) {
@@ -505,11 +507,13 @@
     else if (result.fallbackWriteError) state.message = "\u5df2\u4fdd\u5b58\u5230 localStorage";
   }
 
-  async function initializeEntityStore(records) {
+  async function initializeEntityStore(snapshot) {
+    const records = snapshot?.records || createEmptySharedRecords();
     try {
       return await EntityStore.initializeFromSnapshot(
         getAllSharedRecordEnvelopes(records),
-        buildOutboxEntries(records)
+        buildOutboxEntries(records),
+        snapshot
       );
     } catch (error) {
       return { available: false, migrated: false, records: null, outbox: null };
@@ -518,10 +522,11 @@
 
   async function persistEntityStore(records) {
     try {
-      await EntityStore.persist(
+      const result = await EntityStore.persist(
         getAllSharedRecordEnvelopes(records),
         buildOutboxEntries(records)
       );
+      if (Array.isArray(result.outbox)) state.outbox = result.outbox;
     } catch (error) {
       // The legacy snapshot remains the compatibility copy during dual-write rollout.
     }
@@ -532,6 +537,8 @@
     if (!entries.length) return;
     try {
       await EntityStore.recordFailure(entries.map((entry) => entry.key), message || "sync_failed", state.syncStatus.retryAt);
+      const outbox = await EntityStore.loadOutbox();
+      if (Array.isArray(outbox)) state.outbox = outbox;
     } catch (error) {
       // A failed retry marker must not block local persistence or UI recovery.
     }
@@ -4985,6 +4992,17 @@
     ));
   }
 
+  function getOutboxRecordsToPush() {
+    const recordsByKey = new Map(getAllSharedRecords().map((record) => [`${record.entity}:${record.id}`, record]));
+    const queued = (state.outbox || []).map((entry) => recordsByKey.get(entry.key) || entry.envelope).filter((item) => (
+      item &&
+      SHENK_WRITE_ENTITIES.includes(item.entity) &&
+      item.syncState !== "clean" &&
+      !item.conflict
+    ));
+    return queued.length ? queued : getDirtySharedRecords();
+  }
+
   function buildOutboxEntries(records = state.records) {
     return getAllSharedRecordEnvelopes(records).filter((item) => (
       item &&
@@ -5223,7 +5241,7 @@
 
   async function doPushDirtyRecords() {
     state.records = normalizeSharedRecords(state.records);
-    const records = getDirtySharedRecords();
+    const records = getOutboxRecordsToPush();
     if (!records.length) {
       clearAutoPushRetry();
       const now = new Date().toISOString();

@@ -103,12 +103,14 @@ async function run() {
     envelope: records[0]
   }];
 
-  const migrated = await store.initializeFromSnapshot(records, outbox);
+  const legacySnapshot = { schemaVersion: "v1", workouts: [], records };
+  const migrated = await store.initializeFromSnapshot(records, outbox, legacySnapshot);
   assert.equal(migrated.available, true);
   assert.equal(migrated.migrated, true);
   assert.equal(migrated.records.length, 1);
   assert.equal(migrated.outbox.length, 1);
   assert.equal(localStorage.keys().length, 1);
+  assert.equal(JSON.parse(localStorage.getItem(localStorage.keys()[0])).snapshot.schemaVersion, "v1");
 
   const second = await store.initializeFromSnapshot([], []);
   assert.equal(second.migrated, false);

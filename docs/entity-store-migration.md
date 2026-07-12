@@ -18,11 +18,12 @@ The existing `kv/snapshot` store is retained unchanged.
 ## First Open
 
 1. The existing snapshot is read through the v1-compatible path.
-2. Its normalized shared records are copied into `records`.
-3. Dirty Shenk-owned records are copied into `outbox`.
-4. A backup is written to `meta` and a localStorage key beginning with
+2. A complete legacy snapshot backup is written locally before any entity copy.
+3. Its normalized shared records are copied into `records`.
+4. Dirty Shenk-owned records are copied into `outbox`.
+5. The backup is written to `meta` and a localStorage key beginning with
    `training-assistant-v2:migration-backup:v2:`.
-5. A migration marker is written only after those writes succeed.
+6. A migration marker is written only after those writes succeed.
 
 If IndexedDB is unavailable or migration fails, the application continues using
 the existing snapshot/localStorage fallback. No cloud write is attempted by the
@@ -37,6 +38,11 @@ the entity-store path is verified in normal use.
 `records` and `outbox` use keyed diff writes. Unchanged rows are not rewritten.
 Deleted records remain tombstones in the store so another device cannot restore
 them accidentally.
+
+Outbound sync reads persisted outbox entries first. The in-memory dirty-record
+scan remains only as a compatibility fallback while the dual-write window is open.
+Accepted and conflicted records leave the outbox on the next local save; failed
+attempts retain a local error and attempt count for retry diagnostics.
 
 ## Rollback
 
