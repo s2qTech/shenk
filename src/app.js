@@ -2,7 +2,7 @@
   "use strict";
 
   const DB_NAME = "training-assistant-v2";
-  const DB_VERSION = 1;
+  const DB_VERSION = 2;
   const SNAPSHOT_KEY = "snapshot";
   const FALLBACK_KEY = "training-assistant-v2:snapshot";
   const DEVICE_KEY = "training-assistant-v2:device-id";
@@ -29,11 +29,26 @@
     dbVersion: DB_VERSION,
     storeName: "kv",
     snapshotKey: SNAPSHOT_KEY,
-    fallbackKey: FALLBACK_KEY
+    fallbackKey: FALLBACK_KEY,
+    extraStores: ["records", "outbox", "meta"]
   });
 
   if (!SnapshotStorage) {
     throw new Error("ShenkeSnapshotStorage is required before app.js");
+  }
+  const EntityStore = window.ShenkeEntityStore?.create({
+    window,
+    dbName: DB_NAME,
+    dbVersion: DB_VERSION,
+    recordStoreName: "records",
+    outboxStoreName: "outbox",
+    metaStoreName: "meta",
+    backupKeyPrefix: "training-assistant-v2:migration-backup:v2:",
+    migrationKey: "entity-store-v2"
+  });
+
+  if (!EntityStore) {
+    throw new Error("ShenkeEntityStore is required before app.js");
   }
   const SHARED_ENTITIES = [
     "plan_templates",
@@ -330,6 +345,8 @@
     render();
     registerOfflineSupport();
     const snapshot = normalizeSnapshot(await loadSnapshot());
+    const migrated = await initializeEntityStore(snapshot.records);
+    if (migrated.records) snapshot.records = bucketSharedRecords(migrated.records);
     state.records = normalizeSharedRecords(snapshot.records);
     refreshLegacyCachesFromSharedRecords();
     if (!state.workouts.length) {
@@ -483,8 +500,41 @@
     const snapshot = buildSnapshot();
     const result = await SnapshotStorage.save(snapshot);
     state.storageMode = result.mode;
+    await persistEntityStore(snapshot.records);
     if (message) state.message = message;
     else if (result.fallbackWriteError) state.message = "\u5df2\u4fdd\u5b58\u5230 localStorage";
+  }
+
+  async function initializeEntityStore(records) {
+    try {
+      return await EntityStore.initializeFromSnapshot(
+        getAllSharedRecordEnvelopes(records),
+        buildOutboxEntries(records)
+      );
+    } catch (error) {
+      return { available: false, migrated: false, records: null, outbox: null };
+    }
+  }
+
+  async function persistEntityStore(records) {
+    try {
+      await EntityStore.persist(
+        getAllSharedRecordEnvelopes(records),
+        buildOutboxEntries(records)
+      );
+    } catch (error) {
+      // The legacy snapshot remains the compatibility copy during dual-write rollout.
+    }
+  }
+
+  async function recordEntityStoreFailure(message) {
+    const entries = buildOutboxEntries();
+    if (!entries.length) return;
+    try {
+      await EntityStore.recordFailure(entries.map((entry) => entry.key), message || "sync_failed", state.syncStatus.retryAt);
+    } catch (error) {
+      // A failed retry marker must not block local persistence or UI recovery.
+    }
   }
 
   function buildSnapshot(options = {}) {
@@ -4905,7 +4955,21 @@
   }
 
   function getAllSharedRecords() {
-    return SHARED_ENTITIES.flatMap((entity) => Array.isArray(state.records[entity]) ? state.records[entity] : []);
+    return getAllSharedRecordEnvelopes(state.records);
+  }
+
+  function getAllSharedRecordEnvelopes(records) {
+    const source = records && typeof records === "object" ? records : {};
+    return SHARED_ENTITIES.flatMap((entity) => Array.isArray(source[entity]) ? source[entity] : []);
+  }
+
+  function bucketSharedRecords(records) {
+    const bucket = createEmptySharedRecords();
+    (records || []).forEach((record) => {
+      if (!record || !SHARED_ENTITIES.includes(record.entity)) return;
+      bucket[record.entity].push(record);
+    });
+    return bucket;
   }
 
   function getConflictRecords() {
@@ -4919,6 +4983,23 @@
       item.syncState !== "clean" &&
       !item.conflict
     ));
+  }
+
+  function buildOutboxEntries(records = state.records) {
+    return getAllSharedRecordEnvelopes(records).filter((item) => (
+      item &&
+      SHENK_WRITE_ENTITIES.includes(item.entity) &&
+      item.syncState !== "clean" &&
+      !item.conflict
+    )).map((item) => ({
+      key: `${item.entity}:${item.id}`,
+      entity: item.entity,
+      recordId: item.id,
+      operation: item.deletedAt ? "delete" : "upsert",
+      baseRevision: item.revision || 0,
+      envelope: cloneJson(item),
+      createdAt: item.createdAt || new Date().toISOString()
+    }));
   }
 
   async function handleSyncConfigSubmit(event) {
@@ -5191,6 +5272,7 @@
     } catch (error) {
       state.syncStatus.lastError = error.message || "云端读写失败";
       state.syncStatus.lastResult = "";
+      await recordEntityStoreFailure(state.syncStatus.lastError);
     } finally {
       state.syncStatus.busy = false;
       if (shouldRender) render();

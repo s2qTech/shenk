@@ -86,6 +86,14 @@ Timer writes:
 - Both apps retain static deployment, existing browser storage, cloud ownership boundaries, and accepted UI behavior.
 - Module boundaries are documented in `docs/module-boundaries.md` and `PROJECT_BOUNDARIES.md`.
 
+### Work Package 4: IndexedDB/outbox/sync v2 - in progress
+
+- IndexedDB v2 adds additive `records`, `outbox`, and `meta` stores while retaining the v1 `kv/snapshot` store.
+- First open backs up the normalized local record set before copying it into entity rows and outbox entries.
+- The current rollout is dual-write: old snapshots remain the compatibility copy while entity rows use keyed diff writes.
+- No cloud migration, D1 change, or physical record deletion is part of this stage.
+- Migration and rollback details are documented in `docs/entity-store-migration.md`.
+
 ## Active Development Direction
 
 The canonical next-stage documents are:

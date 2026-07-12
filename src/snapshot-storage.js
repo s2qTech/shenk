@@ -8,6 +8,7 @@
     const storeName = String(options.storeName || "kv");
     const snapshotKey = String(options.snapshotKey || "snapshot");
     const fallbackKey = String(options.fallbackKey || "shenke:snapshot");
+    const extraStores = Array.isArray(options.extraStores) ? options.extraStores.map(String).filter(Boolean) : [];
     let db = null;
 
     function openDatabase() {
@@ -20,6 +21,9 @@
         request.onupgradeneeded = () => {
           const nextDb = request.result;
           if (!nextDb.objectStoreNames.contains(storeName)) nextDb.createObjectStore(storeName);
+          extraStores.forEach((name) => {
+            if (!nextDb.objectStoreNames.contains(name)) nextDb.createObjectStore(name, { keyPath: "key" });
+          });
         };
         request.onsuccess = () => resolve(request.result);
         request.onerror = () => reject(request.error || new Error("IndexedDB open failed"));
