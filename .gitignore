@@ -12,6 +12,12 @@ screenshots/
 node_modules/
 dist/
 .vite/
+mobile/.capacitor/
+mobile/android/.gradle/
+mobile/android/.idea/
+mobile/android/.cxx/
+mobile/android/captures/
+mobile/android/local.properties
 wrangler.toml
 .wrangler/
 .agents/

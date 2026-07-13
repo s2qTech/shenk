@@ -1,0 +1,29 @@
+{
+  "name": "shenk-mobile",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 0.0.0.0",
+    "build": "vite build",
+    "preview": "vite preview",
+    "test": "node --test tests/*.test.js",
+    "android:sync": "pnpm run build && cap sync android",
+    "android:open": "cap open android",
+    "android:debug": "pnpm run android:sync && cd android && gradlew.bat assembleDebug"
+  },
+  "dependencies": {
+    "@aparajita/capacitor-secure-storage": "8.0.0",
+    "@capacitor/android": "8.4.1",
+    "@capacitor/app": "8.1.0",
+    "@capacitor/browser": "8.0.3",
+    "@capacitor/core": "8.4.1",
+    "@capacitor/filesystem": "8.1.2",
+    "@capacitor/haptics": "8.0.2"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "8.4.1",
+    "typescript": "5.9.3",
+    "vite": "8.1.4"
+  }
+}

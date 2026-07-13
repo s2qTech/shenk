@@ -102,6 +102,15 @@ Timer writes:
 - Settings separates routine daily sync from optional connection editing and device migration. Trend panels compact when a metric has no usable series and explain when a second value is needed.
 - The document root no longer announces every rendered page change through a global live region, and reduced-motion preferences suppress nonessential animation.
 
+### Work Package 6: Android foundation and independent mobile shell - completed
+
+- `mobile/` is an independent Vite + Capacitor 8 project with a generated Android container and Android CI workflow. It does not reuse the desktop seven-column calendar or date-detail drawer.
+- The mobile presentation is limited to Today, Training, Records, Data, and Settings. It reuses Contract v1 envelopes and the shared cloud ownership model, while keeping its mobile presentation logic separate.
+- Mobile domain tests cover effective-day priority, timer-session/formal-log separation, user-facing type labels, and timer URLs without tokens.
+- The mobile repository stores writable Shenk entities in its own IndexedDB rows/outbox and rejects writes to `timer_sessions`; cloud pull protects unsynced outbox rows from a silent overwrite.
+- Mobile config stores public API/Timer addresses locally but rejects secret persistence in a browser preview. Native Android uses the Secure Storage adapter backed by Android Keystore.
+- Capacitor adapters exist for Secure Storage, Haptics, Browser launch, and App lifecycle. Native foreground service, native TTS, Android file import/export, and real-device timer lifecycle verification intentionally remain the first follow-up stage rather than being claimed by the Web shell.
+
 ## Active Development Direction
 
 The canonical next-stage documents are:
@@ -126,4 +135,4 @@ Every completed package must report progress as `X / 7`, verification, compatibi
 
 ## Immediate Next Step
 
-Start work package 6 only after defining the Android project boundary, secure storage adapter, and independent mobile information architecture. No desktop layout should be reused as a scaled mobile UI.
+Work packages 0-6 are complete at the foundation level. The next stage starts with real Android-device validation: secure-storage round trip, offline outbox recovery, timer return flow, background/lock-screen constraints, and Android file import/export. No desktop layout should be reused as a scaled mobile UI.

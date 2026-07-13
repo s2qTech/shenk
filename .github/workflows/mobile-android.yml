@@ -1,0 +1,38 @@
+name: Mobile Android
+
+on:
+  push:
+    paths:
+      - "mobile/**"
+      - "contracts/v1/**"
+      - ".github/workflows/mobile-android.yml"
+  pull_request:
+    paths:
+      - "mobile/**"
+      - "contracts/v1/**"
+      - ".github/workflows/mobile-android.yml"
+
+jobs:
+  verify-mobile:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: mobile
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.7.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: mobile/pnpm-lock.yaml
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run test
+      - run: pnpm run android:sync
+      - run: ./android/gradlew assembleDebug
