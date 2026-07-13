@@ -10,6 +10,7 @@
     const metaStoreName = String(options.metaStoreName || "meta");
     const backupKeyPrefix = String(options.backupKeyPrefix || "shenke:migration-backup:");
     const migrationKey = String(options.migrationKey || "entity-store-v2");
+    const legacyCheckpointKey = String(options.legacyCheckpointKey || "legacy-snapshot-checkpoint-v2");
     let db = null;
 
     function clone(value) {
@@ -96,6 +97,15 @@
       });
     }
 
+    async function getMetaValue(key) {
+      const row = await getOne(metaStoreName, key);
+      return row?.value ?? null;
+    }
+
+    async function setMetaValue(key, value) {
+      return putOne(metaStoreName, { key, value: clone(value) });
+    }
+
     function toRecordRows(records) {
       return (records || []).filter((record) => record?.entity && record?.id).map((record) => ({
         key: `${record.entity}:${record.id}`,
@@ -173,7 +183,8 @@
         available: true,
         migrated: !marker,
         records: await loadRecords(),
-        outbox: await loadOutbox()
+        outbox: await loadOutbox(),
+        legacyCheckpoint: await getMetaValue(legacyCheckpointKey)
       };
     }
 
@@ -212,7 +223,16 @@
       return true;
     }
 
-    return { initializeFromSnapshot, loadRecords, loadOutbox, persist, recordFailure, scheduleRetry };
+    return {
+      initializeFromSnapshot,
+      loadRecords,
+      loadOutbox,
+      persist,
+      recordFailure,
+      scheduleRetry,
+      getMetaValue,
+      setMetaValue
+    };
   }
 
   global.ShenkeEntityStore = { create };

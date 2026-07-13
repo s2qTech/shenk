@@ -467,5 +467,11 @@ assert.match(appSource, /data\.type === "shenke\.timer\.ready"/);
 assert.match(appSource, /function respondToTimerReady\(/);
 assert.match(appSource, /event\.source !== timerFrame\.contentWindow/);
 assert.match(appSource, /\[50, 250, 900, 1800\]/);
+assert.match(appSource, /const entityResult = await persistEntityStore\(snapshot\.records\)/);
+assert.match(appSource, /function checkpointLegacySnapshot\(reason, force = false\)/);
+assert.match(appSource, /LEGACY_CHECKPOINT_INTERVAL_MS = 15 \* 60 \* 1000/);
+assert.match(appSource, /const stored = await EntityStore\.loadRecords\(\)/);
+assert.match(appSource, /const snapshot = buildSnapshotFromRecords\(records\)/);
+assert.match(appSource, /if \(legacyCheckpointPending\) return legacyCheckpointPending/);
 
 console.log("integration-flow tests passed");

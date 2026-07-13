@@ -13,6 +13,8 @@
   const SHARED_SCHEMA_VERSION = "2026-06-19-001";
   const SHARED_CONTRACT_VERSION = "1.0";
   const AUTO_PUSH_RETRY_DELAYS = [5000, 15000, 60000];
+  const LEGACY_CHECKPOINT_INTERVAL_MS = 15 * 60 * 1000;
+  const LEGACY_CHECKPOINT_META_KEY = "legacy-snapshot-checkpoint-v2";
   const SyncProfile = window.ShenkeSyncProfileCore?.create({
     defaultApiBase: DEFAULT_CLOUD_API_BASE,
     defaultTimerUrl: DEFAULT_TIMER_URL,
@@ -44,7 +46,8 @@
     outboxStoreName: "outbox",
     metaStoreName: "meta",
     backupKeyPrefix: "training-assistant-v2:migration-backup:v2:",
-    migrationKey: "entity-store-v2"
+    migrationKey: "entity-store-v2",
+    legacyCheckpointKey: LEGACY_CHECKPOINT_META_KEY
   });
 
   if (!EntityStore) {
@@ -298,6 +301,8 @@
   let messageTimer = null;
   let autoPushRetryTimer = null;
   let passiveCloudRefreshTimer = null;
+  let legacyCheckpointTimer = null;
+  let legacyCheckpointPending = null;
   let autoPushRetryCount = 0;
   let lastPassiveCloudRefreshAt = 0;
 
@@ -335,7 +340,9 @@
       lastError: "",
       retryAt: ""
     },
-    outbox: []
+    outbox: [],
+    entityStoreAvailable: false,
+    legacyCheckpointAt: ""
   };
 
   document.addEventListener("DOMContentLoaded", init);
@@ -347,6 +354,8 @@
     registerOfflineSupport();
     const snapshot = normalizeSnapshot(await loadSnapshot());
     const migrated = await initializeEntityStore(snapshot);
+    state.entityStoreAvailable = Boolean(migrated.available);
+    state.legacyCheckpointAt = migrated.legacyCheckpoint?.createdAt || "";
     if (migrated.records) snapshot.records = bucketSharedRecords(migrated.records);
     state.outbox = Array.isArray(migrated.outbox) ? migrated.outbox : [];
     state.records = normalizeSharedRecords(snapshot.records);
@@ -361,6 +370,10 @@
       await saveSnapshot("已载入历史种子记录");
     }
     state.ready = true;
+    registerLegacySnapshotCheckpoint();
+    if (state.entityStoreAvailable && (migrated.migrated || !state.legacyCheckpointAt)) {
+      await checkpointLegacySnapshot("migration", true);
+    }
     render();
     scheduleInitialCloudSync();
   }
@@ -390,6 +403,19 @@
     window.addEventListener("focus", () => schedulePassiveCloudRefresh(500));
     document.addEventListener("visibilitychange", () => {
       if (document.visibilityState === "visible") schedulePassiveCloudRefresh(500);
+    });
+  }
+
+  function registerLegacySnapshotCheckpoint() {
+    if (legacyCheckpointTimer) return;
+    legacyCheckpointTimer = window.setInterval(() => {
+      checkpointLegacySnapshot("interval");
+    }, LEGACY_CHECKPOINT_INTERVAL_MS);
+    window.addEventListener("pagehide", () => {
+      checkpointLegacySnapshot("pagehide");
+    });
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "hidden") checkpointLegacySnapshot("background");
     });
   }
 
@@ -500,11 +526,15 @@
 
   async function saveSnapshot(message) {
     const snapshot = buildSnapshot();
-    const result = await SnapshotStorage.save(snapshot);
-    state.storageMode = result.mode;
-    await persistEntityStore(snapshot.records);
+    const entityResult = await persistEntityStore(snapshot.records);
+    if (entityResult.available) {
+      state.storageMode = "IndexedDB v2";
+    } else {
+      const result = await SnapshotStorage.save(snapshot);
+      state.storageMode = result.mode;
+    }
     if (message) state.message = message;
-    else if (result.fallbackWriteError) state.message = "\u5df2\u4fdd\u5b58\u5230 localStorage";
+    else if (!entityResult.available) state.message = "\u5df2\u4fdd\u5b58\u5230 localStorage";
   }
 
   async function initializeEntityStore(snapshot) {
@@ -527,8 +557,56 @@
         buildOutboxEntries(records)
       );
       if (Array.isArray(result.outbox)) state.outbox = result.outbox;
+      state.entityStoreAvailable = Boolean(result.available);
+      return result;
     } catch (error) {
-      // The legacy snapshot remains the compatibility copy during dual-write rollout.
+      // The legacy snapshot remains the fallback when IndexedDB is unavailable.
+      state.entityStoreAvailable = false;
+      return { available: false, outbox: null };
+    }
+  }
+
+  async function checkpointLegacySnapshot(reason, force = false) {
+    if (!state.ready) return false;
+    if (legacyCheckpointPending) return legacyCheckpointPending;
+
+    const task = (async () => {
+      const previous = Date.parse(state.legacyCheckpointAt || "");
+      if (!force && Number.isFinite(previous) && Date.now() - previous < LEGACY_CHECKPOINT_INTERVAL_MS) return false;
+
+      let records = state.records;
+      if (state.entityStoreAvailable) {
+        try {
+          const stored = await EntityStore.loadRecords();
+          if (Array.isArray(stored)) records = bucketSharedRecords(stored);
+        } catch (error) {
+          // A compatibility checkpoint can still be rebuilt from current memory.
+        }
+      }
+      const snapshot = buildSnapshotFromRecords(records);
+      try {
+        const result = await SnapshotStorage.save(snapshot);
+        state.storageMode = state.entityStoreAvailable ? "IndexedDB v2" : result.mode;
+        const createdAt = new Date().toISOString();
+        state.legacyCheckpointAt = createdAt;
+        if (state.entityStoreAvailable) {
+          try {
+            await EntityStore.setMetaValue(LEGACY_CHECKPOINT_META_KEY, { createdAt, reason });
+          } catch (error) {
+            // The snapshot is valid even if its optional checkpoint marker cannot be updated.
+          }
+        }
+        return true;
+      } catch (error) {
+        return false;
+      }
+    })();
+
+    legacyCheckpointPending = task;
+    try {
+      return await task;
+    } finally {
+      if (legacyCheckpointPending === task) legacyCheckpointPending = null;
     }
   }
 
@@ -545,7 +623,11 @@
   }
 
   function buildSnapshot(options = {}) {
-    const records = normalizeSharedRecords(state.records);
+    return buildSnapshotFromRecords(state.records, options);
+  }
+
+  function buildSnapshotFromRecords(sourceRecords, options = {}) {
+    const records = normalizeSharedRecords(sourceRecords);
     const includeLegacy = options.includeLegacy === true;
     return {
       schemaVersion: SHARED_SCHEMA_VERSION,

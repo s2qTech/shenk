@@ -129,6 +129,15 @@ async function run() {
   const reopened = loadStore({ indexedDB, localStorage });
   assert.equal((await reopened.loadOutbox())[0].nextAttemptAt, "2099-01-01T00:00:30.000Z");
 
+  await store.setMetaValue("legacy-snapshot-checkpoint-v2", {
+    createdAt: "2099-01-01T00:00:31.000Z",
+    reason: "background"
+  });
+  assert.deepEqual(
+    JSON.parse(JSON.stringify(await reopened.getMetaValue("legacy-snapshot-checkpoint-v2"))),
+    { createdAt: "2099-01-01T00:00:31.000Z", reason: "background" }
+  );
+
   const cleanRecord = { ...records[0], syncState: "clean", revision: 2 };
   await store.persist([cleanRecord], []);
   const finalRecords = await store.loadRecords();

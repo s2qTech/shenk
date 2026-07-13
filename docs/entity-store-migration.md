@@ -29,11 +29,16 @@ If IndexedDB is unavailable or migration fails, the application continues using
 the existing snapshot/localStorage fallback. No cloud write is attempted by the
 migration itself.
 
-## Dual Write Window
+## Entity-Primary Write Window
 
-During the first v2 release, saves still update the legacy snapshot and also
-persist entity rows/outbox entries. This keeps older Web builds readable while
-the entity-store path is verified in normal use.
+Normal saves persist entity rows and outbox entries first. They do not rewrite
+the complete legacy snapshot on every edit.
+
+The `kv/snapshot` store remains a compatibility checkpoint. A checkpoint is
+rebuilt from the entity records after the first v2 migration, at most once every
+15 minutes, and when the app moves to the background or starts to unload. If
+IndexedDB is unavailable, the app falls back to the legacy snapshot write path
+for every save.
 
 `records` and `outbox` use keyed diff writes. Unchanged rows are not rewritten.
 Deleted records remain tombstones in the store so another device cannot restore
@@ -48,13 +53,15 @@ turn a scheduled retry into an untracked in-memory operation.
 
 ## Rollback
 
-Rollback is operationally simple: deploy the previous Web build. It continues to
-read `kv/snapshot`; v2 stores are additive and ignored by the previous build.
-The original snapshot is never deleted by this migration.
+The original snapshot is never deleted by this migration. A previous Web build
+can read the latest compatibility checkpoint from `kv/snapshot`; the v2 stores
+are additive and ignored by that build. For a rollback immediately after a
+series of edits, first allow the current app to move to the background so it
+writes a checkpoint, then deploy the prior build.
 
-## Exit Criteria For Full Cutover
+## Entity-Primary Cutover Checks
 
-Before the legacy snapshot stops receiving normal writes, verify:
+Verify the following after the legacy snapshot stops receiving normal writes:
 
 - a browser with an existing v1 snapshot migrates without losing records;
 - a clean browser starts with empty entity stores and remains usable offline;
@@ -62,4 +69,4 @@ Before the legacy snapshot stops receiving normal writes, verify:
 - a scheduled retry retains its attempt metadata and next retry time after a
   browser refresh;
 - cloud pull, conflict resolution, and tombstone sync preserve local state;
-- a previous Web build can still read the legacy snapshot during the dual-write window.
+- a compatibility checkpoint remains readable through the v1 snapshot path.
