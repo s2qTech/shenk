@@ -5189,12 +5189,25 @@
     const delay = overrideDelay ?? AUTO_PUSH_RETRY_DELAYS[Math.min(autoPushRetryCount, AUTO_PUSH_RETRY_DELAYS.length - 1)];
     if (countAsFailure) autoPushRetryCount += 1;
     state.syncStatus.retryAt = new Date(Date.now() + delay).toISOString();
+    persistEntityStoreRetryAt(state.syncStatus.retryAt);
     autoPushRetryTimer = window.setTimeout(async () => {
       autoPushRetryTimer = null;
       state.syncStatus.retryAt = "";
       await autoPushDirtyRecords(localMessage);
       render();
     }, delay);
+  }
+
+  async function persistEntityStoreRetryAt(nextAttemptAt) {
+    const entries = buildOutboxEntries();
+    if (!entries.length) return;
+    try {
+      await EntityStore.scheduleRetry(entries.map((entry) => entry.key), nextAttemptAt);
+      const outbox = await EntityStore.loadOutbox();
+      if (Array.isArray(outbox)) state.outbox = outbox;
+    } catch (error) {
+      // Retry scheduling remains usable in memory even when IndexedDB is unavailable.
+    }
   }
 
   function clearAutoPushRetry() {

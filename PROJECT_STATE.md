@@ -1,6 +1,6 @@
 # Project State
 
-Updated: 2026-07-11
+Updated: 2026-07-13
 
 ## Product Boundary
 
@@ -91,6 +91,7 @@ Timer writes:
 - IndexedDB v2 adds additive `records`, `outbox`, and `meta` stores while retaining the v1 `kv/snapshot` store.
 - First open backs up the normalized local record set before copying it into entity rows and outbox entries.
 - The current rollout is dual-write: old snapshots remain the compatibility copy while entity rows use keyed diff writes.
+- Outbox failure count, error detail, and scheduled retry time are durable across a refresh.
 - No cloud migration, D1 change, or physical record deletion is part of this stage.
 - Migration and rollback details are documented in `docs/entity-store-migration.md`.
 

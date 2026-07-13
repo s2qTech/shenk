@@ -196,7 +196,23 @@
       return true;
     }
 
-    return { initializeFromSnapshot, loadRecords, loadOutbox, persist, recordFailure };
+    async function scheduleRetry(keys, nextAttemptAt) {
+      const rows = await getAll(outboxStoreName);
+      if (rows === null) return false;
+      const target = new Set(keys || []);
+      const next = rows.map((row) => {
+        if (!target.has(row.key)) return row;
+        return {
+          ...row,
+          nextAttemptAt: nextAttemptAt || "",
+          updatedAt: new Date().toISOString()
+        };
+      });
+      await replaceRows(outboxStoreName, next);
+      return true;
+    }
+
+    return { initializeFromSnapshot, loadRecords, loadOutbox, persist, recordFailure, scheduleRetry };
   }
 
   global.ShenkeEntityStore = { create };

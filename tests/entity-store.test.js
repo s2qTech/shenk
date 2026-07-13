@@ -86,7 +86,8 @@ function loadStore(browser) {
 
 async function run() {
   const localStorage = createLocalStorage();
-  const store = loadStore({ indexedDB: createIndexedDb(), localStorage });
+  const indexedDB = createIndexedDb();
+  const store = loadStore({ indexedDB, localStorage });
   const records = [{
     id: "log_1",
     entity: "training_logs",
@@ -120,6 +121,13 @@ async function run() {
   const failed = await store.loadOutbox();
   assert.equal(failed[0].attempts, 1);
   assert.equal(failed[0].lastError, "offline");
+
+  await store.scheduleRetry(["training_logs:log_1"], "2099-01-01T00:00:30.000Z");
+  const scheduled = await store.loadOutbox();
+  assert.equal(scheduled[0].nextAttemptAt, "2099-01-01T00:00:30.000Z");
+
+  const reopened = loadStore({ indexedDB, localStorage });
+  assert.equal((await reopened.loadOutbox())[0].nextAttemptAt, "2099-01-01T00:00:30.000Z");
 
   const cleanRecord = { ...records[0], syncState: "clean", revision: 2 };
   await store.persist([cleanRecord], []);

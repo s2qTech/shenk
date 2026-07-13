@@ -42,7 +42,9 @@ them accidentally.
 Outbound sync reads persisted outbox entries first. The in-memory dirty-record
 scan remains only as a compatibility fallback while the dual-write window is open.
 Accepted and conflicted records leave the outbox on the next local save; failed
-attempts retain a local error and attempt count for retry diagnostics.
+attempts retain a local error, attempt count, and next retry time for retry
+diagnostics. Those fields are stored in the outbox row, so a refresh does not
+turn a scheduled retry into an untracked in-memory operation.
 
 ## Rollback
 
@@ -57,5 +59,7 @@ Before the legacy snapshot stops receiving normal writes, verify:
 - a browser with an existing v1 snapshot migrates without losing records;
 - a clean browser starts with empty entity stores and remains usable offline;
 - dirty save, failed push, reload, and retry preserve the same outbox item;
+- a scheduled retry retains its attempt metadata and next retry time after a
+  browser refresh;
 - cloud pull, conflict resolution, and tombstone sync preserve local state;
 - a previous Web build can still read the legacy snapshot during the dual-write window.
