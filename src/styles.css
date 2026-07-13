@@ -326,6 +326,19 @@ textarea {
   grid-template-rows: repeat(2, minmax(0, 1fr));
 }
 
+.data-page .data-trend-grid.has-empty-trends {
+  grid-template-rows: repeat(2, minmax(178px, auto));
+  align-content: start;
+}
+
+.data-page .data-trend-grid .trend-panel.is-empty {
+  min-height: 178px;
+}
+
+.data-page .data-trend-grid .trend-panel.is-empty .panel-body {
+  display: block;
+}
+
 .data-page .data-side-stack {
   grid-template-rows: auto minmax(0, 1fr);
 }
@@ -792,7 +805,7 @@ textarea {
   box-shadow: var(--shadow);
 }
 
-.date-drawer {
+  .date-drawer {
   position: fixed;
   top: 12px;
   right: 12px;
@@ -807,6 +820,14 @@ textarea {
   background: var(--surface);
   box-shadow: 0 24px 70px rgba(31, 41, 36, 0.22);
   animation: drawer-in 0.2s ease-out;
+}
+
+.drawer-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  background: rgba(31, 41, 36, 0.22);
+  backdrop-filter: blur(1px);
 }
 
 @keyframes drawer-in {
@@ -1244,6 +1265,20 @@ textarea {
   background: linear-gradient(180deg, #fbfcfa 0%, #f5f7f4 100%);
 }
 
+.trend-insufficient {
+  display: grid;
+  align-content: start;
+  gap: 12px;
+}
+
+.trend-insufficient-note {
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--radius-sm);
+  padding: 14px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
 .trend-grid {
   stroke: rgba(203, 214, 205, 0.75);
   stroke-width: 1;
@@ -1562,6 +1597,32 @@ textarea {
   gap: 12px;
   border-bottom: 1px solid rgba(223, 229, 223, 0.82);
   padding-bottom: 10px;
+}
+
+details.settings-block > summary {
+  cursor: pointer;
+  list-style: none;
+}
+
+details.settings-block > summary::-webkit-details-marker {
+  display: none;
+}
+
+details.settings-block > summary::after {
+  content: "⌄";
+  color: var(--muted);
+  font-size: 18px;
+  line-height: 1;
+  transition: transform 0.16s ease;
+}
+
+details.settings-block[open] > summary::after {
+  transform: rotate(180deg);
+}
+
+.settings-block-content {
+  display: grid;
+  gap: 12px;
 }
 
 .settings-block-head strong,
@@ -3125,7 +3186,7 @@ textarea {
     flex-direction: column;
   }
 
-  .date-drawer {
+.date-drawer {
     inset: auto 8px 8px;
     top: 70px;
     width: calc(100vw - 16px);
@@ -3300,5 +3361,16 @@ textarea {
 
   .day-kind {
     font-size: 12px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
   }
 }

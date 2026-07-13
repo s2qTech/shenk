@@ -86,7 +86,7 @@ Timer writes:
 - Both apps retain static deployment, existing browser storage, cloud ownership boundaries, and accepted UI behavior.
 - Module boundaries are documented in `docs/module-boundaries.md` and `PROJECT_BOUNDARIES.md`.
 
-### Work Package 4: IndexedDB/outbox/sync v2 - in progress
+### Work Package 4: IndexedDB/outbox/sync v2 - completed
 
 - IndexedDB v2 adds additive `records`, `outbox`, and `meta` stores while retaining the v1 `kv/snapshot` store.
 - First open backs up the normalized local record set before copying it into entity rows and outbox entries.
@@ -94,6 +94,13 @@ Timer writes:
 - Outbox failure count, error detail, and scheduled retry time are durable across a refresh.
 - No cloud migration, D1 change, or physical record deletion is part of this stage.
 - Migration and rollback details are documented in `docs/entity-store-migration.md`.
+
+### Work Package 5: Web information architecture and accessibility - completed
+
+- The Records entry now contains only confirmed formal training logs. Timer sessions remain source facts in date details and can prefill, but never compete as a second history page.
+- Date details use dialog semantics, a focus trap, Escape-to-close, focus restoration, and a background scrim. Calendar dates support arrow keys, Home/End, and Page Up/Down navigation.
+- Settings separates routine daily sync from optional connection editing and device migration. Trend panels compact when a metric has no usable series and explain when a second value is needed.
+- The document root no longer announces every rendered page change through a global live region, and reduced-motion preferences suppress nonessential animation.
 
 ## Active Development Direction
 
@@ -119,4 +126,4 @@ Every completed package must report progress as `X / 7`, verification, compatibi
 
 ## Immediate Next Step
 
-Start work package 4: design an entity-store IndexedDB migration and durable outbox. This requires an explicit migration preview, local backup, compatibility read path, and rollback plan before any user data is changed.
+Start work package 6 only after defining the Android project boundary, secure storage adapter, and independent mobile information architecture. No desktop layout should be reused as a scaled mobile UI.

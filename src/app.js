@@ -303,6 +303,8 @@
   let passiveCloudRefreshTimer = null;
   let legacyCheckpointTimer = null;
   let legacyCheckpointPending = null;
+  let detailReturnDate = "";
+  let pendingDetailFocus = false;
   let autoPushRetryCount = 0;
   let lastPassiveCloudRefreshAt = 0;
 
@@ -1587,7 +1589,7 @@
     app.innerHTML = `
       <div class="workspace">
         ${renderSideNav()}
-        <main class="workspace-main">
+        <main class="workspace-main" ${state.detailOpen ? "aria-hidden=\"true\"" : ""}>
           ${renderActiveTab()}
         </main>
         ${state.message ? `<div class="toast-message" role="status">${escapeHtml(state.message)}</div>` : ""}
@@ -1595,6 +1597,7 @@
       </div>
     `;
     bindEvents();
+    manageDateDrawerFocus();
     scheduleMessageDismiss();
   }
 
@@ -1616,7 +1619,7 @@
   function renderSideNav() {
     const tabs = ["calendar", "timer", "records", "data"];
     return `
-      <aside class="side-nav" aria-label="主导航">
+      <aside class="side-nav" aria-label="主导航" ${state.detailOpen ? "aria-hidden=\"true\"" : ""}>
         <nav class="side-tabs">
           ${tabs.map((id) => renderSideTab(id)).join("")}
         </nav>
@@ -1643,11 +1646,11 @@
     }
 
     if (state.activeTab === "records") {
-      return renderTimerSessionsPage();
+      return renderFormalRecordsPage();
     }
 
     if (state.activeTab === "data") {
-      return state.dataView === "records" ? renderAllRecordsPage() : renderDataSummaryPage();
+      return renderDataSummaryPage();
     }
 
     if (state.activeTab === "settings") {
@@ -1673,9 +1676,9 @@
     `;
   }
 
-  function panel(title, subtitle, body, action = "") {
+  function panel(title, subtitle, body, action = "", className = "") {
     return `
-      <section class="panel">
+      <section class="panel ${escapeHtml(className)}">
         <div class="panel-header">
           <div>
             <h2 class="panel-title">${escapeHtml(title)}</h2>
@@ -1723,11 +1726,11 @@
       <section class="content-page data-page">
         ${renderPageHead("数据")}
         <div class="data-grid-layout">
-          <div class="data-column data-trend-grid">
-            ${panel("体重趋势", "最近体重记录", renderWeightTrend())}
-            ${panel("腰围趋势", "最近腰围记录", renderWaistTrend())}
-            ${panel("体脂率趋势", "最近体脂记录", renderBodyFatTrend())}
-            ${panel("肌肉量趋势", "最近肌肉量记录", renderMuscleTrend())}
+          <div class="data-column data-trend-grid ${hasAnyEmptyBodyTrend() ? "has-empty-trends" : ""}">
+            ${renderDataTrendPanel("体重趋势", "最近体重记录", "weightKg", renderWeightTrend)}
+            ${renderDataTrendPanel("腰围趋势", "最近腰围记录", "waistCm", renderWaistTrend)}
+            ${renderDataTrendPanel("体脂率趋势", "最近体脂记录", "bodyFatPct", renderBodyFatTrend)}
+            ${renderDataTrendPanel("肌肉量趋势", "最近肌肉量记录", "muscleKg", renderMuscleTrend)}
           </div>
           <div class="data-column data-side-stack">
             ${panel("记录概览", "最近训练节奏", renderOverview())}
@@ -1744,16 +1747,20 @@
   }
 
   function renderAllRecordsPage() {
+    return renderFormalRecordsPage(true);
+  }
+
+  function renderFormalRecordsPage(showBackAction = false) {
     const records = recentWorkouts();
     return `
       <section class="content-page records-page">
         <div class="page-head records-page-head">
           <div class="page-title-group">
-            <h1>全部记录</h1>
+            <h1>训练记录</h1>
           </div>
-          <button type="button" class="subtle" data-action="back-to-data">返回数据</button>
+          ${showBackAction ? `<button type="button" class="subtle" data-action="back-to-data">返回数据</button>` : ""}
         </div>
-        ${records.length ? renderWeeklyRecordTimeline(records) : `<div class="empty-state">暂无记录。</div>`}
+        ${records.length ? renderWeeklyRecordTimeline(records) : `<div class="empty-state">暂无正式训练记录。</div>`}
       </section>
     `;
   }
@@ -1783,11 +1790,12 @@
     const canEdit = canEditSelectedDate();
     const editorTitle = getEditorTitle(date, hasRecord, isPast);
     return `
-      <aside class="date-drawer" aria-label="日期详情">
+      <div class="drawer-scrim" data-action="close-detail" aria-hidden="true"></div>
+      <aside class="date-drawer" role="dialog" aria-modal="true" aria-labelledby="date-drawer-title" tabindex="-1">
         <div class="drawer-head">
           <div>
             <p class="drawer-kicker">${escapeHtml(getSelectedPanelTitle())}</p>
-            <h2>${escapeHtml(date)}</h2>
+            <h2 id="date-drawer-title">${escapeHtml(date)}</h2>
           </div>
           <div class="drawer-actions">
             ${renderDrawerEditActions(date, isPast, hasEditableDate)}
@@ -1925,6 +1933,22 @@
     });
   }
 
+  function getBodyTrendRecords(key) {
+    return state.bodyMetrics
+      .filter((item) => item[key] !== null && item[key] !== undefined)
+      .sort((a, b) => a.date.localeCompare(b.date))
+      .slice(-30);
+  }
+
+  function hasAnyEmptyBodyTrend() {
+    return ["weightKg", "waistCm", "bodyFatPct", "muscleKg"].some((key) => !getBodyTrendRecords(key).length);
+  }
+
+  function renderDataTrendPanel(title, subtitle, key, renderTrend) {
+    const className = getBodyTrendRecords(key).length ? "trend-panel has-data" : "trend-panel is-empty";
+    return panel(title, subtitle, renderTrend(), "", className);
+  }
+
   function renderWaistTrend() {
     return renderBodyTrend({
       key: "waistCm",
@@ -1962,10 +1986,7 @@
   }
 
   function renderBodyTrend({ key, title, unit, emptyText, rangeFloor, deltaThreshold, className }) {
-    const records = state.bodyMetrics
-      .filter((item) => item[key] !== null && item[key] !== undefined)
-      .sort((a, b) => a.date.localeCompare(b.date))
-      .slice(-30);
+    const records = getBodyTrendRecords(key);
 
     if (!records.length) {
       return `<div class="empty-state">${escapeHtml(emptyText)}</div>`;
@@ -2000,25 +2021,38 @@
     const deltaClass = delta > deltaThreshold ? "trend-up" : delta < -deltaThreshold ? "trend-down" : "trend-flat";
     const latestPoint = points[points.length - 1];
 
+    const summary = `
+      <div class="trend-summary">
+        <div class="trend-stat primary-stat">
+          <span>最新</span>
+          <strong>${formatNumber(latest[key], 1)} ${unit}</strong>
+          <small>${formatShortDate(latest.date)}</small>
+        </div>
+        <div class="trend-stat">
+          <span>区间变化</span>
+          <strong class="${deltaClass}">${deltaText}</strong>
+          <small>${formatShortDate(first.date)} - ${formatShortDate(latest.date)}</small>
+        </div>
+        <div class="trend-stat">
+          <span>记录数</span>
+          <strong>${records.length}</strong>
+          <small>最近 ${records.length} 条</small>
+        </div>
+      </div>
+    `;
+
+    if (records.length === 1) {
+      return `
+        <div class="weight-trend body-trend ${className} trend-insufficient">
+          ${summary}
+          <div class="trend-insufficient-note">再记录一次后显示连线趋势。</div>
+        </div>
+      `;
+    }
+
     return `
       <div class="weight-trend body-trend ${className}">
-        <div class="trend-summary">
-          <div class="trend-stat primary-stat">
-            <span>最新</span>
-            <strong>${formatNumber(latest[key], 1)} ${unit}</strong>
-            <small>${formatShortDate(latest.date)}</small>
-          </div>
-          <div class="trend-stat">
-            <span>区间变化</span>
-            <strong class="${deltaClass}">${deltaText}</strong>
-            <small>${formatShortDate(first.date)} - ${formatShortDate(latest.date)}</small>
-          </div>
-          <div class="trend-stat">
-            <span>记录数</span>
-            <strong>${records.length}</strong>
-            <small>最近 ${records.length} 条</small>
-          </div>
-        </div>
+        ${summary}
         <svg class="trend-chart" viewBox="0 0 ${width} ${height}" preserveAspectRatio="none" role="img" aria-label="${escapeHtml(title)}">
           ${yTicks.map((tick) => {
             const y = padTop + ((chartMax - tick) / chartRange) * innerHeight;
@@ -3178,17 +3212,19 @@
     const token = config.token || "";
     const timerToken = config.timerToken || "";
     const configProfileId = config.configProfileId || "";
+    const showConnectionConfig = !(apiBase && token);
     const status = state.syncStatus.busy ? "云端读写中..." : state.syncStatus.lastResult || "未连接";
     const error = state.syncStatus.lastError;
     const retryText = state.syncStatus.retryAt ? `，下次自动重试 ${formatLocalDateTime(state.syncStatus.retryAt)}` : "";
     return `
       <form class="sync-form" id="sync-config-form">
-        <section class="settings-block sync-config-block">
-          <div class="settings-block-head">
+        <details class="settings-block sync-config-block" ${showConnectionConfig ? "open" : ""}>
+          <summary class="settings-block-head">
             <strong>连接配置</strong>
-            <span>保存到当前浏览器，不写入代码或 URL。</span>
-          </div>
-          <div class="settings-form-grid">
+            <span>仅首次连接或更换服务时修改。</span>
+          </summary>
+          <div class="settings-block-content">
+            <div class="settings-form-grid">
             <label>
               <span>API 地址</span>
               <input type="url" name="apiBase" placeholder="https://your-worker.workers.dev/api" value="${escapeHtml(apiBase)}">
@@ -3205,12 +3241,13 @@
               <span>计时器访问密钥</span>
               <input type="password" name="timerToken" autocomplete="off" placeholder="Worker TIMER_TOKEN，仅本地保存，不进 URL" value="${escapeHtml(timerToken)}">
             </label>
+            </div>
+            <div class="button-row settings-actions">
+              <button type="submit" class="primary">保存配置</button>
+              <button type="button" data-action="sync-health">测试连接</button>
+            </div>
           </div>
-          <div class="button-row settings-actions">
-            <button type="submit" class="primary">保存配置</button>
-            <button type="button" data-action="sync-health">测试连接</button>
-          </div>
-        </section>
+        </details>
 
         <section class="settings-block sync-status-block">
           <div class="settings-block-head">
@@ -3242,7 +3279,7 @@
           <p class="sync-status ${error ? "sync-error" : ""}">${escapeHtml(`${error || status}${retryText}`)}</p>
         </section>
 
-        <details class="settings-block sync-transfer sync-profile-block" open>
+        <details class="settings-block sync-transfer sync-profile-block">
           <summary>
             <strong>多端配置</strong>
             <span>用一段迁移码连接新浏览器</span>
@@ -3362,14 +3399,8 @@
     }
 
     app.querySelectorAll("[data-date]").forEach((button) => {
-      button.addEventListener("click", () => {
-        state.selectedDate = button.dataset.date;
-        state.visibleMonth = state.selectedDate.slice(0, 7);
-        state.detailOpen = true;
-        state.editMode = false;
-        clearEditorDrafts();
-        render();
-      });
+      button.addEventListener("click", () => openDateDrawer(button.dataset.date));
+      button.addEventListener("keydown", (event) => handleCalendarKeydown(event, button.dataset.date));
     });
 
     const calendarArea = app.querySelector("[data-calendar-area]");
@@ -3377,10 +3408,7 @@
       calendarArea.addEventListener("click", (event) => {
         if (!state.detailOpen) return;
         if (event.target.closest("[data-date]")) return;
-        state.detailOpen = false;
-        state.editMode = false;
-        clearEditorDrafts();
-        render();
+        closeDetail();
       });
     }
 
@@ -3523,8 +3551,7 @@
   }
 
   function openAllRecords() {
-    state.activeTab = "data";
-    state.dataView = "records";
+    state.activeTab = "records";
     state.detailOpen = false;
     state.editMode = false;
     clearEditorDrafts();
@@ -4585,6 +4612,7 @@
     state.selectedDate = date;
     state.visibleMonth = date.slice(0, 7);
     state.detailOpen = true;
+    pendingDetailFocus = true;
     closeEditorSection("training");
     const message = `已保存训练 ${date}`;
     await saveSnapshot(message);
@@ -4631,6 +4659,7 @@
     state.selectedDate = date;
     state.visibleMonth = date.slice(0, 7);
     state.detailOpen = true;
+    pendingDetailFocus = true;
     closeEditorSection("status");
     const message = `已保存状态 ${date}`;
     await saveSnapshot(message);
@@ -4699,6 +4728,8 @@
     state.activeTab = "calendar";
     state.detailOpen = true;
     state.editMode = true;
+    detailReturnDate = session.date;
+    pendingDetailFocus = true;
     state.timerFilters.selectedSessionId = session.id;
     openEditorSection("training");
     state.editorDrafts = {
@@ -4876,11 +4907,116 @@
     render();
   }
 
+  function openDateDrawer(date) {
+    if (!date) return;
+    detailReturnDate = date;
+    pendingDetailFocus = true;
+    state.selectedDate = date;
+    state.visibleMonth = date.slice(0, 7);
+    state.detailOpen = true;
+    state.editMode = false;
+    clearEditorDrafts();
+    render();
+  }
+
+  function manageDateDrawerFocus() {
+    const drawer = app.querySelector(".date-drawer");
+    if (!drawer) return;
+    drawer.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        closeDetail();
+        return;
+      }
+      if (event.key !== "Tab") return;
+      const focusable = getDrawerFocusableElements(drawer);
+      if (!focusable.length) {
+        event.preventDefault();
+        drawer.focus();
+        return;
+      }
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    });
+    if (!pendingDetailFocus) return;
+    pendingDetailFocus = false;
+    window.setTimeout(() => {
+      const closeButton = drawer.querySelector("[data-action='close-detail']");
+      (closeButton || drawer).focus();
+    }, 0);
+  }
+
+  function getDrawerFocusableElements(drawer) {
+    return [...drawer.querySelectorAll("button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex='-1'])")]
+      .filter((element) => element.getClientRects().length > 0);
+  }
+
+  function handleCalendarKeydown(event, date) {
+    const current = parseCalendarDate(date);
+    if (!current) return;
+    let next = null;
+    if (event.key === "ArrowLeft") next = addCalendarDays(current, -1);
+    if (event.key === "ArrowRight") next = addCalendarDays(current, 1);
+    if (event.key === "ArrowUp") next = addCalendarDays(current, -7);
+    if (event.key === "ArrowDown") next = addCalendarDays(current, 7);
+    if (event.key === "Home") next = addCalendarDays(current, -((current.getDay() + 6) % 7));
+    if (event.key === "End") next = addCalendarDays(current, 6 - ((current.getDay() + 6) % 7));
+    if (event.key === "PageUp") next = addCalendarMonths(current, event.shiftKey ? -12 : -1);
+    if (event.key === "PageDown") next = addCalendarMonths(current, event.shiftKey ? 12 : 1);
+    if (!next) return;
+    event.preventDefault();
+    focusCalendarDate(formatCalendarDate(next));
+  }
+
+  function parseCalendarDate(date) {
+    const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(date || ""));
+    if (!match) return null;
+    return new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
+  }
+
+  function addCalendarDays(date, amount) {
+    const next = new Date(date);
+    next.setDate(next.getDate() + amount);
+    return next;
+  }
+
+  function addCalendarMonths(date, amount) {
+    const targetYear = date.getFullYear();
+    const targetMonth = date.getMonth() + amount;
+    const lastDay = new Date(targetYear, targetMonth + 1, 0).getDate();
+    return new Date(targetYear, targetMonth, Math.min(date.getDate(), lastDay));
+  }
+
+  function formatCalendarDate(date) {
+    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+  }
+
+  function focusCalendarDate(date) {
+    state.selectedDate = date;
+    state.visibleMonth = date.slice(0, 7);
+    render();
+    window.setTimeout(() => {
+      app.querySelector(`[data-date="${date}"]`)?.focus();
+    }, 0);
+  }
+
   function closeDetail() {
+    const returnDate = detailReturnDate || state.selectedDate;
     state.detailOpen = false;
     state.editMode = false;
     clearEditorDrafts();
     render();
+    detailReturnDate = "";
+    window.setTimeout(() => {
+      app.querySelector(`[data-date="${returnDate}"]`)?.focus();
+    }, 0);
   }
 
   function enableSelectedEdit() {

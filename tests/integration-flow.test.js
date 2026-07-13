@@ -463,6 +463,7 @@ function upsert(api, entity, data) {
 }
 
 const appSource = fs.readFileSync(path.join(__dirname, "..", "src", "app.js"), "utf8");
+const indexSource = fs.readFileSync(path.join(__dirname, "..", "index.html"), "utf8");
 assert.match(appSource, /data\.type === "shenke\.timer\.ready"/);
 assert.match(appSource, /function respondToTimerReady\(/);
 assert.match(appSource, /event\.source !== timerFrame\.contentWindow/);
@@ -473,5 +474,10 @@ assert.match(appSource, /LEGACY_CHECKPOINT_INTERVAL_MS = 15 \* 60 \* 1000/);
 assert.match(appSource, /const stored = await EntityStore\.loadRecords\(\)/);
 assert.match(appSource, /const snapshot = buildSnapshotFromRecords\(records\)/);
 assert.match(appSource, /if \(legacyCheckpointPending\) return legacyCheckpointPending/);
+assert.match(appSource, /role="dialog" aria-modal="true"/);
+assert.match(appSource, /function handleCalendarKeydown\(/);
+assert.match(appSource, /function getDrawerFocusableElements\(/);
+assert.match(appSource, /function renderFormalRecordsPage\(/);
+assert.doesNotMatch(indexSource, /aria-live="polite"/);
 
 console.log("integration-flow tests passed");
