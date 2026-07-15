@@ -2348,10 +2348,12 @@
       if (record) {
         entries.set(date, calendarEntryFromRecord(record));
       } else {
-        const adjustment = getPlanAdjustmentsByDate(date).at(-1);
-        const planItem = getPlanItemsByDate(date)[0];
-        if (adjustment) entries.set(date, calendarEntryFromPlanAdjustment(adjustment));
-        else if (planItem) entries.set(date, calendarEntryFromPlanItem(planItem));
+        const effectivePlan = getEffectivePlanForDate(date);
+        if (effectivePlan?.source === "adjustment") {
+          entries.set(date, calendarEntryFromPlanAdjustment(effectivePlan.envelope));
+        } else if (effectivePlan?.source === "plan") {
+          entries.set(date, calendarEntryFromPlanItem(effectivePlan.envelope));
+        }
       }
     }
 
@@ -4393,10 +4395,11 @@
       applyPatchEntityRecord("routine_templates", routine, data, counters, now);
     });
 
-    getPatchArray(patch, "dailyPlanItems").forEach((item) => {
+    getPatchArray(patch, "dailyPlanItems").forEach((item, index) => {
+      const itemUpdatedAt = new Date(Date.parse(now) + index).toISOString();
       const data = normalizeDailyPlanItemData({
         ...item,
-        updatedAt: now,
+        updatedAt: itemUpdatedAt,
         createdAt: item.createdAt || now
       });
       if (!isPatchDeleteItem(item) && (!data || data.date < todayISO() || getWorkoutsByDate(data.date).length)) {
@@ -4409,14 +4412,18 @@
       if (result.applied && data?.date) firstDate = firstDate || data.date;
     });
 
-    getPatchArray(patch, "planAdjustments").forEach((adjustment) => {
+    getPatchArray(patch, "planAdjustments").forEach((adjustment, index) => {
+      const adjustmentUpdatedAt = new Date(Date.parse(now) + index).toISOString();
       const data = normalizePlanAdjustmentData({
         ...adjustment,
         adjustedBy: adjustment.adjustedBy || patch.generatedBy || "coach",
         reason: adjustment.reason || patch.reason || "",
-        updatedAt: now,
+        updatedAt: adjustmentUpdatedAt,
         createdAt: adjustment.createdAt || now
       });
+      if (data && !adjustment.adjustedAt && !adjustment.adjusted_at) {
+        data.adjustedAt = adjustmentUpdatedAt;
+      }
       const result = applyPatchEntityRecord("plan_adjustments", adjustment, data, counters, now);
       trackCalendarPatchResult(counters, result);
       if (result.applied && data?.date) firstDate = firstDate || data.date;
@@ -4525,7 +4532,7 @@
   }
 
   function findPlanItemForDate(date) {
-    return getPlanItemsByDate(date)[0] || null;
+    return getPlanItemsByDate(date).at(-1) || null;
   }
 
   function getLatestPlanAdjustmentForDate(date) {
@@ -5716,13 +5723,38 @@
   function getPlanItemsByDate(date) {
     return (state.records.daily_plan_items || [])
       .filter((item) => !item.deletedAt && item.data?.date === date)
-      .sort(compareSharedEnvelopes);
+      .sort(comparePlanEnvelopesByRecency);
   }
 
   function getPlanAdjustmentsByDate(date) {
     return (state.records.plan_adjustments || [])
       .filter((item) => !item.deletedAt && item.data?.date === date)
-      .sort(compareSharedEnvelopes);
+      .sort(comparePlanEnvelopesByRecency);
+  }
+
+  function comparePlanEnvelopesByRecency(a, b) {
+    const timeComparison = getPlanEnvelopeEffectiveTime(a).localeCompare(getPlanEnvelopeEffectiveTime(b));
+    if (timeComparison) return timeComparison;
+    const revisionComparison = (a.revision || 0) - (b.revision || 0);
+    if (revisionComparison) return revisionComparison;
+    const createdComparison = String(a.createdAt || a.data?.createdAt || "")
+      .localeCompare(String(b.createdAt || b.data?.createdAt || ""));
+    return createdComparison || String(a.id || "").localeCompare(String(b.id || ""));
+  }
+
+  function getPlanEnvelopeEffectiveTime(envelope) {
+    const data = envelope?.data || {};
+    return String(
+      data.updatedAt
+      || data.updated_at
+      || envelope?.updatedAt
+      || data.adjustedAt
+      || data.adjusted_at
+      || data.createdAt
+      || data.created_at
+      || envelope?.createdAt
+      || ""
+    );
   }
 
   function getTimerSessionsForDate(date) {

@@ -25,7 +25,9 @@ function loadAppTestApi() {
     normalizeRoutineTemplateData,
     previewPlanPatch,
     applyCoachPlanPatch,
-    findSharedRecordById
+    findSharedRecordById,
+    getEffectivePlanForDate,
+    buildMonthCalendarEntries
   };
 `;
   const instrumented = source.replace(/\}\)\(\);\s*$/, `${hook}\n})();`);
@@ -126,6 +128,37 @@ function routinePatch(overrides = {}) {
   assert.equal(recoveryStretch.scene, "recovery");
   const seated = api.normalizeRoutineTemplateData(routinePatch({ title: "座位活动", trainingType: "seat_recovery", scene: "recovery" }));
   assert.equal(seated.scene, "travel");
+}
+
+{
+  const api = loadAppTestApi();
+  reset(api);
+  upsert(api, "plan_adjustments", {
+    id: "adjust_old_import",
+    date: "2099-08-03",
+    reason: "Old import",
+    adjustedAt: "2020-01-01T00:00:00.000Z",
+    updatedAt: "2020-01-01T00:00:00.000Z",
+    toSnapshot: {
+      date: "2099-08-03",
+      title: "Old recovery",
+      trainingType: "recovery"
+    }
+  });
+  api.applyCoachPlanPatch({
+    schema: "coach_plan_patch",
+    effectiveFrom: "2099-08-03",
+    planAdjustments: [{
+      date: "2099-08-03",
+      title: "Updated strength",
+      trainingType: "strength",
+      reason: "New import"
+    }]
+  });
+  const effective = api.getEffectivePlanForDate("2099-08-03");
+  assert.equal(effective.source, "adjustment");
+  assert.equal(effective.data.title, "Updated strength");
+  assert.equal(effective.data.trainingType, "strength");
 }
 
 {
@@ -430,6 +463,40 @@ function routinePatch(overrides = {}) {
   const records = api.state.records.plan_adjustments.filter((item) => !item.deletedAt);
   assert.equal(records.length, 2);
   assert.notEqual(records[0].id, records[1].id);
+  const effective = api.getEffectivePlanForDate("2099-08-01");
+  assert.equal(effective.source, "adjustment");
+  assert.equal(effective.data.title, "Recovery");
+  assert.equal(effective.data.trainingType, "recovery");
+  const calendarEntry = api.buildMonthCalendarEntries(2099, 8).get("2099-08-01");
+  assert.equal(calendarEntry.kind, "adjustment");
+  assert.equal(calendarEntry.type, "recovery");
+  assert.match(calendarEntry.text, /Recovery/);
+}
+
+{
+  const api = loadAppTestApi();
+  reset(api);
+  upsert(api, "daily_plan_items", {
+    id: "daily_old_plan",
+    date: "2099-08-02",
+    title: "Old walk",
+    trainingType: "easy_walk",
+    updatedAt: "2099-01-01T00:00:00.000Z"
+  });
+  upsert(api, "daily_plan_items", {
+    id: "daily_new_plan",
+    date: "2099-08-02",
+    title: "New strength",
+    trainingType: "strength",
+    updatedAt: "2099-02-01T00:00:00.000Z"
+  });
+  const effective = api.getEffectivePlanForDate("2099-08-02");
+  assert.equal(effective.source, "plan");
+  assert.equal(effective.data.title, "New strength");
+  const calendarEntry = api.buildMonthCalendarEntries(2099, 8).get("2099-08-02");
+  assert.equal(calendarEntry.kind, "plan");
+  assert.equal(calendarEntry.type, "strength");
+  assert.match(calendarEntry.text, /New strength/);
 }
 
 {
