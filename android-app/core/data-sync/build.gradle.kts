@@ -4,7 +4,7 @@ plugins {
 
 android {
     namespace = "io.s2qtech.shenk.sync"
-    compileSdk = 37
+    compileSdk = 36
 
     defaultConfig {
         minSdk = 26

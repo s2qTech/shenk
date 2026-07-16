@@ -39,6 +39,7 @@ test("Package 0 remains diagnostic-only and Contract v1 only", () => {
 
   assert.match(app, /仅用于验证原生工程/);
   assert.match(versions, /agp = "9\.2\.1"/);
+  assert.match(versions, /core = "1\.18\.0"/);
   assert.doesNotMatch(versions, /org\.jetbrains\.kotlin\.android/);
   assert.equal(fixture.synthetic, true);
   assert.equal(fixture.contractVersion, "1.0");
