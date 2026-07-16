@@ -34,11 +34,13 @@ test("native Android Package 0 keeps the accepted small module graph", () => {
 
 test("native CI gates the emulator behind verify and bounds its runtime", () => {
   const workflow = read(".github/workflows/android-native.yml");
+  const instrumentationScript = read("android-app/ci/run-instrumentation.sh");
 
   assert.match(workflow, /needs: verify/);
-  assert.match(workflow, /timeout-minutes: 15/);
+  assert.match(workflow, /timeout-minutes: 30/);
   assert.match(workflow, /api-level: 34/);
   assert.match(workflow, /script: \.\/ci\/run-instrumentation\.sh/);
+  assert.match(instrumentationScript, /timeout --signal=TERM 12m/);
 });
 
 test("Package 0 remains diagnostic-only and Contract v1 only", () => {

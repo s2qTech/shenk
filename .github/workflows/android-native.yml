@@ -63,7 +63,9 @@ jobs:
   instrumentation:
     needs: verify
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    # The emulator action installs and cold-boots its system image before the
+    # test script starts. Keep the job allowance separate from the test limit.
+    timeout-minutes: 30
     defaults:
       run:
         working-directory: android-app
