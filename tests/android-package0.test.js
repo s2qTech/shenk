@@ -44,7 +44,11 @@ test("Package 0 remains diagnostic-only and Contract v1 only", () => {
 
 test("Capacitor prototype is visibly frozen", () => {
   const readme = read("mobile/README.md");
+  const workflow = read(".github/workflows/mobile-android.yml");
   assert.match(readme, /验证原型（冻结）/);
   assert.match(readme, /不再接收生产功能/);
   assert.match(readme, /android-app\//);
+  assert.doesNotMatch(workflow, /assembleDebug/);
+  assert.match(workflow, /pnpm run test/);
+  assert.match(workflow, /pnpm run android:sync/);
 });

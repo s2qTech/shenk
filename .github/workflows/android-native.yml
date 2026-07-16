@@ -32,7 +32,21 @@ jobs:
       - name: Install pinned Android SDK
         run: sdkmanager "platforms;android-36" "build-tools;36.0.0"
       - name: Verify source, tests, lint, and debug APK
-        run: ./gradlew package0Check
+        shell: bash
+        run: |
+          set +e
+          ./gradlew package0Check 2>&1 | tee package0-check.log
+          result=${PIPESTATUS[0]}
+          if [ "$result" -ne 0 ]; then
+            {
+              echo "### Native Android verification failed"
+              echo
+              echo '```text'
+              tail -n 160 package0-check.log
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+          exit "$result"
       - uses: actions/upload-artifact@v4
         with:
           name: shenk-package0-debug
