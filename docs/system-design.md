@@ -1,12 +1,20 @@
 # System Design
 
-更新日期：2026-07-11
+更新日期：2026-07-17
+
+> Android 生产架构已由 `android-technical-architecture.md` 取代。本文继续描述当前 Web/Worker 基线；其中“后续 Android”不再表示复用 Web runtime。
 
 ## 当前架构
 
 ```text
-身刻 Web / 后续 Android
+身刻 Web
   -> 本地 IndexedDB + outbox
+  -> Cloudflare Worker API
+  -> Cloudflare D1
+
+身刻 Android（计划）
+  -> Kotlin + Jetpack Compose
+  -> Room + outbox + WorkManager
   -> Cloudflare Worker API
   -> Cloudflare D1
 
@@ -83,7 +91,7 @@ home-training-timer Web
 - 不先做 UI 框架重写；优先抽离 domain、storage、sync 和 adapter。
 - IndexedDB 从整包快照转为实体 store + outbox。
 - Worker 从逐条无界操作转为批量、分页和实体 schema 校验。
-- Android 复用领域层和同步协议，使用独立移动呈现。
+- Android 复用领域语义、数据契约、同步协议和 fixtures，使用独立 Kotlin/Compose 实现，不复用 Web 页面或 JavaScript runtime。
 
 ## 安全
 

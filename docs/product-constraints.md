@@ -1,5 +1,7 @@
 # Product Constraints
 
+> Status: historical product notes superseded on 2026-07-16 by `android-product-blueprint.md` and `android-delivery-and-constraints.md`. Do not use this file to add phase-1 features such as weather or screenshot recognition.
+
 ## 目标用户
 
 当前目标用户是单人使用的中年男性，存在以下现实约束：

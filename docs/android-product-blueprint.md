@@ -1,0 +1,265 @@
+# Android Product Blueprint
+
+Updated: 2026-07-16
+Status: confirmed product direction; implementation has not started
+
+## 1. Product Definition
+
+Shenk is a personal-first training companion that helps the user find sustainable exercise time inside a fragmented daily life. It is not a generic fitness content library, a calorie tracker, or an autonomous coach that overrides the user.
+
+The product loop is:
+
+```text
+morning status and measurements
+  -> effective guidance for today
+  -> training or rest execution
+  -> actual record and daily review
+  -> weekly feedback to advanced AI
+  -> validated plan update for the next week
+```
+
+The Android app is the primary daily product and should eventually cover about 80% of use. The Web app remains a compatible baseline and administration fallback.
+
+## 2. Product Principles
+
+1. Health and sustainable execution come before short-term weight loss speed.
+2. The user's actual body response and execution always win over a proposed plan.
+3. An advanced AI plan has higher authority than a local fallback suggestion.
+4. Missing data is shown as missing. It is never silently converted to rest or normal status.
+5. Recording should take less than five minutes and support one-handed operation.
+6. Offline use is a core capability, not a degraded afterthought.
+7. The interface should feel refined, light, positive, and native to Android rather than like a scaled Web page.
+8. Gestures may accelerate common actions, but every important action also needs a discoverable and accessible control.
+
+## 3. Authority Model
+
+| Source | May do | Must not do |
+| --- | --- | --- |
+| User | Execute, skip, rest, correct records, report discomfort, choose a shorter strength routine | Be forced to follow a plan that conflicts with actual condition |
+| Advanced AI through ChatGPT | Create weekly strategy, plans, goals, routines, and plan patches | Write directly without validation and confirmation |
+| Daily compatible AI | Review the day, warn, explain, and suggest within the latest advanced-AI strategy | Modify formal plans or routines |
+| Local fallback engine | Offer generic guidance when a formal plan is unavailable or offline | Pretend to be a formal AI plan |
+
+## 4. Phase 1 Scope
+
+### Included
+
+- Native Android Today experience and whole-month calendar.
+- Morning check-in and optional pre-workout delta check-in.
+- Weight, body-fat percentage, muscle mass, and waist recording.
+- Total sleep duration, deep-sleep duration, sleep quality, fatigue, and regional pain.
+- Formal plan inbox through Android share and paste fallback.
+- Patch validation, preview, apply, and undo-latest.
+- Sunday-to-Saturday formal weekly plan; future dates beyond the plan use clearly labelled local suggestions.
+- Native timer with routine selection, preview, voice, keep-screen-on, pause/resume, call interruption handling, music ducking, and post-workout completion.
+- Routine library with explicit scene and role, details, active/inactive state, and enable/disable control.
+- Formal training and rest records, recent-record correction, and data trends.
+- Daily AI review after training or confirmed rest.
+- Weekly feedback package generated Saturday evening and shared to ChatGPT.
+- Offline-first storage, durable outbox, encrypted configuration migration, and full JSON backup.
+- Four configurable reminders: morning, midday missing data, evening unrecorded, and weekly review.
+
+### Phase 2
+
+- Xiaomi Band 9 Pro / Xiaomi Fitness or Health Connect integration where technically available.
+- Xiaomi scale import beyond the phase-1 manual flow.
+- A polished 2x2 rotating home-screen widget.
+- High-quality exercise animation assets linked through `mediaAssetId`.
+
+### Explicitly Excluded From Phase 1
+
+- Diet and calorie recognition.
+- Multi-user accounts and public distribution infrastructure.
+- Weather-based plan changes.
+- A local AI that autonomously edits formal plans.
+- Generic social, leaderboard, or gamification features.
+- A WebView wrapper of the desktop Web UI.
+
+## 5. Primary Information Architecture
+
+The main Android experience is a continuous horizontal space:
+
+```text
+Calendar  <-  Today  ->  Training
+```
+
+- **Today** is the default anchor.
+- A leftward reveal opens the whole-month calendar and its date stream.
+- A rightward reveal opens the native training/timer space.
+- Returning to Today while a timer is active shows only a compact “training in progress” state. It does not duplicate timer controls.
+- System back, visible navigation controls, and accessibility actions must provide alternatives to gestures.
+
+Secondary spaces are reached from a compact, native menu or a contextual pull-down surface:
+
+- Records
+- Data
+- Plan inbox
+- Routine library
+- Settings and backup
+
+The final navigation control may be refined during visual prototyping, but a conventional five-tab Web layout must not be treated as the default.
+
+## 6. Today Experience
+
+Today is one adaptable canvas rather than a dashboard of nested cards.
+
+### Morning State
+
+- Missing check-in prompt, or a concise morning summary.
+- Today’s effective plan.
+- Measurement delta from yesterday or the recent baseline when useful.
+- A small list of genuinely missing information, not a permanent checklist.
+
+### Daytime State
+
+- Effective plan remains visible.
+- An optional one-time midday reminder can surface missing information.
+- A lightweight status update can record only changed fields such as fatigue or discomfort.
+
+### Pre-workout State
+
+- User may add a delta check-in; omitted fields inherit the morning check-in.
+- Plan and relevant safety notes remain visible.
+- If the formal plan requires a timer routine, Today can enter Training with the matching routine selected.
+
+### Completed State
+
+- Actual execution replaces plan prominence.
+- Daily review shows three fields: `today conclusion`, `key evidence`, and `attention needed`.
+- The original plan is available in details but does not compete with the actual record.
+
+### Unrecorded State
+
+- The day remains `unrecorded` until the user confirms training, rest, or skip.
+- Late reminders prompt once; they do not silently create a rest record.
+
+## 7. Calendar Experience
+
+The user wants the entire month visible, but not as a cramped desktop seven-column grid.
+
+The design prototype should explore a continuous month rhythm:
+
+- Week bands or a vertically flowing month stream preserve month context.
+- Actual records, formal plans, and local suggestions have distinct visual languages.
+- Actual execution is strongest; formal plans use structured patterned treatment; local suggestions are quieter.
+- Today is always easy to return to and can expand through a container transformation rather than a hard page jump.
+- The default month view prioritizes completion rhythm and upcoming formal plans.
+- A day normally displays one effective training item. Multiple source records remain available in date details.
+
+Display priority is:
+
+```text
+actual record > effective formal plan > local fallback suggestion
+```
+
+Plan adjustments are resolved into the effective formal plan. Adjustment history is not shown as a competing calendar layer.
+
+## 8. Morning and Status Recording
+
+### Measurements
+
+- Weight, body-fat percentage, and muscle mass are primary daily trend values.
+- Waist is recordable and shown as a concise change rather than a fourth equal-weight chart on Today.
+- Values use wheel/stepper interactions tuned for small daily changes and one-handed input.
+- Missing values may be skipped without later forcing completion.
+
+### Sleep and Readiness
+
+- Total sleep duration.
+- Deep-sleep duration.
+- Subjective sleep quality.
+- Fatigue.
+- Optional work-pressure prompt when context requires it.
+
+### Pain and Discomfort
+
+Regions:
+
+- neck and shoulder
+- wrist
+- lower back
+- hip and glute
+- thigh and knee
+- calf and ankle
+- other
+
+The flow starts with a fast `no abnormality` action. Fatigue and pain are distinct. Severity is captured only when a region is selected.
+
+## 9. Native Training and Timer
+
+### Entry Behavior
+
+- Strength and recovery plans may preselect the matching routine.
+- Walking plans open the walking scene; the user manually chooses warmup or stretch.
+- The user may switch routines before starting.
+- A cached routine is an offline executable copy, not a replacement for the AI-managed source.
+
+### Preview
+
+- Show logical exercises, not expanded prepare/switch implementation steps as separate exercises.
+- Every exercise can be opened before training to inspect cues and warnings.
+- Preparation, side switching, and bilateral execution remain visible as execution details.
+
+### Active Timer
+
+- Portrait is the app default; the timer supports portrait and landscape without losing state.
+- Keep the screen on only while training is active.
+- Incoming calls pause the timer.
+- Voice cues temporarily duck other audio instead of stopping it.
+- No vibration is required.
+- Female text-to-speech is preferred when available.
+- Every exercise announces its cue together with countdown behavior.
+- Current action, remaining time, exercise cues, and warnings are the dominant content.
+- Do not create a custom lock-screen experience. If Android requires a foreground-service notification, keep it minimal and private.
+
+### Completion
+
+1. Persist the immutable `timer_session` fact first.
+2. Open post-workout completion for average heart rate, subjective result, and notes.
+3. Confirmation creates or updates the formal `training_log`.
+4. Leaving before confirmation keeps the session as `pending completion`.
+
+Walking records may come from wearable data or manual entry and do not require a timer match.
+
+## 10. Daily AI Review
+
+- Runs after a formal workout, confirmed rest, or explicit skip is recorded.
+- Covers rest days and may point out avoidable inactivity, but remains factual and professional.
+- Missing key status data prompts the user to complete it or explicitly generate from available data.
+- Offline requests are queued and generated automatically when connectivity returns.
+- Correcting the day regenerates the review; only the latest review is prominent.
+- The review never modifies a formal plan.
+
+## 11. Weekly Feedback and Plan Intake
+
+- Saturday at 22:30, generate a shareable feedback package.
+- Include 14-day details, 30-day trend summary, current plan and routine versions, unresolved discomfort, skips, short versions, and relevant reasons.
+- Share directly to the established ChatGPT coaching conversation.
+- Plan patches enter through Android share or paste.
+- A patch is validated as a whole, previewed, and only then applied.
+- Validation failure rejects the whole patch.
+- Only the latest applied patch needs one-step undo.
+
+## 12. Visual and Motion Direction
+
+- Tone: a restrained professional coach and dependable companion.
+- Character: refined, light, positive, and designed; not clinical, childish, or overly decorative.
+- Light and dark themes follow the phone.
+- Use a broader accent system than the current Web palette while keeping Shenk brand recognition.
+- Avoid nested cards, oversized dashboard typography, constant explanatory copy, and conventional form-heavy screens.
+- Use spatial transitions: shared-axis movement between Calendar/Today/Training and container transforms for expanding a date.
+- Default motion should be subtle, approximately 180–280 ms, with reduced-motion support.
+- Every gesture path must have an accessible semantic action and meet font scaling and contrast requirements.
+
+## 13. Phase 1 Success Criteria
+
+The first release succeeds when the user can stop opening the Web app for most daily tasks:
+
+1. Complete a morning check-in in under five minutes with one hand.
+2. See the correct effective plan offline.
+3. Run a complete native timer session without losing state on rotation or a phone call.
+4. Save actual training and generate a daily review.
+5. See one month of rhythm and one month of body trends.
+6. Import and undo a validated weekly plan patch.
+7. Produce and share the weekly feedback package to ChatGPT.
+8. Reconnect after offline use and synchronize without silent data loss.

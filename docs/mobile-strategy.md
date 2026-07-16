@@ -1,5 +1,7 @@
 # Mobile Strategy
 
+> Status: superseded as a production strategy on 2026-07-16. The confirmed Android implementation uses Kotlin and Jetpack Compose. This file remains historical context for the Capacitor prototype.
+
 更新日期：2026-07-11
 
 ## 结论

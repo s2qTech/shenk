@@ -1,5 +1,7 @@
 # Android Foundation
 
+> Status: superseded as a production direction on 2026-07-16. The Capacitor project described below is retained only as a prototype. The confirmed native direction is defined in `android-product-blueprint.md`, `android-technical-architecture.md`, `android-contract-v2-plan.md`, and `android-delivery-and-constraints.md`.
+
 ## 目标
 
 Android 端复用身刻的业务数据契约、离线记录原则和云端同步协议，但拥有独立的移动信息架构。它不是桌面 Web 的缩放版本。

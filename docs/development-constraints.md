@@ -1,8 +1,8 @@
 # 开发约束边界
 
-更新日期：2026-07-11
+更新日期：2026-07-17
 
-本文是身刻、`home-training-timer`、Cloudflare Worker 和未来 Android 客户端的强制约束。除非用户明确批准变更，并同步更新数据契约、迁移和测试，否则不得绕过。
+本文是身刻、`home-training-timer`、Cloudflare Worker 和原生 Android 客户端的强制约束。仓库入口和优先级见根目录 `AGENTS.md`，机器可读摘要见 `governance/guardrails.json`。除非用户明确批准变更，并同步更新数据契约、ADR、迁移和测试，否则不得绕过。
 
 ## 1. 产品职责
 
@@ -13,7 +13,7 @@
 - 本地优先存储、同步协调和冲突处理。
 - 从日计划打开计时器，并读取计时事实。
 
-### 计时器必须负责
+### 计时模块必须负责
 
 - routine 选择、预览、运行时 step 展开和状态机。
 - 语音、提示音、常亮、暂停、恢复和停止。
@@ -30,13 +30,13 @@
 
 - 不强行合并两个前端仓库。
 - 计时器不得写 `training_logs`、`body_metrics` 或计划实体。
-- 身刻不得写、改写或删除 `timer_sessions`。
+- Web/Android 的日历、计划和记录模块不得写、改写或删除 `timer_sessions`；Web 计时器和 Android 原生计时器作为计时模块可写入。
 - Worker 不得替用户自动改变训练计划或正式训练记录。
 
 ## 2. 数据所有权
 
-- `plan_templates`、`routine_templates`、`daily_plan_items`、`plan_adjustments`、`training_logs`、`body_metrics`、`weather_logs`、`media_assets`、`feedback_summaries` 由身刻写。
-- `timer_sessions` 只由计时器写。
+- `plan_templates`、`routine_templates`、`daily_plan_items`、`plan_adjustments`、`training_logs`、`body_metrics`、`status_checkins`、`daily_reviews`、`media_assets`、`feedback_summaries` 由对应的身刻领域模块写。
+- `timer_sessions` 只由计时模块写；计时模块可位于独立 Web timer 或 Android 身刻应用内。
 - 双方可读共享实体，但只可写自己拥有的实体。
 - `timer_session_links` 只保留旧数据兼容；新流程不再创建纯关联处理记录。
 - 新增实体前必须同时定义 owner、schema、同步策略、迁移和测试。
@@ -51,6 +51,8 @@
 - 日期有效指导是“原计划 + 最新有效调整”的结果；普通 UI 不重复展示调整历史。
 - patch 缺失字段或空数组必须是 no-op；只有显式 delete/tombstone 才可删除。
 - 删除预览非零时必须二次确认。
+- 新 routine 必须显式包含 `scene` 和 `role`；禁止根据标题、trainingType、routineId 或动作内容推断、覆盖或批量迁移分类。
+- 高级 AI patch 可更新正式计划和 routine；日常兼容 AI 不得写计划、调整、目标、策略或 routine。
 
 ## 4. 日历与正式记录
 
@@ -81,6 +83,7 @@
 - 删除使用 tombstone，并有明确保留期；不得立即物理删除。
 - 查询必须分页或使用增量游标，不得长期无限量返回全部历史。
 - 普通保存不得序列化和重写整个数据库快照。
+- Android 使用 Room 作为业务数据 source of truth；DataStore 只保存设备偏好。
 
 ## 7. 安全与隐私
 
@@ -91,6 +94,7 @@
 - Worker 必须认证业务数据访问。加密同步档案密文可由身刻/admin token 或迁移码验证后的访问密钥读取；迁移码永远不写入 URL、Git、日志或云端明文。
 - 角色权限必须由服务端执行，不能只依赖前端隐藏按钮。
 - 导出文件默认保存在被 `.gitignore` 排除的位置。
+- 兼容 AI 的 API key 只可在 TLS 请求中瞬时经过 Worker；不得写入 Worker 日志、D1 业务实体或普通备份。
 
 ## 8. 共享 Contract
 
@@ -113,12 +117,15 @@
 
 ## 10. Android UI
 
-- Android 共用领域逻辑、schema、同步协议和 timer engine，不共用桌面表现结构。
+- 正式 Android 使用 Kotlin + Jetpack Compose；`mobile/` Capacitor 工程只是冻结原型。
+- Android 共用领域语义、schema、同步协议和 timer 行为 fixtures，不共用 Web 页面源码。
 - 禁止把桌面 7 列月历等比例压缩到手机。
 - 禁止依赖右侧抽屉和鼠标 hover 才能完成核心任务。
-- 移动端优先支持：今日指导、开始训练、补状态、近期记录和离线恢复。
-- 原生层只承载平台能力和安全存储，不复制业务规则。
-- 常亮、TTS、前台服务、返回键和生命周期必须通过 adapter 隔离。
+- 移动端主空间采用 Calendar <- Today -> Training 的连续模型，同时为手势提供可见替代入口。
+- Room 是本地业务 source of truth；所有保存先本地后 outbox。
+- 计时器必须原生实现，不通过 iframe、外部浏览器或 WebView 作为正式运行时。
+- 常亮、TTS、音频 duck、来电暂停、前台服务、旋转和进程恢复必须通过可测试 adapter 隔离。
+- 不做自定义锁屏计时界面；平台强制通知必须最小化并使用私密锁屏可见性。
 
 ## 11. 可访问性
 
@@ -137,6 +144,7 @@
 - 核心规则必须是可测试纯函数，不得隐藏在 DOM 事件中。
 - 两个仓库都必须有 CI；Worker、同步和 timer state machine 必须有自动化测试。
 - 生成文件、临时截图、真实导出和依赖目录不得提交。
+- 任何代理开始任务前必须阅读 `AGENTS.md`；违反 `governance/guardrails.json` 的改动不得通过评审或 CI。
 
 ## 13. 变更流程
 

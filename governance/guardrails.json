@@ -1,0 +1,119 @@
+{
+  "schema": "shenk_project_guardrails/v1",
+  "updatedAt": "2026-07-17",
+  "activeDelivery": {
+    "phase": "android_pre_package_0",
+    "progress": "0/9",
+    "productionContract": "1.0",
+    "plannedContract": "2.0",
+    "androidProductionStack": "kotlin_jetpack_compose",
+    "capacitorStatus": "frozen_prototype"
+  },
+  "canonicalDocuments": [
+    "AGENTS.md",
+    "PROJECT_STATE.md",
+    "docs/android-product-blueprint.md",
+    "docs/android-technical-architecture.md",
+    "docs/android-contract-v2-plan.md",
+    "docs/android-delivery-and-constraints.md",
+    "docs/development-constraints.md",
+    "docs/domain-glossary.md"
+  ],
+  "historicalDocuments": [
+    "docs/mobile-strategy.md",
+    "docs/android-foundation.md",
+    "docs/next-stage-development-plan.md",
+    "docs/product-constraints.md"
+  ],
+  "dayDisplayPriority": [
+    "training_logs",
+    "effective_formal_plan",
+    "local_fallback_suggestion"
+  ],
+  "entityOwnership": {
+    "planning_module": [
+      "plan_templates",
+      "routine_templates",
+      "daily_plan_items",
+      "plan_adjustments",
+      "plan_import_batches",
+      "goal_sets",
+      "coach_strategies"
+    ],
+    "record_module": [
+      "training_logs",
+      "body_metrics",
+      "status_checkins"
+    ],
+    "timer_module": [
+      "timer_sessions"
+    ],
+    "ai_review_module": [
+      "daily_reviews"
+    ]
+  },
+  "requiredInvariants": [
+    {
+      "id": "G-DATA-001",
+      "rule": "All user business writes are local-first and transactionally enqueue an outbox operation."
+    },
+    {
+      "id": "G-DATA-002",
+      "rule": "Dirty local records are never silently overwritten by cloud pulls."
+    },
+    {
+      "id": "G-PLAN-001",
+      "rule": "Formal actual record outranks effective formal plan, which outranks local fallback suggestion."
+    },
+    {
+      "id": "G-PLAN-002",
+      "rule": "Missing patch fields and empty arrays are no-op; deletion must be explicit."
+    },
+    {
+      "id": "G-ROUTINE-001",
+      "rule": "Routine scene and role are explicit authoritative fields and are never inferred from title, type, id, or steps."
+    },
+    {
+      "id": "G-TIMER-001",
+      "rule": "Timer sessions are immutable execution facts and formal training logs require user confirmation."
+    },
+    {
+      "id": "G-AI-001",
+      "rule": "Daily compatible AI cannot mutate formal plans, adjustments, goals, strategies, or routines."
+    },
+    {
+      "id": "G-SEC-001",
+      "rule": "Secrets and real health data never enter source, docs, URLs, logs, fixtures, Git, or normal backups."
+    },
+    {
+      "id": "G-ANDROID-001",
+      "rule": "Production Android uses Kotlin and Jetpack Compose; Capacitor remains a frozen prototype."
+    },
+    {
+      "id": "G-DELETE-001",
+      "rule": "Deleted items disappear from normal UI immediately; tombstones remain internal to synchronization."
+    }
+  ],
+  "requiresExplicitUserApproval": [
+    "destructive_or_physical_data_deletion",
+    "bulk_reclassification_or_metadata_inference",
+    "replace_mode_import",
+    "entity_ownership_change",
+    "calendar_priority_change",
+    "ai_authority_change",
+    "irreversible_storage_migration",
+    "repository_merge",
+    "android_stack_change",
+    "phase_scope_expansion"
+  ],
+  "phase1Excluded": [
+    "diet_and_calorie_recognition",
+    "multi_user_accounts",
+    "weather_based_plan_changes",
+    "social_and_leaderboards",
+    "widget",
+    "wearable_sync",
+    "exercise_gif_assets",
+    "local_ai_formal_plan_mutation"
+  ]
+}

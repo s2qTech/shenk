@@ -1,4 +1,6 @@
-name: Mobile Android
+# Frozen validation pipeline for the historical Capacitor prototype in mobile/.
+# Production Android will use a separate Kotlin/Compose workflow under android-app/.
+name: Capacitor Prototype
 
 on:
   push:

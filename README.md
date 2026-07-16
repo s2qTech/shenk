@@ -18,15 +18,20 @@
 - 本地：IndexedDB 第一写入点，离线可查看、记录和执行缓存 routine。
 - 云端：Cloudflare Worker + D1，使用通用 record envelope。
 - 部署：GitHub Pages。
-- Android：后续使用共享领域层和独立移动 UI，不缩放桌面版页面。
+- Android：正式版本使用 Kotlin + Jetpack Compose、Room 和原生计时器；`mobile/` 仅为冻结的 Capacitor 原型。
 
 ## 关键文档
 
+- [代理必读入口](AGENTS.md)
+- [机器可读约束](governance/guardrails.json)
+- [Android 产品蓝图](docs/android-product-blueprint.md)
+- [Android 技术架构](docs/android-technical-architecture.md)
+- [Android Contract v2 计划](docs/android-contract-v2-plan.md)
+- [Android 交付与约束](docs/android-delivery-and-constraints.md)
+- [领域术语表](docs/domain-glossary.md)
 - [共享数据契约](docs/data-contract.md)
 - [系统设计](docs/system-design.md)
-- [下一阶段开发方案](docs/next-stage-development-plan.md)
 - [开发约束边界](docs/development-constraints.md)
-- [移动端策略](docs/mobile-strategy.md)
 - [云数据库部署](docs/cloudflare-cloud-db-setup.md)
 - [Cloud Records API](docs/cloud-records-api.md)
 

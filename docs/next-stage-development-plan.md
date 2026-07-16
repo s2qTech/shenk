@@ -1,5 +1,7 @@
 # 下一阶段开发指导方案
 
+> Status: historical seven-package plan superseded on 2026-07-16 by `android-delivery-and-constraints.md`. Packages 0-6 below describe completed Web/foundation history, not the active native Android plan.
+
 更新日期：2026-07-11
 
 ## 1. 阶段目标

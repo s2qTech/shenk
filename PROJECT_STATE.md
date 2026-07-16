@@ -1,20 +1,20 @@
 # Project State
 
-Updated: 2026-07-13
+Updated: 2026-07-17
 
 ## Product Boundary
 
-身刻 and `home-training-timer` remain separate applications and repositories.
+身刻 Web and `home-training-timer` remain separate applications and repositories. The future Android app contains a native timer module but does not merge or embed the Web timer source.
 
-- 身刻 owns plans, calendar snapshots, plan adjustments, formal training logs, body metrics, trends, feedback summaries, and sync coordination.
-- `home-training-timer` owns routine execution, voice, wake lock, timing state, and `timer_sessions`.
+- Shenk planning/record modules own plans, calendar snapshots, plan adjustments, formal training logs, body metrics, trends, feedback summaries, and sync coordination.
+- The timer role owns routine execution, voice, wake behavior, timing state, and `timer_sessions`; the role is implemented by independent Web timer and future native Android timer modules.
 - Cloudflare Worker + D1 owns authentication, role permissions, validation, revisions, conflict metadata, and shared cloud storage.
 
-Do not merge timer execution code into 身刻. Do not let either client write entities owned by the other client.
+Do not merge or embed the Web timer code into Shenk. Enforce writes by module role: planning/record UI cannot write timer facts, and timer modules cannot write formal records or plans.
 
 ## Shared Data Ownership
 
-身刻 writes:
+Shenk planning/record modules write:
 
 - `plan_templates`
 - `routine_templates`
@@ -26,7 +26,7 @@ Do not merge timer execution code into 身刻. Do not let either client write en
 - `media_assets`
 - `feedback_summaries`
 
-Timer writes:
+Timer modules write:
 
 - `timer_sessions`
 
@@ -102,7 +102,7 @@ Timer writes:
 - Settings separates routine daily sync from optional connection editing and device migration. Trend panels compact when a metric has no usable series and explain when a second value is needed.
 - The document root no longer announces every rendered page change through a global live region, and reduced-motion preferences suppress nonessential animation.
 
-### Work Package 6: Android foundation and independent mobile shell - completed
+### Historical Work Package 6: Capacitor Android prototype - completed
 
 - `mobile/` is an independent Vite + Capacitor 8 project with a generated Android container and Android CI workflow. It does not reuse the desktop seven-column calendar or date-detail drawer.
 - The mobile presentation is limited to Today, Training, Records, Data, and Settings. It reuses Contract v1 envelopes and the shared cloud ownership model, while keeping its mobile presentation logic separate.
@@ -113,26 +113,27 @@ Timer writes:
 
 ## Active Development Direction
 
-The canonical next-stage documents are:
+The previously generated Capacitor `mobile/` project is now a frozen validation prototype, not the production Android base. Product discovery completed on 2026-07-16 and selected a native Kotlin + Jetpack Compose implementation with a native timer.
 
-- `docs/next-stage-development-plan.md`
-- `docs/development-constraints.md`
-- `docs/data-contract.md`
-- `docs/system-design.md`
-- `docs/mobile-strategy.md`
+The canonical Android planning documents are:
 
-Work proceeds in seven packages:
+- `docs/android-product-blueprint.md`
+- `docs/android-technical-architecture.md`
+- `docs/android-contract-v2-plan.md`
+- `docs/android-delivery-and-constraints.md`
 
-0. Freeze baseline and fixtures.
-1. Data correctness and security.
-2. Shared Contract v1 and version governance.
-3. Modularization and CI.
-4. IndexedDB/outbox/sync v2.
-5. Web information architecture and accessibility.
-6. Android foundation with shared domain logic and independent mobile UI.
+Repository governance is enforced through:
 
-Every completed package must report progress as `X / 7`, verification, compatibility, remaining risks, and next prerequisites.
+- `AGENTS.md` as the mandatory entry point for any coding model;
+- `governance/guardrails.json` as a machine-readable invariant summary;
+- `docs/domain-glossary.md` for stable terminology;
+- accepted decisions in `docs/adr/`;
+- `tests/governance.test.js` in the normal CI test suite.
+
+No production Android feature implementation has started under this new direction. Contract v1 remains active until the Contract v2 package passes Worker and cross-client compatibility gates.
+
+The earlier seven Web/foundation work packages remain completed historical work. Native Android delivery now uses the nine packages and `X / 9` reporting format in `docs/android-delivery-and-constraints.md`.
 
 ## Immediate Next Step
 
-Work packages 0-6 are complete at the foundation level. The next stage starts with real Android-device validation: secure-storage round trip, offline outbox recovery, timer return flow, background/lock-screen constraints, and Android file import/export. No desktop layout should be reused as a scaled mobile UI.
+After user approval of the confirmed blueprint, start Android Package 0: record the native ADR, freeze the Capacitor prototype, create the Compose skeleton and CI, and prepare sanitized cross-client fixtures. Do not begin feature screens or Contract v2 writes before those gates exist.
