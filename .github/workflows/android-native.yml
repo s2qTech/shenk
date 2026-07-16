@@ -45,6 +45,11 @@ jobs:
               tail -n 160 package0-check.log
               echo '```'
             } >> "$GITHUB_STEP_SUMMARY"
+            failure_tail=$(tail -n 80 package0-check.log)
+            failure_tail=${failure_tail//'%'/'%25'}
+            failure_tail=${failure_tail//$'\r'/'%0D'}
+            failure_tail=${failure_tail//$'\n'/'%0A'}
+            echo "::error title=Native Android verification failed::$failure_tail"
           fi
           exit "$result"
       - uses: actions/upload-artifact@v4
@@ -54,6 +59,7 @@ jobs:
           if-no-files-found: error
 
   instrumentation:
+    needs: verify
     runs-on: ubuntu-latest
     defaults:
       run:
