@@ -130,10 +130,10 @@ Repository governance is enforced through:
 - accepted decisions in `docs/adr/`;
 - `tests/governance.test.js` in the normal CI test suite.
 
-No production Android feature implementation has started under this new direction. Contract v1 remains active until the Contract v2 package passes Worker and cross-client compatibility gates.
+Native Android Package 0 is implemented as a diagnostic-only foundation. The Compose project, accepted four-module graph, Contract v1 conformance fixture, unit/lint/build checks, debug APK artifact, and Compose instrumentation launch test are all in place. CI passed on commit `29470a3`; Xiaomi 14 installation and launch acceptance is still required before Package 0 can be marked complete. Contract v1 remains active until the Contract v2 package passes Worker and cross-client compatibility gates.
 
 The earlier seven Web/foundation work packages remain completed historical work. Native Android delivery now uses the nine packages and `X / 9` reporting format in `docs/android-delivery-and-constraints.md`.
 
 ## Immediate Next Step
 
-After user approval of the confirmed blueprint, start Android Package 0: record the native ADR, freeze the Capacitor prototype, create the Compose skeleton and CI, and prepare sanitized cross-client fixtures. Do not begin feature screens or Contract v2 writes before those gates exist.
+Install the Package 0 debug APK from Native Android run `29524515552` on the Xiaomi 14 and verify installation, launch, and the diagnostic foundation labels. Keep progress at `0 / 9` until that device acceptance passes. Do not begin feature screens or Contract v2 writes before Package 0 is accepted.

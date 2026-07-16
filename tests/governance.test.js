@@ -13,7 +13,7 @@ test("repository governance entrypoints and canonical documents are present", ()
   const agents = read("AGENTS.md");
 
   assert.equal(guardrails.schema, "shenk_project_guardrails/v1");
-  assert.equal(guardrails.activeDelivery.phase, "android_pre_package_0");
+  assert.equal(guardrails.activeDelivery.phase, "android_package_0_device_acceptance");
   assert.equal(guardrails.activeDelivery.progress, "0/9");
   assert.equal(guardrails.activeDelivery.productionContract, "1.0");
   assert.equal(guardrails.activeDelivery.androidProductionStack, "kotlin_jetpack_compose");
