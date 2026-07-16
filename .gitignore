@@ -18,6 +18,11 @@ mobile/android/.idea/
 mobile/android/.cxx/
 mobile/android/captures/
 mobile/android/local.properties
+android-app/.gradle/
+android-app/.idea/
+android-app/**/build/
+android-app/local.properties
+android-app/captures/
 wrangler.toml
 .wrangler/
 .agents/

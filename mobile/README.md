@@ -1,6 +1,8 @@
-# 身刻移动端基础工程
+# 身刻 Capacitor 验证原型（冻结）
 
-`mobile/` 是身刻的独立移动呈现层。它不复用桌面七列日历、日详情抽屉或桌面设置布局。
+`mobile/` 只保留为历史验证原型，不是正式 Android 基础，不再接收生产功能。正式 Android 工程位于 `android-app/`，使用 Kotlin + Jetpack Compose。
+
+本目录仅用于回归既有 Capacitor 行为。不要从这里复制页面结构、存储实现或计时器运行时到正式 Android；跨端只共享契约、脱敏 fixtures 和可验证的领域语义。
 
 ## 运行
 
@@ -32,6 +34,6 @@ pnpm run android:sync
 - 计时器 URL 只带 routine/date/plan 上下文，绝不携带 token。
 - 本机 `deviceId` 只用于同步身份和冲突定位，保存为非敏感本机标识；不会出现在计划、训练记录或导出数据中。
 
-## Android 原生职责
+## 历史原生适配职责
 
-这一阶段已建立 Capacitor 适配边界：安全存储、触感反馈、外部计时器打开、应用前后台事件和浏览器语音。后台保活、原生 TTS、前台服务和文件导入导出将在真实设备验证后以原生插件完成，不能在 Web 壳中假定已具备。
+本原型曾建立 Capacitor 适配边界：安全存储、触感反馈、外部计时器打开、应用前后台事件和浏览器语音。这些内容不再继续扩展；正式原生能力按 `docs/android-delivery-and-constraints.md` 在 `android-app/` 分包实现。

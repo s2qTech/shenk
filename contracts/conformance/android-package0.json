@@ -1,0 +1,26 @@
+{
+  "fixtureSchema": "shenk_android_package0/v1",
+  "synthetic": true,
+  "contractVersion": "1.0",
+  "expectedDayPriority": [
+    "training_logs",
+    "effective_formal_plan",
+    "local_fallback_suggestion"
+  ],
+  "routine": {
+    "id": "routine_fixture_recovery_package0",
+    "title": "合成恢复流程",
+    "scene": "recovery",
+    "role": "recovery"
+  },
+  "timerSession": {
+    "id": "timer_fixture_package0",
+    "entity": "timer_sessions",
+    "completion": "completed"
+  },
+  "trainingLog": {
+    "id": "training_fixture_package0",
+    "entity": "training_logs",
+    "timerSessionId": "timer_fixture_package0"
+  }
+}
