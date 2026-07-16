@@ -63,6 +63,7 @@ jobs:
   instrumentation:
     needs: verify
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     defaults:
       run:
         working-directory: android-app
@@ -79,7 +80,9 @@ jobs:
       - name: Run Compose instrumentation test
         uses: reactivecircus/android-emulator-runner@v2
         with:
-          api-level: 35
+          api-level: 34
           arch: x86_64
-          profile: pixel_7
-          script: cd android-app && ./gradlew connectedDebugAndroidTest
+          profile: pixel_6
+          disable-animations: true
+          working-directory: android-app
+          script: ./ci/run-instrumentation.sh
