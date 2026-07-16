@@ -8,6 +8,15 @@ const test = require("node:test");
 const root = path.resolve(__dirname, "..");
 const read = (relativePath) => fs.readFileSync(path.join(root, relativePath), "utf8");
 
+const walkFiles = (directory) => fs.readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
+  const entryPath = path.join(directory, entry.name);
+  if (entry.isDirectory()) {
+    if (entry.name === "build" || entry.name === ".gradle") return [];
+    return walkFiles(entryPath);
+  }
+  return [entryPath];
+});
+
 test("native Android Package 0 keeps the accepted small module graph", () => {
   const settings = read("android-app/settings.gradle.kts");
   const requiredModules = [
@@ -41,6 +50,26 @@ test("Package 0 remains diagnostic-only and Contract v1 only", () => {
   assert.equal(fixture.routine.scene, "recovery");
   assert.equal(fixture.routine.role, "recovery");
   assert.equal(fixture.trainingLog.timerSessionId, fixture.timerSession.id);
+});
+
+test("native Kotlin sources keep the repository formatting baseline", () => {
+  const sourceFiles = walkFiles(path.join(root, "android-app"))
+    .filter((file) => file.endsWith(".kt") || file.endsWith(".kts"));
+  const violations = [];
+
+  for (const file of sourceFiles) {
+    const text = fs.readFileSync(file, "utf8");
+    const relative = path.relative(root, file);
+    for (const [index, line] of text.split(/\r?\n/).entries()) {
+      if (line.includes("\t")) violations.push(`${relative}:${index + 1}: tab`);
+      if (line !== line.trimEnd()) violations.push(`${relative}:${index + 1}: trailing whitespace`);
+    }
+    if (text.length > 0 && !text.endsWith("\n")) {
+      violations.push(`${relative}: missing final newline`);
+    }
+  }
+
+  assert.deepEqual(violations, []);
 });
 
 test("Capacitor prototype is visibly frozen", () => {

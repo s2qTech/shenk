@@ -5,7 +5,7 @@ plugins {
 
 android {
     namespace = "io.s2qtech.shenk"
-    compileSdk = 36
+    compileSdk = 37
 
     defaultConfig {
         applicationId = "io.s2qtech.shenk"
