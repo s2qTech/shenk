@@ -26,16 +26,37 @@ run_instrumentation() {
   ./gradlew --no-parallel :app:connectedDebugAndroidTest
 }
 
+report_test_failures() {
+  local report
+  local found=0
+
+  while IFS= read -r report; do
+    if grep -Eq '<failure|<error' "$report"; then
+      found=1
+      echo "Report: $report"
+      grep -E '<testsuite|<testcase|<failure|<error' "$report" | tail -n 40
+    fi
+  done < <(find . -path '*/build/outputs/androidTest-results/connected/*' -name '*.xml' -type f | sort)
+
+  if [ "$found" -eq 0 ]; then
+    echo "No failing instrumentation XML report was found."
+  fi
+}
+
 export -f run_instrumentation
 timeout --signal=TERM 18m bash -c run_instrumentation 2>&1 | tee instrumentation-check.log
 result=${PIPESTATUS[0]}
 
 if [ "$result" -ne 0 ]; then
-  failure_tail=$(tail -n 120 instrumentation-check.log)
-  failure_tail=${failure_tail//'%'/'%25'}
-  failure_tail=${failure_tail//$'\r'/'%0D'}
-  failure_tail=${failure_tail//$'\n'/'%0A'}
-  echo "::error title=Compose instrumentation failed::$failure_tail"
+  failure_summary=$(report_test_failures)
+  if [[ "$failure_summary" == *"No failing instrumentation XML report was found."* ]]; then
+    failure_summary+=$'\n\nGradle tail:\n'
+    failure_summary+=$(tail -n 35 instrumentation-check.log)
+  fi
+  failure_summary=${failure_summary//'%'/'%25'}
+  failure_summary=${failure_summary//$'\r'/'%0D'}
+  failure_summary=${failure_summary//$'\n'/'%0A'}
+  echo "::error title=Compose instrumentation failed::$failure_summary"
 fi
 
 if [ "$result" -eq 124 ]; then
