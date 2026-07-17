@@ -1,7 +1,7 @@
 # Android Delivery Plan and Constraints
 
-Updated: 2026-07-16
-Status: confirmed planning baseline
+Updated: 2026-07-18
+Status: confirmed planning baseline; Packages 0-3 accepted, progress `4 / 9`
 
 ## 1. Delivery Model
 
