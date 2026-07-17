@@ -85,6 +85,12 @@ test("native CI gates emulator tests behind Package 2 verification", () => {
   assert.match(workflow, /timeout-minutes: 30/);
   assert.match(workflow, /java-version: "25"/);
   assert.match(workflow, /api-level: 36/);
+  assert.match(workflow, /Build instrumentation APKs before emulator boot/);
+  assert.match(workflow, /Enable KVM for Android emulator/);
+  assert.match(workflow, /udevadm trigger --name-match=kvm/);
+  assert.match(workflow, /target: default/);
+  assert.match(workflow, /ram-size: 2048M/);
+  assert.doesNotMatch(workflow, /profile: pixel_6/);
   assert.match(workflow, /script: \.\/ci\/run-instrumentation\.sh/);
   assert.match(instrumentationScript, /timeout --signal=TERM 18m/);
   assert.match(instrumentationScript, /--no-parallel :core:data-sync:connectedDebugAndroidTest/);

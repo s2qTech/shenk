@@ -79,12 +79,30 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
       - name: Install pinned Android SDK
         run: sdkmanager "platforms;android-36" "build-tools;36.0.0"
+      - name: Build instrumentation APKs before emulator boot
+        run: >-
+          ./gradlew --no-parallel
+          :core:data-sync:assembleDebug
+          :core:data-sync:assembleDebugAndroidTest
+          :app:assembleDebug
+          :app:assembleDebugAndroidTest
+      - name: Enable KVM for Android emulator
+        shell: bash
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' \
+            | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
       - name: Run Compose instrumentation test
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 36
+          target: default
           arch: x86_64
-          profile: pixel_6
+          cores: 2
+          ram-size: 2048M
+          heap-size: 512M
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none
           disable-animations: true
           working-directory: android-app
           script: ./ci/run-instrumentation.sh
