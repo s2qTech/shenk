@@ -32,6 +32,23 @@ test("native Android keeps the accepted small module graph", () => {
   assert.equal((settings.match(/include\(/g) || []).length, requiredModules.length);
 });
 
+test("native Android uses the accepted current-stable platform baseline", () => {
+  const appBuild = read("android-app/app/build.gradle.kts");
+  const syncBuild = read("android-app/core/data-sync/build.gradle.kts");
+  const domainBuild = read("android-app/core/model-domain/build.gradle.kts");
+  const timerBuild = read("android-app/feature/timer-engine/build.gradle.kts");
+
+  assert.match(appBuild, /compileSdk = 36/);
+  assert.match(appBuild, /minSdk = 36/);
+  assert.match(appBuild, /targetSdk = 36/);
+  assert.match(syncBuild, /minSdk = 36/);
+
+  for (const moduleBuild of [appBuild, syncBuild, domainBuild, timerBuild]) {
+    assert.match(moduleBuild, /jvmToolchain\(25\)/);
+    assert.match(moduleBuild, /JvmTarget\.JVM_17/);
+  }
+});
+
 test("Package 2 provides the local-first foundation without feature UI", () => {
   const versions = read("android-app/gradle/libs.versions.toml");
   const repository = read("android-app/core/data-sync/src/main/kotlin/io/s2qtech/shenk/sync/LocalFirstRepository.kt");
@@ -66,7 +83,8 @@ test("native CI gates emulator tests behind Package 2 verification", () => {
   assert.match(workflow, /needs: verify/);
   assert.match(workflow, /package2Check/);
   assert.match(workflow, /timeout-minutes: 30/);
-  assert.match(workflow, /api-level: 34/);
+  assert.match(workflow, /java-version: "25"/);
+  assert.match(workflow, /api-level: 36/);
   assert.match(workflow, /script: \.\/ci\/run-instrumentation\.sh/);
   assert.match(instrumentationScript, /timeout --signal=TERM 18m/);
   assert.match(instrumentationScript, /--no-parallel :core:data-sync:connectedDebugAndroidTest/);

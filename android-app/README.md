@@ -24,9 +24,9 @@ See `../docs/android-package2-local-first.md` for schema, retry, conflict, backu
 
 ## Prerequisites
 
-- JDK 17
+- JDK 25
 - Android SDK Platform 36 and Build Tools 36.0.0
-- An API 34+ emulator for instrumentation tests
+- An API 36 emulator or Android 16 device for instrumentation tests
 
 ## Verification
 

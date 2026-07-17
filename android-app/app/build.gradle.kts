@@ -9,7 +9,7 @@ android {
 
     defaultConfig {
         applicationId = "io.s2qtech.shenk"
-        minSdk = 26
+        minSdk = 36
         targetSdk = 36
         versionCode = 1
         versionName = "0.0.1-package0"
@@ -32,7 +32,10 @@ android {
 }
 
 kotlin {
-    jvmToolchain(17)
+    jvmToolchain(25)
+    compilerOptions {
+        jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
+    }
 }
 
 dependencies {

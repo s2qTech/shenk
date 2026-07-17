@@ -2,6 +2,13 @@
 
 Updated: 2026-07-17
 
+## Android Platform Baseline
+
+- Android is a private, single-primary-device product with no legacy device or OS compatibility requirement.
+- The accepted initial production baseline is Android 16 / API 36, JDK 25, AGP 9.2.1, Gradle 9.4.1, and Kotlin 2.3.21.
+- Android/JVM modules compile with JDK 25 but emit JVM 17 bytecode until D8/R8 officially supports a newer target.
+- Tooling and libraries advance as one stable, officially compatible set. Existing Web/Worker data-contract compatibility remains mandatory.
+
 ## Product Boundary
 
 身刻 Web and `home-training-timer` remain separate applications and repositories. The future Android app contains a native timer module but does not merge or embed the Web timer source.

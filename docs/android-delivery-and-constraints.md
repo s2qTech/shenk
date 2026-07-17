@@ -111,6 +111,9 @@ Phase-2 work starts only after Package 8: widget, Health Connect/Xiaomi data, an
 10. New shared fields require schema, Worker validation, ownership, fixtures, and compatibility tests in the same package.
 11. Empty patch arrays never mean replace or delete; deletion is explicit.
 12. Unknown additive fields must be preserved where clients round-trip an entity.
+13. Android supports the current stable platform used by the primary device; phase 1 carries no legacy Android compatibility matrix.
+14. Gradle runs and compilation use the current LTS JDK, while Android bytecode level follows the newest class-file target officially supported by D8/R8.
+15. Dependency upgrades select the newest stable, mutually compatible set and are verified as a set; preview versions and unsupported version mixtures are not production defaults.
 
 ## 4. Timer Safety Boundaries
 

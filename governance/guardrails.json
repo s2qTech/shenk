@@ -11,6 +11,9 @@
       "2.0"
     ],
     "androidProductionStack": "kotlin_jetpack_compose",
+    "androidPlatformPolicy": "current_stable_single_primary_device",
+    "androidBuildJdk": "25",
+    "androidMinimumApi": 36,
     "capacitorStatus": "frozen_prototype"
   },
   "canonicalDocuments": [
@@ -98,6 +101,10 @@
     {
       "id": "G-ANDROID-001",
       "rule": "Production Android uses Kotlin and Jetpack Compose; Capacitor remains a frozen prototype."
+    },
+    {
+      "id": "G-ANDROID-002",
+      "rule": "Production Android targets the current stable Android platform and current LTS JDK using an officially compatible stable toolchain; no legacy device or OS compatibility code is added without explicit approval."
     },
     {
       "id": "G-DELETE-001",

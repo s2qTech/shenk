@@ -15,3 +15,4 @@ ADR 记录已经确认、后续模型不能随意推翻的架构决定。
 - `0003-ai-authority-and-day-priority.md`
 - `0004-timer-facts-and-formal-records.md`
 - `0005-explicit-routine-scene-role.md`
+- `0006-modern-stable-android-baseline.md`

@@ -1,6 +1,6 @@
 # Android Technical Architecture
 
-Updated: 2026-07-16
+Updated: 2026-07-17
 Status: architecture decision for the native implementation
 
 ## 1. Architecture Decision
@@ -57,6 +57,30 @@ Responsibilities:
 Feature modules may be split later only when build time or ownership justifies it. Avoid a module per screen in the personal-product phase.
 
 ## 4. Technology Selection
+
+### 4.1 Supported platform and build baseline
+
+This is a private, single-primary-device product with no legacy Android install base. The Android production baseline therefore follows these rules:
+
+- Support the current stable Android platform only. The initial baseline is Android 16 / API 36 for compile, target, minimum SDK, emulator, and target-device verification.
+- Run Gradle and compile with the current LTS JDK. The initial baseline is JDK 25.
+- Emit JVM 17 bytecode for Android and shared JVM modules until the Android D8/R8 toolchain officially supports a newer class-file target. This is an Android build-format boundary, not support for old devices or old Java installations.
+- Prefer the newest stable versions inside one officially compatible toolchain set. Do not combine unrelated maximum version numbers when their published compatibility ranges do not overlap.
+- Stable platform/library releases are adopted at a package boundary after build, lint, unit, instrumentation, offline, and rollback verification. Preview, alpha, beta, or RC releases require a concrete product need and an isolated rollback path.
+- Do not add desugaring, polyfills, alternate implementations, version checks, or UI compromises solely for hypothetical old Android versions.
+
+Initial accepted set:
+
+| Layer | Baseline | Reason |
+| --- | --- | --- |
+| Android platform | API 36 only | Current stable target and current primary-device baseline |
+| Build runtime/toolchain | JDK 25 | Current LTS; supported by the selected Gradle line |
+| Android Gradle Plugin | 9.2.1 | Current stable AGP patch |
+| Gradle wrapper | 9.4.1 | AGP 9.2 documented default and supported with JDK 25 |
+| Kotlin | 2.3.21 | Current validated project pairing with AGP 9.2; upgrade when the full published compatibility set covers the selected AGP/Gradle line |
+| JVM class-file target | 17 | Current documented Android language/class-file boundary |
+
+This policy does not remove compatibility obligations for existing user data, Web clients, Worker APIs, encrypted profiles, or Contract v1/v2. Those are live product state rather than obsolete device support.
 
 | Area | Selection | Notes |
 | --- | --- | --- |

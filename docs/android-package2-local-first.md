@@ -58,4 +58,4 @@ Package 2 does not migrate production Web or D1 storage. Rolling Android back be
 - JVM: domain ownership, additive-field preservation, profile crypto/gateway and backup rejection tests.
 - Android instrumentation: transaction atomicity, owner refusal, dirty-pull protection, stale-pull handling, required metadata, process-death database reopen, accepted/unacknowledged sync behavior and Keystore recreation.
 - Build: KSP Room generation, lint, unit tests, Android-test APK compilation and debug APK assembly.
-- CI: the same build gate plus API 34 emulator execution.
+- CI: the same build gate plus API 36 emulator execution on the current stable Android baseline.
