@@ -7,9 +7,9 @@ plugins {
     alias(libs.plugins.ksp) apply false
 }
 
-tasks.register("package2Check") {
+tasks.register("package3Check") {
     group = "verification"
-    description = "Runs the Package 2 native Android local-first quality gate."
+    description = "Runs the Package 3 native Android Today and check-in quality gate."
     dependsOn(
         ":app:testDebugUnitTest",
         ":app:lintDebug",
@@ -20,8 +20,14 @@ tasks.register("package2Check") {
     )
 }
 
+tasks.register("package2Check") {
+    group = "verification"
+    description = "Compatibility alias for the native Android quality gate."
+    dependsOn("package3Check")
+}
+
 tasks.register("package0Check") {
     group = "verification"
     description = "Compatibility alias for the native Android quality gate."
-    dependsOn("package2Check")
+    dependsOn("package3Check")
 }

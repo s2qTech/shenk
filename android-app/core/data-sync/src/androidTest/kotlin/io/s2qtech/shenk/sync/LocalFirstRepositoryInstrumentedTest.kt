@@ -48,6 +48,44 @@ class LocalFirstRepositoryInstrumentedTest {
     }
 
     @Test
+    fun batchWriteQueuesEveryRecordInOneTransaction() {
+        runBlocking {
+            val repository = repository(database)
+            repository.persistBatchAndEnqueue(
+                records = listOf(
+                    SharedRecord.create("status_checkins", "synthetic-checkin", buildJsonObject {}),
+                    SharedRecord.create("body_metrics", "synthetic-metric", buildJsonObject {}),
+                ),
+                writer = SharedEntityOwner.RECORD,
+            )
+
+            assertEquals(2, database.records().count())
+            assertEquals(2, database.outbox().count())
+        }
+    }
+
+    @Test
+    fun invalidBatchOwnerLeavesNoPartialWrite() {
+        runBlocking {
+            val repository = repository(database)
+
+            assertThrows(IllegalArgumentException::class.java) {
+                runBlocking {
+                    repository.persistBatchAndEnqueue(
+                        records = listOf(
+                            SharedRecord.create("body_metrics", "synthetic-metric", buildJsonObject {}),
+                            SharedRecord.create("timer_sessions", "synthetic-session", buildJsonObject {}),
+                        ),
+                        writer = SharedEntityOwner.RECORD,
+                    )
+                }
+            }
+            assertEquals(0, database.records().count())
+            assertEquals(0, database.outbox().count())
+        }
+    }
+
+    @Test
     fun unauthorizedOwnerLeavesNoPartialWrite() {
         runBlocking {
             val repository = repository(database)
@@ -138,15 +176,20 @@ class LocalFirstRepositoryInstrumentedTest {
         }
     }
 
-    private fun repository(db: ShenkDatabase) = LocalFirstRepository(
-        database = db,
-        localDeviceId = "synthetic-device",
-        timeSource = object : TimeSource {
-            override fun epochMillis(): Long = 4_102_444_800_000L
-            override fun isoInstant(): String = "2100-01-01T00:00:00Z"
-        },
-        nextId = { "synthetic-idempotency" },
-    )
+    private fun repository(db: ShenkDatabase): LocalFirstRepository {
+        var sequence = 0
+        return LocalFirstRepository(
+            database = db,
+            localDeviceId = "synthetic-device",
+            timeSource = object : TimeSource {
+                override fun epochMillis(): Long = 4_102_444_800_000L
+                override fun isoInstant(): String = "2100-01-01T00:00:00Z"
+            },
+            nextId = {
+                if (sequence++ == 0) "synthetic-idempotency" else "synthetic-idempotency-$sequence"
+            },
+        )
+    }
 
     private fun trainingLog(id: String, result: String) = SharedRecord.create(
         entity = "training_logs",

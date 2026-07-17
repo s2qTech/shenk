@@ -49,13 +49,17 @@ test("native Android uses the accepted current-stable platform baseline", () => 
   }
 });
 
-test("Package 2 provides the local-first foundation without feature UI", () => {
+test("Package 3 keeps local-first storage and adds only the Today recording slice", () => {
   const versions = read("android-app/gradle/libs.versions.toml");
   const repository = read("android-app/core/data-sync/src/main/kotlin/io/s2qtech/shenk/sync/LocalFirstRepository.kt");
   const store = read("android-app/core/data-sync/src/main/kotlin/io/s2qtech/shenk/sync/LocalStore.kt");
   const sync = read("android-app/core/data-sync/src/main/kotlin/io/s2qtech/shenk/sync/CloudSync.kt");
   const secrets = read("android-app/core/data-sync/src/main/kotlin/io/s2qtech/shenk/sync/DeviceConfiguration.kt");
   const backup = read("android-app/core/data-sync/src/main/kotlin/io/s2qtech/shenk/sync/BusinessBackup.kt");
+  const todayRepository = read("android-app/core/data-sync/src/main/kotlin/io/s2qtech/shenk/sync/TodayRecordRepository.kt");
+  const todayScreen = read("android-app/app/src/main/java/io/s2qtech/shenk/TodayScreen.kt");
+  const checkinSheet = read("android-app/app/src/main/java/io/s2qtech/shenk/CheckInSheets.kt");
+  const reminders = read("android-app/app/src/main/java/io/s2qtech/shenk/ReminderSettings.kt");
 
   assert.match(versions, /room-runtime/);
   assert.match(versions, /work-runtime-ktx/);
@@ -68,20 +72,25 @@ test("Package 2 provides the local-first foundation without feature UI", () => {
   assert.match(secrets, /AndroidKeyStore/);
   assert.match(backup, /shenk_business_backup\/v1/);
   assert.doesNotMatch(backup, /SHENK_TOKEN|TIMER_TOKEN|AI_PROVIDER_KEY/);
+  assert.match(todayRepository, /persistBatchAndEnqueue/);
+  assert.match(todayScreen, /TodayRoute/);
+  assert.match(checkinSheet, /MorningCheckInSheet/);
+  assert.match(checkinSheet, /PreWorkoutSheet/);
+  assert.match(reminders, /MissingMorningWorker/);
 
   const appSources = walkFiles(path.join(root, "android-app/app/src/main"))
     .filter((file) => file.endsWith(".kt"))
     .map((file) => fs.readFileSync(file, "utf8"))
     .join("\n");
-  assert.doesNotMatch(appSources, /TodayScreen|CheckInScreen|TrainingScreen|TimerScreen/);
+  assert.doesNotMatch(appSources, /CalendarScreen|TrainingScreen|TimerScreen|AiReviewScreen/);
 });
 
-test("native CI gates emulator tests behind Package 2 verification", () => {
+test("native CI gates emulator tests behind Package 3 verification", () => {
   const workflow = read(".github/workflows/android-native.yml");
   const instrumentationScript = read("android-app/ci/run-instrumentation.sh");
 
   assert.match(workflow, /needs: verify/);
-  assert.match(workflow, /package2Check/);
+  assert.match(workflow, /package3Check/);
   assert.match(workflow, /timeout-minutes: 30/);
   assert.match(workflow, /java-version: "25"/);
   assert.match(workflow, /api-level: 36/);

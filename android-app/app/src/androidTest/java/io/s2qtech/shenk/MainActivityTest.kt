@@ -3,6 +3,7 @@ package io.s2qtech.shenk
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performClick
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import org.junit.Rule
 import org.junit.Test
@@ -14,9 +15,11 @@ class MainActivityTest {
     val composeRule = createAndroidComposeRule<MainActivity>()
 
     @Test
-    fun packageZeroDiagnosticSurfaceOpens() {
-        composeRule.onNodeWithText("身刻").assertIsDisplayed()
-        composeRule.onNodeWithText("原生 Android 基座").assertIsDisplayed()
-        composeRule.onNodeWithText("Package 0 · 仅用于验证原生工程").assertIsDisplayed()
+    fun todayOpensOfflineAndMorningWorkspaceIsReachable() {
+        composeRule.onNodeWithText("今天").assertIsDisplayed()
+        composeRule.onNodeWithText("晨起状态").assertIsDisplayed()
+        composeRule.onNodeWithText("记录").performClick()
+        composeRule.onNodeWithText("今天身体怎么样？").assertIsDisplayed()
+        composeRule.onNodeWithText("保存晨起状态").assertIsDisplayed()
     }
 }
