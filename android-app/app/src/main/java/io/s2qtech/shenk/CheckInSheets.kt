@@ -406,7 +406,7 @@ private fun SheetFrame(
 private fun SheetSection(title: String, content: @Composable ColumnScope.() -> Unit) {
     Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
     Spacer(Modifier.height(8.dp))
-    content()
+    Column(content = content)
     Spacer(Modifier.height(18.dp))
     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
     Spacer(Modifier.height(18.dp))
