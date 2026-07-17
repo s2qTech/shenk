@@ -27,7 +27,7 @@ class ContractFoundationTest {
         assertEquals("recovery", fixture.routine.role)
         assertEquals(fixture.timerSession.id, fixture.trainingLog.timerSessionId)
         assertTrue(EntityOwnership.canWrite(SharedEntityOwner.TIMER, "timer_sessions"))
-        assertFalse(EntityOwnership.canWrite(SharedEntityOwner.PLANNING_RECORD, "timer_sessions"))
+        assertFalse(EntityOwnership.canWrite(SharedEntityOwner.RECORD, "timer_sessions"))
     }
 
     @Test
@@ -55,5 +55,16 @@ class ContractFoundationTest {
         assertEquals(fixture.legacyBodyMetric.weightKg, migrated.bodyMetric.weightKg)
         assertEquals(fixture.legacyBodyMetric.energy, migrated.statusCheckin.energy)
         assertEquals(fixture.legacyBodyMetric.fatigue, migrated.statusCheckin.fatigue)
+    }
+
+    @Test
+    fun entityOwnersStaySeparatedAtRepositoryBoundary() {
+        assertTrue(EntityOwnership.canWrite(SharedEntityOwner.PLANNING, "daily_plan_items"))
+        assertTrue(EntityOwnership.canWrite(SharedEntityOwner.RECORD, "training_logs"))
+        assertTrue(EntityOwnership.canWrite(SharedEntityOwner.TIMER, "timer_sessions"))
+        assertTrue(EntityOwnership.canWrite(SharedEntityOwner.AI_REVIEW, "daily_reviews"))
+        assertTrue(EntityOwnership.canWrite(SharedEntityOwner.ASSET, "media_assets"))
+        assertFalse(EntityOwnership.canWrite(SharedEntityOwner.PLANNING, "training_logs"))
+        assertFalse(EntityOwnership.canWrite(SharedEntityOwner.RECORD, "daily_reviews"))
     }
 }

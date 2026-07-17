@@ -1,7 +1,7 @@
 # Android Product Blueprint
 
 Updated: 2026-07-16
-Status: confirmed product direction; Packages 0-1 accepted, Package 2 ready
+Status: confirmed product direction; Packages 0-2 accepted, Package 3 ready
 
 ## 1. Product Definition
 

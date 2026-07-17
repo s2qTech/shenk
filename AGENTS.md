@@ -6,7 +6,7 @@
 
 - 当前日期基线：2026-07-17。
 - Web 身刻和 Web `home-training-timer` 是可用基线，保持独立仓库和部署。
-- 正式 Android 产品已完成需求收束；Package 0 原生骨架和 Package 1 Contract v2/Worker 兼容层已通过门禁，进度为 `2 / 9`。Package 2 尚未开始。
+- 正式 Android 产品已完成需求收束；Packages 0-2 已通过门禁，进度为 `3 / 9`。Package 2 已建立原生本地优先数据层，Package 3 可开始。
 - `mobile/` 是冻结的 Capacitor 验证原型，不是正式 Android 基础，不得继续向其中添加生产功能。
 - 正式 Android 技术路线是 Kotlin + Jetpack Compose，生产工程位于 `android-app/`。
 - 当前生产默认数据契约仍是 Contract v1；Worker 已兼容 Contract v2。Android 仅可在对应工作包内显式使用 v2，Web 旧客户端继续使用 v1。

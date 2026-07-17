@@ -8,17 +8,48 @@ object ContractVersion {
 }
 
 enum class SharedEntityOwner {
-    PLANNING_RECORD,
+    PLANNING,
+    RECORD,
     TIMER,
+    AI_REVIEW,
+    ASSET,
 }
 
 object EntityOwnership {
     private val timerOwned = setOf("timer_sessions")
+    private val planningOwned = setOf(
+        "plan_templates",
+        "routine_templates",
+        "daily_plan_items",
+        "plan_adjustments",
+        "plan_import_batches",
+        "goal_sets",
+        "coach_strategies",
+    )
+    private val recordOwned = setOf(
+        "timer_session_links",
+        "training_logs",
+        "body_metrics",
+        "status_checkins",
+        "weather_logs",
+        "feedback_summaries",
+    )
+    private val aiOwned = setOf("daily_reviews")
+    private val assetOwned = setOf("media_assets")
 
-    fun ownerOf(entity: String): SharedEntityOwner =
-        if (entity in timerOwned) SharedEntityOwner.TIMER else SharedEntityOwner.PLANNING_RECORD
+    val knownEntities: Set<String> = planningOwned + recordOwned + timerOwned + aiOwned + assetOwned
 
-    fun canWrite(owner: SharedEntityOwner, entity: String): Boolean = ownerOf(entity) == owner
+    fun ownerOf(entity: String): SharedEntityOwner = when (entity) {
+        in planningOwned -> SharedEntityOwner.PLANNING
+        in recordOwned -> SharedEntityOwner.RECORD
+        in timerOwned -> SharedEntityOwner.TIMER
+        in aiOwned -> SharedEntityOwner.AI_REVIEW
+        in assetOwned -> SharedEntityOwner.ASSET
+        else -> throw IllegalArgumentException("unknown entity $entity")
+    }
+
+    fun canWrite(owner: SharedEntityOwner, entity: String): Boolean =
+        entity in knownEntities && ownerOf(entity) == owner
 }
 
 @Serializable
