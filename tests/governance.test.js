@@ -13,9 +13,10 @@ test("repository governance entrypoints and canonical documents are present", ()
   const agents = read("AGENTS.md");
 
   assert.equal(guardrails.schema, "shenk_project_guardrails/v1");
-  assert.equal(guardrails.activeDelivery.phase, "android_package_1_ready");
-  assert.equal(guardrails.activeDelivery.progress, "1/9");
+  assert.equal(guardrails.activeDelivery.phase, "android_package_2_ready");
+  assert.equal(guardrails.activeDelivery.progress, "2/9");
   assert.equal(guardrails.activeDelivery.productionContract, "1.0");
+  assert.deepEqual(guardrails.activeDelivery.workerSupportedContracts, ["1.0", "2.0"]);
   assert.equal(guardrails.activeDelivery.androidProductionStack, "kotlin_jetpack_compose");
   assert.equal(guardrails.activeDelivery.capacitorStatus, "frozen_prototype");
 
@@ -27,6 +28,7 @@ test("repository governance entrypoints and canonical documents are present", ()
 
 test("critical guardrails keep stable identifiers and ownership", () => {
   const guardrails = JSON.parse(read("governance/guardrails.json"));
+  const contractV2 = JSON.parse(read("contracts/v2/contract.schema.json"));
   const ids = guardrails.requiredInvariants.map((item) => item.id);
 
   assert.equal(new Set(ids).size, ids.length, "guardrail IDs must be unique");
@@ -52,6 +54,12 @@ test("critical guardrails keep stable identifiers and ownership", () => {
   ]);
   assert.deepEqual(guardrails.entityOwnership.timer_module, ["timer_sessions"]);
   assert.ok(!guardrails.entityOwnership.record_module.includes("timer_sessions"));
+  assert.deepEqual(guardrails.entityOwnership.asset_module, ["media_assets"]);
+  assert.deepEqual(
+    new Set(Object.values(guardrails.entityOwnership).flat()),
+    new Set(contractV2.$defs.entity.enum),
+    "guardrail ownership must cover every Contract v2 entity exactly once"
+  );
 });
 
 test("accepted ADRs and historical-document warnings remain visible", () => {
@@ -83,6 +91,7 @@ test("independent timer repository has a canonical agent-rule source", () => {
   assert.match(timerRules, /禁止从标题、trainingType、routineId 或动作内容推断/);
   assert.match(timerRules, /不得写 `training_logs`/);
   assert.match(timerRules, /Android 原生计时器/);
-  assert.match(timerBoundaries, /Contract v1 remains the production contract/);
+  assert.match(timerBoundaries, /Contract v1 remains the timer's default production write contract/);
+  assert.match(timerBoundaries, /Contract v2 passed the additive Worker and cross-client compatibility gate/);
   assert.match(timerBoundaries, /Never infer or rewrite them from title/);
 });

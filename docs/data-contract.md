@@ -33,6 +33,20 @@ The current shared contract version is `1.0`.
 - The timer repository contains a byte-for-byte schema/fixture test mirror under `contracts/v1/`; the 身刻 copy remains canonical.
 
 `schemaVersion` is a storage or feature format marker. `contractVersion` is the cross-client business contract and must not be inferred from UI version strings.
+
+## Contract v2 Compatibility Window
+
+Contract v2 is additive and is available to compatible clients without replacing Contract v1.
+
+- Canonical JSON Schema: `contracts/v2/contract.schema.json`.
+- Canonical API description: `contracts/v2/openapi.json`.
+- Sanitized compatibility fixture: `contracts/v2/contract-fixtures.json`.
+- The Worker accepts explicit `contractVersion: "1.0"` and `"2.0"`; omitted versions still resolve to `1.0`.
+- A v1 query cannot read v2-only entities. A v2 query can read the full additive entity set.
+- The D1 `cloud_records` table remains unchanged because entity data is stored in `data_json`. No destructive database migration is required.
+- Unknown compatible fields are preserved in the record JSON. Clients must retain the raw entity payload when they may round-trip records they do not fully understand.
+- Rollback means returning a client to `1.0`; it does not delete or rewrite v2 records. V2-only records remain stored and become visible again to a v2 client.
+- Production Web clients continue to default to v1 during the migration window. Android may opt into v2 only through its package-specific compatibility gate.
 - Plans are modified only through explicit coach/user-confirmed updates, not automatically by the app.
 - `routine_templates` in Cloudflare D1 are the source of truth for timer-executable routines.
 - `home-training-timer` may cache `routine_templates` locally for offline execution, but cache is only a replica.

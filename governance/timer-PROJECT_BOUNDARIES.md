@@ -38,7 +38,9 @@ Canonical contracts and governance live in the Shenk repository. Read these firs
 - `docs/adr/0004-timer-facts-and-formal-records.md`
 - `docs/adr/0005-explicit-routine-scene-role.md`
 
-Contract v1 remains the production contract. Contract v2 is a plan until Worker and cross-client compatibility gates pass. This repository keeps an identical v1 test mirror at `contracts/v1/` so its offline suite can verify compatibility.
+Contract v1 remains the timer's default production write contract after Package 1. Contract v2 passed the additive Worker and cross-client compatibility gate, but it does not become the timer's write envelope until a later migration package explicitly opts in. This repository keeps identical v1 and v2 test mirrors under `contracts/` so its offline suite verifies both legacy behavior and additive-field preservation.
+
+A Contract v2 routine must provide explicit `scene` and `role`; malformed v2 routines are rejected with a visible error. The v1 compatibility path remains readable during migration and must not rewrite the source template. Unknown template fields are retained under the cached `rawTemplate` snapshot.
 
 Timer changes that add or change shared fields must update the canonical contract first.
 

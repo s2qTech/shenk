@@ -6,7 +6,7 @@
 
 1. 本仓库 `PROJECT_BOUNDARIES.md`
 2. 本仓库 `MODULE_BOUNDARIES.md`
-3. 本仓库 `contracts/v1/` 镜像和测试
+3. 本仓库 `contracts/v1/`、`contracts/v2/` 镜像和测试
 4. 身刻仓库 `AGENTS.md`
 5. 身刻仓库 `governance/guardrails.json`
 6. 身刻仓库 `docs/data-contract.md`

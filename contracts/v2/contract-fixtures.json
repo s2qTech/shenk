@@ -1,0 +1,248 @@
+{
+  "fixtureSchema": "shenk_contract_v2_conformance/v1",
+  "synthetic": true,
+  "contractVersion": "2.0",
+  "unknownField": {
+    "mustSurviveRoundTrip": true
+  },
+  "records": [
+    {
+      "contractVersion": "2.0",
+      "entity": "routine_templates",
+      "id": "routine_fixture_v2_recovery",
+      "revision": 1,
+      "deviceId": "fixture_planner",
+      "createdAt": "2099-01-01T00:00:00.000Z",
+      "updatedAt": "2099-01-01T00:00:00.000Z",
+      "deletedAt": null,
+      "data": {
+        "id": "routine_fixture_v2_recovery",
+        "contractVersion": "2.0",
+        "version": "2.0.0",
+        "title": "Synthetic Recovery",
+        "trainingType": "recovery",
+        "scene": "recovery",
+        "role": "recovery",
+        "lifecycle": "published",
+        "timerVisible": true,
+        "calendarVisible": true,
+        "countsTowardTraining": true,
+        "steps": [
+          {
+            "stepId": "fixture_calf_hold",
+            "name": "Synthetic calf hold",
+            "phase": "stretch",
+            "durationSeconds": 30,
+            "mediaAssetId": "media_fixture_calf",
+            "execution": {
+              "mode": "bilateral_hold",
+              "prepareSeconds": 8,
+              "sideSeconds": 30,
+              "switchSeconds": 6,
+              "sides": ["left", "right"]
+            },
+            "futureCompatibleField": "preserve-me"
+          }
+        ]
+      }
+    },
+    {
+      "contractVersion": "2.0",
+      "entity": "timer_sessions",
+      "id": "session_fixture_v2_001",
+      "revision": 1,
+      "deviceId": "fixture_timer_android",
+      "createdAt": "2099-01-01T01:00:00.000Z",
+      "updatedAt": "2099-01-01T01:05:00.000Z",
+      "deletedAt": null,
+      "data": {
+        "id": "session_fixture_v2_001",
+        "contractVersion": "2.0",
+        "date": "2099-01-01",
+        "routineId": "routine_fixture_v2_recovery",
+        "routineVersion": "2.0.0",
+        "routineDigest": "sha256:fixture-only",
+        "routineSnapshot": { "title": "Synthetic Recovery" },
+        "trainingType": "recovery",
+        "startedAt": "2099-01-01T01:00:00.000Z",
+        "endedAt": "2099-01-01T01:05:00.000Z",
+        "completion": "completed",
+        "actualSeconds": 240,
+        "activeSeconds": 240,
+        "elapsedSeconds": 300,
+        "pausedSeconds": 60,
+        "calendarVisible": true,
+        "countsTowardTraining": true,
+        "stepResults": [],
+        "devicePlatform": "android",
+        "idempotencyKey": "fixture-session-v2-001"
+      }
+    },
+    {
+      "contractVersion": "2.0",
+      "entity": "body_metrics",
+      "id": "metric_fixture_v2_001",
+      "revision": 1,
+      "deviceId": "fixture_android",
+      "createdAt": "2099-01-01T00:30:00.000Z",
+      "updatedAt": "2099-01-01T00:30:00.000Z",
+      "deletedAt": null,
+      "data": {
+        "id": "metric_fixture_v2_001",
+        "date": "2099-01-01",
+        "observedAt": "2099-01-01T00:30:00.000Z",
+        "context": "morning",
+        "source": "manual",
+        "sourceRecordId": null,
+        "weightKg": 100.0,
+        "bodyFatPct": 28.0,
+        "muscleKg": 68.0,
+        "waistCm": 104.0
+      }
+    },
+    {
+      "contractVersion": "2.0",
+      "entity": "status_checkins",
+      "id": "checkin_fixture_v2_morning",
+      "revision": 1,
+      "deviceId": "fixture_android",
+      "createdAt": "2099-01-01T00:31:00.000Z",
+      "updatedAt": "2099-01-01T00:31:00.000Z",
+      "deletedAt": null,
+      "data": {
+        "id": "checkin_fixture_v2_morning",
+        "date": "2099-01-01",
+        "kind": "morning",
+        "observedAt": "2099-01-01T00:31:00.000Z",
+        "sleepDurationMinutes": 390,
+        "deepSleepMinutes": 82,
+        "sleepQuality": 3,
+        "energy": 4,
+        "fatigue": 2,
+        "workPressure": 3,
+        "pain": [
+          { "region": "calf_ankle", "severity": 1, "side": "right" }
+        ]
+      }
+    },
+    {
+      "contractVersion": "2.0",
+      "entity": "daily_reviews",
+      "id": "review_fixture_v2_001",
+      "revision": 1,
+      "deviceId": "fixture_ai_module",
+      "createdAt": "2099-01-01T15:00:00.000Z",
+      "updatedAt": "2099-01-01T15:00:00.000Z",
+      "deletedAt": null,
+      "data": {
+        "id": "review_fixture_v2_001",
+        "date": "2099-01-01",
+        "version": 1,
+        "status": "generated",
+        "conclusion": "Synthetic review only.",
+        "evidence": [],
+        "cautions": [],
+        "inputDigest": "sha256:fixture-input",
+        "provider": "fixture-provider",
+        "model": "fixture-model",
+        "generatedAt": "2099-01-01T15:00:00.000Z"
+      }
+    },
+    {
+      "contractVersion": "2.0",
+      "entity": "plan_import_batches",
+      "id": "batch_fixture_v2_001",
+      "revision": 1,
+      "deviceId": "fixture_planner",
+      "createdAt": "2099-01-01T00:00:00.000Z",
+      "updatedAt": "2099-01-01T00:00:00.000Z",
+      "deletedAt": null,
+      "data": {
+        "id": "batch_fixture_v2_001",
+        "patchId": "patch_fixture_v2_001",
+        "patchSchema": "coach_plan_patch",
+        "patchVersion": "2.0",
+        "receivedAt": "2099-01-01T00:00:00.000Z",
+        "status": "previewed",
+        "affectedEntityIds": [],
+        "counts": { "added": 0, "updated": 0, "deleted": 0 }
+      }
+    },
+    {
+      "contractVersion": "2.0",
+      "entity": "goal_sets",
+      "id": "goals_fixture_v2_001",
+      "revision": 1,
+      "deviceId": "fixture_planner",
+      "createdAt": "2099-01-01T00:00:00.000Z",
+      "updatedAt": "2099-01-01T00:00:00.000Z",
+      "deletedAt": null,
+      "data": {
+        "id": "goals_fixture_v2_001",
+        "version": "1",
+        "lifecycle": "published",
+        "effectiveFrom": "2099-01-01",
+        "goals": [{ "metric": "fixture", "target": 1 }]
+      }
+    },
+    {
+      "contractVersion": "2.0",
+      "entity": "coach_strategies",
+      "id": "strategy_fixture_v2_001",
+      "revision": 1,
+      "deviceId": "fixture_planner",
+      "createdAt": "2099-01-01T00:00:00.000Z",
+      "updatedAt": "2099-01-01T00:00:00.000Z",
+      "deletedAt": null,
+      "data": {
+        "id": "strategy_fixture_v2_001",
+        "version": "1",
+        "lifecycle": "published",
+        "effectiveFrom": "2099-01-01",
+        "boundaries": { "dailyAiMayModifyFormalPlan": false }
+      }
+    }
+  ],
+  "coachPlanPatch": {
+    "schema": "coach_plan_patch",
+    "contractVersion": "2.0",
+    "effectiveFrom": "2099-01-01",
+    "replaceMode": false,
+    "routineTemplates": [],
+    "dailyPlanItems": []
+  },
+  "compatibilityCases": {
+    "emptyPatchIsNoOp": {
+      "routineTemplates": [],
+      "dailyPlanItems": [],
+      "planAdjustments": [],
+      "planTemplates": []
+    },
+    "explicitDelete": {
+      "entity": "routine_templates",
+      "id": "routine_fixture_deleted",
+      "deletedAt": "2099-01-02T00:00:00.000Z"
+    },
+    "staleConflict": {
+      "entity": "body_metrics",
+      "id": "metric_fixture_conflict",
+      "serverRevision": 3,
+      "baseRevision": 2,
+      "expected": "conflict"
+    },
+    "legacyBodyMetricMigration": {
+      "input": {
+        "id": "legacy_metric_fixture_2099-01-03",
+        "date": "2099-01-03",
+        "weightKg": 101.2,
+        "waistCm": 105.0,
+        "bodyFatPct": 28.5,
+        "muscleKg": 67.5,
+        "energy": 4,
+        "fatigue": 2
+      },
+      "expectedBodyMetricId": "body_metric:legacy_metric_fixture_2099-01-03",
+      "expectedStatusCheckinId": "status_checkin:legacy_metric_fixture_2099-01-03"
+    }
+  }
+}

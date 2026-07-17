@@ -1,11 +1,12 @@
 const SCHEMA_VERSION = "2026-06-28-cloud-records-v2";
-const CONTRACT_VERSION = "1.0";
+const ACTIVE_CONTRACT_VERSION = "1.0";
+const SUPPORTED_CONTRACT_VERSIONS = new Set(["1.0", "2.0"]);
 const MAX_UPSERT_RECORDS = 100;
 const MAX_RECORD_DATA_BYTES = 256 * 1024;
 const DEFAULT_QUERY_LIMIT = 200;
 const MAX_QUERY_LIMIT = 500;
 
-const ENTITIES = [
+const V1_ENTITIES = [
   "plan_templates",
   "routine_templates",
   "daily_plan_items",
@@ -19,6 +20,17 @@ const ENTITIES = [
   "feedback_summaries"
 ];
 
+const V2_ENTITIES = [
+  ...V1_ENTITIES,
+  "status_checkins",
+  "daily_reviews",
+  "plan_import_batches",
+  "goal_sets",
+  "coach_strategies"
+];
+
+const ENTITIES = V2_ENTITIES;
+
 const ROLE_WRITE_ENTITIES = {
   admin: new Set(ENTITIES),
   shenk: new Set([
@@ -29,9 +41,14 @@ const ROLE_WRITE_ENTITIES = {
     "timer_session_links",
     "training_logs",
     "body_metrics",
+    "status_checkins",
     "weather_logs",
     "media_assets",
-    "feedback_summaries"
+    "feedback_summaries",
+    "daily_reviews",
+    "plan_import_batches",
+    "goal_sets",
+    "coach_strategies"
   ]),
   timer: new Set(["timer_sessions"])
 };
@@ -55,7 +72,8 @@ export default {
           ok: true,
           service: "shenke-cloud-db",
           schemaVersion: SCHEMA_VERSION,
-          contractVersion: CONTRACT_VERSION,
+          contractVersion: ACTIVE_CONTRACT_VERSION,
+          supportedContractVersions: [...SUPPORTED_CONTRACT_VERSIONS],
           time: new Date().toISOString()
         }, 200, request, env);
       }
@@ -80,7 +98,7 @@ export default {
           ok: true,
           serverTime: new Date().toISOString(),
           schemaVersion: SCHEMA_VERSION,
-          contractVersion: CONTRACT_VERSION,
+          contractVersion: ACTIVE_CONTRACT_VERSION,
           records: {
             plan_templates: [],
             routine_templates: [],
@@ -194,12 +212,12 @@ export default {
 };
 
 async function queryRecords(env, body, client) {
-  assertSupportedContractVersion(body.contractVersion);
-  const entities = sanitizeEntities(body.entities).filter(entity => canRead(client.role, entity));
+  const contractVersion = resolveContractVersion(body.contractVersion);
+  const entities = sanitizeEntities(body.entities, contractVersion).filter(entity => canRead(client.role, entity));
   const since = body.since ? String(body.since) : null;
   const page = normalizeQueryPage(body);
   if (!entities.length) {
-    return { ok: true, contractVersion: CONTRACT_VERSION, serverTime: new Date().toISOString(), records: [], nextCursor: null };
+    return { ok: true, contractVersion, serverTime: new Date().toISOString(), records: [], nextCursor: null };
   }
   const placeholders = entities.map(() => "?").join(",");
   const where = [`entity IN (${placeholders})`];
@@ -230,9 +248,9 @@ async function queryRecords(env, body, client) {
 
   return {
     ok: true,
-    contractVersion: CONTRACT_VERSION,
+    contractVersion,
     serverTime: new Date().toISOString(),
-    records: visibleRows.map(rowToRecord),
+    records: visibleRows.map(row => rowToRecord(row, contractVersion)),
     nextCursor: hasMore && lastRow ? encodeQueryCursor(lastRow) : null
   };
 }
@@ -267,7 +285,7 @@ function decodeQueryCursor(value) {
 }
 
 async function upsertRecords(env, body, client) {
-  assertSupportedContractVersion(body.contractVersion);
+  const contractVersion = resolveContractVersion(body.contractVersion);
   const deviceId = String(body.deviceId || client.deviceId || "unknown_device");
   const records = Array.isArray(body.records) ? body.records : [];
   if (records.length > MAX_UPSERT_RECORDS) {
@@ -281,7 +299,7 @@ async function upsertRecords(env, body, client) {
   for (const record of records) {
     const entity = String(record.entity || "");
     const id = String(record.id || record.data?.id || "");
-    if (!ENTITIES.includes(entity) || !id || !record.data || typeof record.data !== "object") {
+    if (!entitiesForContract(contractVersion).includes(entity) || !id || !record.data || typeof record.data !== "object") {
       conflicts.push({ entity, id, reason: "invalid_record" });
       continue;
     }
@@ -289,7 +307,7 @@ async function upsertRecords(env, body, client) {
       conflicts.push({ entity, id, reason: "forbidden_entity_for_role", role: client.role });
       continue;
     }
-    const validationError = validateRecordForUpsert(entity, id, record.data, record.deletedAt);
+    const validationError = validateRecordForUpsert(contractVersion, entity, id, record.data, record.deletedAt);
     if (validationError) {
       conflicts.push({ entity, id, reason: validationError });
       continue;
@@ -309,7 +327,7 @@ async function upsertRecords(env, body, client) {
         entity,
         id,
         reason: "immutable_template_requires_new_id",
-        serverRecord: rowToRecord(existing),
+        serverRecord: rowToRecord(existing, contractVersion),
         clientRecord: record
       });
       continue;
@@ -330,7 +348,7 @@ async function upsertRecords(env, body, client) {
         entity,
         id,
         reason: "server_revision_mismatch",
-        serverRecord: rowToRecord(existing),
+        serverRecord: rowToRecord(existing, contractVersion),
         clientRecord: record
       });
       continue;
@@ -363,15 +381,15 @@ async function upsertRecords(env, body, client) {
 
   return {
     ok: true,
-    contractVersion: CONTRACT_VERSION,
+    contractVersion,
     serverTime: new Date().toISOString(),
     accepted,
     conflicts
   };
 }
 
-function validateRecordForUpsert(entity, id, data, deletedAt) {
-  if (data.contractVersion !== undefined && data.contractVersion !== CONTRACT_VERSION) return "unsupported_contract_version";
+function validateRecordForUpsert(contractVersion, entity, id, data, deletedAt) {
+  if (data.contractVersion !== undefined && String(data.contractVersion) !== contractVersion) return "record_contract_version_mismatch";
   if (String(id).length > 160 || /[\u0000-\u001f]/.test(String(id))) return "invalid_record_id";
   if (data.id !== undefined && String(data.id) !== String(id)) return "record_id_mismatch";
   let serialized = "";
@@ -394,15 +412,118 @@ function validateRecordForUpsert(entity, id, data, deletedAt) {
       return "invalid_timer_duration";
     }
   }
+  if (contractVersion === "2.0") return validateV2Record(entity, data);
   return null;
 }
 
-function assertSupportedContractVersion(value) {
-  if (value === undefined || value === null || value === "") return;
-  if (String(value) === CONTRACT_VERSION) return;
+function resolveContractVersion(value) {
+  if (value === undefined || value === null || value === "") return ACTIVE_CONTRACT_VERSION;
+  const version = String(value);
+  if (SUPPORTED_CONTRACT_VERSIONS.has(version)) return version;
   const error = new Error("unsupported_contract_version");
   error.status = 400;
   throw error;
+}
+
+function entitiesForContract(contractVersion) {
+  return contractVersion === "2.0" ? V2_ENTITIES : V1_ENTITIES;
+}
+
+function validateV2Record(entity, data) {
+  const requiredByEntity = {
+    routine_templates: ["id", "title", "trainingType", "scene", "role", "lifecycle", "timerVisible", "calendarVisible", "countsTowardTraining", "steps"],
+    timer_sessions: ["id", "date", "routineId", "routineVersion", "routineDigest", "startedAt", "completion", "calendarVisible", "countsTowardTraining", "activeSeconds", "elapsedSeconds", "pausedSeconds", "devicePlatform", "idempotencyKey"],
+    training_logs: ["id", "date", "type", "status", "source", "calendarVisible", "countsTowardTraining"],
+    body_metrics: ["id", "date", "observedAt", "context", "source"],
+    status_checkins: ["id", "date", "kind", "observedAt"],
+    daily_reviews: ["id", "date", "version", "status", "conclusion", "inputDigest", "provider", "model", "generatedAt"],
+    plan_import_batches: ["id", "patchId", "patchSchema", "receivedAt", "status", "affectedEntityIds", "counts"],
+    goal_sets: ["id", "version", "lifecycle", "effectiveFrom", "goals"],
+    coach_strategies: ["id", "version", "lifecycle", "effectiveFrom", "boundaries"]
+  };
+  const missing = (requiredByEntity[entity] || []).find(key => data[key] === undefined || data[key] === null || data[key] === "");
+  if (missing) return `missing_v2_field:${missing}`;
+
+  if (entity === "routine_templates") {
+    if (!["home", "walk", "recovery", "travel"].includes(data.scene)) return "invalid_routine_scene";
+    if (!["main", "warmup", "stretch", "cooldown", "recovery", "auxiliary"].includes(data.role)) return "invalid_routine_role";
+    if (!["draft", "published", "archived"].includes(data.lifecycle)) return "invalid_template_lifecycle";
+    if (!Array.isArray(data.steps) || data.steps.length === 0) return "invalid_routine_steps";
+    if (![data.timerVisible, data.calendarVisible, data.countsTowardTraining].every(value => typeof value === "boolean")) return "invalid_routine_visibility";
+    const invalidStep = data.steps.some(step => {
+      if (!isObject(step) || !step.stepId || !isNumberInRange(step.durationSeconds, 0, 21600, false)) return true;
+      if (step.execution === undefined) return false;
+      if (!isObject(step.execution)) return true;
+      return !["simple", "prepare_only", "alternating", "bilateral_hold", "bilateral_reps"].includes(step.execution.mode || "simple");
+    });
+    if (invalidStep) return "invalid_routine_step";
+  }
+  if (entity === "status_checkins") {
+    if (!["morning", "pre_workout"].includes(data.kind)) return "invalid_checkin_kind";
+    if (data.pain !== undefined && !Array.isArray(data.pain)) return "invalid_checkin_pain";
+    if (!isIsoTimestamp(data.observedAt)) return "invalid_checkin_observed_at";
+    if (["sleepDurationMinutes", "deepSleepMinutes"].some(key => data[key] !== undefined && !isNumberInRange(data[key], 0, 1440))) return "invalid_checkin_sleep";
+    if (["sleepQuality", "energy", "fatigue", "workPressure"].some(key => data[key] !== undefined && !isNumberInRange(data[key], ["sleepQuality", "energy"].includes(key) ? 1 : 0, 5))) return "invalid_checkin_scale";
+    if (Array.isArray(data.pain) && data.pain.some(item => !isValidPain(item))) return "invalid_checkin_pain";
+  }
+  if (entity === "body_metrics") {
+    if (!["morning", "other"].includes(data.context)) return "invalid_metric_context";
+    if (!["manual", "health_connect", "xiaomi_import", "scale_import", "legacy"].includes(data.source)) return "invalid_metric_source";
+    if (!isIsoTimestamp(data.observedAt)) return "invalid_metric_observed_at";
+    if (["weightKg", "waistCm", "bodyFatPct", "muscleKg"].some(key => data[key] !== undefined && !isNumberInRange(data[key], 0, key === "bodyFatPct" ? 100 : 500))) return "invalid_metric_value";
+  }
+  if (entity === "timer_sessions") {
+    if (String(data.idempotencyKey).length > 160) return "invalid_idempotency_key";
+    if (!["web", "android"].includes(data.devicePlatform)) return "invalid_timer_device_platform";
+    if (![data.calendarVisible, data.countsTowardTraining].every(value => typeof value === "boolean")) return "invalid_timer_visibility";
+    if (!isIsoTimestamp(data.startedAt) || (data.endedAt && !isIsoTimestamp(data.endedAt))) return "invalid_timer_timestamp";
+    if (!["activeSeconds", "elapsedSeconds", "pausedSeconds"].every(key => isNumberInRange(data[key], 0, Number.MAX_SAFE_INTEGER))) return "invalid_timer_duration";
+  }
+  if (entity === "training_logs") {
+    if (![data.calendarVisible, data.countsTowardTraining].every(value => typeof value === "boolean")) return "invalid_training_visibility";
+    if (!["manual", "timer", "native_timer", "health_connect", "xiaomi_import", "wearable", "screenshot", "import", "coach_adjusted", "legacy"].includes(data.source)) return "invalid_training_source";
+  }
+  if (entity === "daily_reviews") {
+    if (!["generated", "invalidated", "failed"].includes(data.status)) return "invalid_review_status";
+    if (!isNumberInRange(data.version, 1, Number.MAX_SAFE_INTEGER) || !isIsoTimestamp(data.generatedAt)) return "invalid_review_metadata";
+  }
+  if (entity === "plan_import_batches") {
+    if (data.patchSchema !== "coach_plan_patch" || !["previewed", "applied", "undone", "rejected"].includes(data.status)) return "invalid_plan_import_batch";
+    if (!Array.isArray(data.affectedEntityIds) || !isObject(data.counts)) return "invalid_plan_import_batch";
+    if (!["added", "updated", "deleted"].every(key => isNumberInRange(data.counts[key], 0, Number.MAX_SAFE_INTEGER))) return "invalid_plan_import_counts";
+  }
+  if (entity === "goal_sets") {
+    if (!isPublishedLifecycle(data.lifecycle) || !Array.isArray(data.goals) || data.goals.length === 0 || !isIsoDate(data.effectiveFrom)) return "invalid_goal_set";
+  }
+  if (entity === "coach_strategies") {
+    if (!isPublishedLifecycle(data.lifecycle) || !isObject(data.boundaries) || !isIsoDate(data.effectiveFrom)) return "invalid_coach_strategy";
+  }
+  return null;
+}
+
+function isObject(value) {
+  return Boolean(value && typeof value === "object" && !Array.isArray(value));
+}
+
+function isIsoTimestamp(value) {
+  const text = String(value || "");
+  return text.length >= 10 && !Number.isNaN(Date.parse(text));
+}
+
+function isNumberInRange(value, minimum, maximum, allowMinimum = true) {
+  const number = Number(value);
+  return Number.isFinite(number) && (allowMinimum ? number >= minimum : number > minimum) && number <= maximum;
+}
+
+function isValidPain(value) {
+  if (!isObject(value)) return false;
+  const regions = ["neck_shoulder", "wrist", "lower_back", "hip_glute", "thigh_knee", "calf_ankle", "other"];
+  const sides = [undefined, "left", "right", "bilateral", "unspecified"];
+  return regions.includes(value.region) && sides.includes(value.side) && isNumberInRange(value.severity, 0, 5);
+}
+
+function isPublishedLifecycle(value) {
+  return ["draft", "published", "archived"].includes(value);
 }
 
 function hasSameStoredPayload(existing, data, deletedAt) {
@@ -588,9 +709,9 @@ async function hashProfileAccessKey(value) {
   return Array.from(new Uint8Array(digest)).map((byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
-function rowToRecord(row) {
+function rowToRecord(row, contractVersion = ACTIVE_CONTRACT_VERSION) {
   return {
-    contractVersion: CONTRACT_VERSION,
+    contractVersion,
     entity: row.entity,
     id: row.id,
     revision: row.revision,
@@ -602,10 +723,10 @@ function rowToRecord(row) {
   };
 }
 
-function sanitizeEntities(value) {
-  if (!Array.isArray(value) || !value.length) return ENTITIES;
-  const entities = value.map(String).filter(entity => ENTITIES.includes(entity));
-  return entities.length ? entities : ENTITIES;
+function sanitizeEntities(value, contractVersion = ACTIVE_CONTRACT_VERSION) {
+  const allowed = entitiesForContract(contractVersion);
+  if (!Array.isArray(value) || !value.length) return allowed;
+  return [...new Set(value.map(String).filter(entity => allowed.includes(entity)))];
 }
 
 async function readJson(request) {

@@ -321,6 +321,150 @@ async function run() {
   assert.equal((await response.json()).error, "too_many_records");
 }
 
+{
+  const worker = loadWorker();
+  const response = await worker.fetch(
+    request("https://worker.example/api/health"),
+    { SHENK_TOKEN: "valid" }
+  );
+  const body = await response.json();
+  assert.equal(body.contractVersion, "1.0");
+  assert.deepEqual(Array.from(body.supportedContractVersions), ["1.0", "2.0"]);
+}
+
+{
+  const worker = loadWorker();
+  const response = await worker.fetch(
+    request("https://worker.example/api/records/query", {
+      method: "POST",
+      headers: { Authorization: "Bearer valid", "Content-Type": "application/json" },
+      body: JSON.stringify({ contractVersion: "1.0", entities: ["status_checkins"] })
+    }),
+    { SHENK_TOKEN: "valid", DB: { prepare() { throw new Error("v1 must not query v2-only entities"); } } }
+  );
+  const body = await response.json();
+  assert.equal(response.status, 200);
+  assert.equal(body.contractVersion, "1.0");
+  assert.deepEqual(Array.from(body.records), []);
+}
+
+{
+  const worker = loadWorker();
+  const unknownData = {
+    id: "checkin_roundtrip",
+    date: "2099-01-01",
+    kind: "morning",
+    observedAt: "2099-01-01T00:30:00.000Z",
+    futureCompatibleField: { keep: true }
+  };
+  const row = {
+    entity: "status_checkins",
+    id: "checkin_roundtrip",
+    revision: 1,
+    device_id: "android",
+    created_at: "2099-01-01T00:30:00.000Z",
+    updated_at: "2099-01-01T00:30:00.000Z",
+    deleted_at: null,
+    data_json: JSON.stringify(unknownData)
+  };
+  const response = await worker.fetch(
+    request("https://worker.example/api/records/query", {
+      method: "POST",
+      headers: { Authorization: "Bearer valid", "Content-Type": "application/json" },
+      body: JSON.stringify({ contractVersion: "2.0", entities: ["status_checkins"] })
+    }),
+    {
+      SHENK_TOKEN: "valid",
+      DB: { prepare() { return { bind() { return { all: async () => ({ results: [row] }) }; } }; } }
+    }
+  );
+  const body = await response.json();
+  assert.equal(body.contractVersion, "2.0");
+  assert.deepEqual(body.records[0].data.futureCompatibleField, { keep: true });
+}
+
+{
+  const worker = loadWorker();
+  const writes = [];
+  const checkin = {
+    id: "checkin_v2_write",
+    date: "2099-01-01",
+    kind: "morning",
+    observedAt: "2099-01-01T00:31:00.000Z",
+    pain: [{ region: "wrist", severity: 1, side: "right" }]
+  };
+  const db = {
+    prepare(sql) {
+      if (sql.startsWith("SELECT entity, id, revision")) return { bind() { return { first: async () => null }; } };
+      return { bind(...args) { writes.push({ sql, args }); return { run: async () => ({}) }; } };
+    }
+  };
+  const response = await worker.fetch(
+    request("https://worker.example/api/records/upsert", {
+      method: "POST",
+      headers: { Authorization: "Bearer valid", "Content-Type": "application/json" },
+      body: JSON.stringify({
+        contractVersion: "2.0",
+        records: [{ entity: "status_checkins", id: checkin.id, data: checkin }]
+      })
+    }),
+    { SHENK_TOKEN: "valid", DB: db }
+  );
+  const body = await response.json();
+  assert.equal(body.contractVersion, "2.0");
+  assert.equal(body.accepted.length, 1);
+  assert.equal(body.conflicts.length, 0);
+  assert.equal(writes.length, 2);
+}
+
+{
+  const worker = loadWorker();
+  const response = await worker.fetch(
+    request("https://worker.example/api/records/upsert", {
+      method: "POST",
+      headers: { Authorization: "Bearer valid", "Content-Type": "application/json" },
+      body: JSON.stringify({
+        contractVersion: "2.0",
+        records: [{
+          entity: "status_checkins",
+          id: "timer_cannot_write_checkin",
+          data: { id: "timer_cannot_write_checkin", date: "2099-01-01", kind: "morning", observedAt: "2099-01-01T00:00:00.000Z" }
+        }]
+      })
+    }),
+    { TIMER_TOKEN: "valid", DB: { prepare() { throw new Error("forbidden records must not query D1"); } } }
+  );
+  const body = await response.json();
+  assert.equal(body.conflicts[0].reason, "forbidden_entity_for_role");
+}
+
+{
+  const worker = loadWorker();
+  const response = await worker.fetch(
+    request("https://worker.example/api/records/upsert", {
+      method: "POST",
+      headers: { Authorization: "Bearer valid", "Content-Type": "application/json" },
+      body: JSON.stringify({
+        contractVersion: "2.0",
+        records: [{
+          entity: "timer_sessions",
+          id: "invalid_v2_timer",
+          data: {
+            id: "invalid_v2_timer",
+            date: "2099-01-01",
+            routineId: "routine_fixture",
+            startedAt: "2099-01-01T01:00:00.000Z",
+            completion: "completed"
+          }
+        }]
+      })
+    }),
+    { TIMER_TOKEN: "valid", DB: { prepare() { throw new Error("invalid records must not query D1"); } } }
+  );
+  const body = await response.json();
+  assert.equal(body.conflicts[0].reason, "missing_v2_field:routineVersion");
+}
+
 console.log("worker security tests passed");
 }
 

@@ -1,0 +1,40 @@
+{
+  "fixtureSchema": "shenk_android_package1/v1",
+  "synthetic": true,
+  "contractVersion": "2.0",
+  "supportedContractVersions": ["1.0", "2.0"],
+  "routine": {
+    "id": "routine_fixture_package1",
+    "title": "Synthetic Recovery",
+    "scene": "recovery",
+    "role": "recovery",
+    "lifecycle": "published",
+    "timerVisible": true,
+    "calendarVisible": true,
+    "countsTowardTraining": true,
+    "futureCompatibleField": {
+      "mustSurvive": true
+    }
+  },
+  "statusCheckin": {
+    "id": "checkin_fixture_package1",
+    "entity": "status_checkins",
+    "kind": "morning",
+    "energy": 4
+  },
+  "timerSession": {
+    "id": "timer_fixture_package1",
+    "entity": "timer_sessions",
+    "devicePlatform": "android"
+  },
+  "legacyBodyMetric": {
+    "id": "legacy_metric_fixture_package1",
+    "date": "2099-01-03",
+    "weightKg": 101.2,
+    "waistCm": 105.0,
+    "bodyFatPct": 28.5,
+    "muscleKg": 67.5,
+    "energy": 4,
+    "fatigue": 2
+  }
+}

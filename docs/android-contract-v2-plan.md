@@ -1,13 +1,15 @@
 # Android Contract v2 Plan
 
-Updated: 2026-07-16
-Status: design plan; `contracts/v1` remains the active production contract
+Updated: 2026-07-17
+Status: Package 1 compatibility gate passed; Worker accepts `1.0` and `2.0`, while `1.0` remains the default production contract
 
 ## 1. Purpose
 
 Contract v1 is sufficient for the current Web baseline but does not fully represent morning status, pre-workout changes, native timer durability, daily AI review, plan rollback, or future wearable imports.
 
 Contract v2 must remain presentation-neutral so Android can use a new UI while Web keeps its existing interface.
+
+Package 1 added the canonical v2 schema, OpenAPI description, sanitized fixtures, Worker validation, and cross-client compatibility checks. The D1 record table remains unchanged because shared records are stored as generic JSON envelopes. Rollback is therefore non-destructive: clients stop sending `2.0` and continue using the still-supported `1.0` contract. Package 2 may build native local storage against v2, but existing Web clients continue to default to v1 during the migration window.
 
 ## 2. Compatibility Rules
 
@@ -47,6 +49,7 @@ Required or recommended fields:
   "sleepDurationMinutes": 390,
   "deepSleepMinutes": 82,
   "sleepQuality": 3,
+  "energy": 4,
   "fatigue": 2,
   "workPressure": 3,
   "pain": [
@@ -100,7 +103,7 @@ Source values should support:
 - `scale_import`
 - `legacy`
 
-Legacy sleep, fatigue, and pain fields remain readable but are normalized into `status_checkins`. Android must not indefinitely dual-write both representations.
+Legacy sleep, energy, fatigue, and pain fields remain readable but are normalized into `status_checkins`. Android must not indefinitely dual-write both representations.
 
 ## 6. Evolve `routine_templates`
 

@@ -2,10 +2,14 @@
   "schema": "shenk_project_guardrails/v1",
   "updatedAt": "2026-07-17",
   "activeDelivery": {
-    "phase": "android_package_1_ready",
-    "progress": "1/9",
+    "phase": "android_package_2_ready",
+    "progress": "2/9",
     "productionContract": "1.0",
     "plannedContract": "2.0",
+    "workerSupportedContracts": [
+      "1.0",
+      "2.0"
+    ],
     "androidProductionStack": "kotlin_jetpack_compose",
     "capacitorStatus": "frozen_prototype"
   },
@@ -41,15 +45,21 @@
       "coach_strategies"
     ],
     "record_module": [
+      "timer_session_links",
       "training_logs",
       "body_metrics",
-      "status_checkins"
+      "status_checkins",
+      "weather_logs",
+      "feedback_summaries"
     ],
     "timer_module": [
       "timer_sessions"
     ],
     "ai_review_module": [
       "daily_reviews"
+    ],
+    "asset_module": [
+      "media_assets"
     ]
   },
   "requiredInvariants": [

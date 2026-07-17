@@ -130,10 +130,10 @@ Repository governance is enforced through:
 - accepted decisions in `docs/adr/`;
 - `tests/governance.test.js` in the normal CI test suite.
 
-Native Android Package 0 is complete. The Compose project, accepted four-module graph, Contract v1 conformance fixture, unit/lint/build checks, debug APK artifact, and Compose instrumentation launch test are all in place. CI passed on commit `29470a3`; installation, launch, restart, and offline launch then passed on Xiaomi 14. Native Android progress is `1 / 9`. Contract v1 remains active until the Contract v2 package passes Worker and cross-client compatibility gates.
+Native Android Packages 0 and 1 are complete. Package 0 established the accepted Compose module graph and passed CI plus Xiaomi 14 installation, restart, and offline-launch checks. Package 1 added additive Contract v2 schema/OpenAPI/fixtures, Worker `1.0`/`2.0` negotiation and validation, and Web/Worker/Web timer/Android conformance checks. Native Android progress is `2 / 9`. Contract v1 remains the production default during migration; the Worker accepts v2 without a D1 table migration.
 
 The earlier seven Web/foundation work packages remain completed historical work. Native Android delivery now uses the nine packages and `X / 9` reporting format in `docs/android-delivery-and-constraints.md`.
 
 ## Immediate Next Step
 
-Package 1 is ready but not started: Contract v2 and Worker compatibility. Before implementation, confirm the affected entities, additive compatibility rules, fixtures, Worker validation, rollback path, and cross-client acceptance matrix. Do not begin Package 2 native storage or feature screens as part of Package 1.
+Package 2 is ready but not started: native local-first foundation. Before implementation, confirm Room entities, repository boundaries, transactional outbox behavior, conflict visibility, WorkManager retry policy, DataStore/Keystore responsibilities, encrypted-profile interoperability, SAF backup/restore, and process-death tests. Do not begin Today, check-in, timer, or other feature screens as part of Package 2.
