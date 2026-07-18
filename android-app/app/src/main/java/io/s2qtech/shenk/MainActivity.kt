@@ -19,6 +19,7 @@ class MainActivity : ComponentActivity() {
                     timerSessionRepository = app.timerSessionRepository,
                     timerCoordinator = app.nativeTimerCoordinator,
                     reminderStore = ReminderSettingsStore(this),
+                    cloudConnectionManager = app.cloudConnectionManager,
                 )
             }
         }

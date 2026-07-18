@@ -12,6 +12,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import io.s2qtech.shenk.sync.CalendarRecordRepository
+import io.s2qtech.shenk.sync.CloudConnectionManager
 import io.s2qtech.shenk.sync.NativeTimerSessionRepository
 import io.s2qtech.shenk.sync.RoutineLibraryRepository
 import io.s2qtech.shenk.sync.TodayRecordRepository
@@ -34,6 +35,7 @@ fun ShenkApp(
     timerSessionRepository: NativeTimerSessionRepository,
     timerCoordinator: NativeTimerCoordinator,
     reminderStore: ReminderSettingsStore,
+    cloudConnectionManager: CloudConnectionManager,
 ) {
     val pager = rememberPagerState(initialPage = 1, pageCount = { 3 })
     val scope = rememberCoroutineScope()
@@ -61,6 +63,7 @@ fun ShenkApp(
                     1 -> TodayRoute(
                         repository = todayRepository,
                         reminderStore = reminderStore,
+                        cloudConnectionManager = cloudConnectionManager,
                         onCalendar = { scope.launch { pager.animateScrollToPage(0) } },
                         onRecords = { secondary = SecondarySpace.RECORDS },
                         onData = { secondary = SecondarySpace.DATA },

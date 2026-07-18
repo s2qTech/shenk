@@ -143,4 +143,4 @@ The earlier seven Web/foundation work packages remain completed historical work.
 
 ## Immediate Next Step
 
-Package 5 is implemented and awaiting full CI plus Xiaomi 14 acceptance. The implementation and manual acceptance paths are recorded in `docs/android-package5-native-timer.md`. Do not start Package 6 or raise progress to `6 / 9` until the native timer passes rotation, interruption, background, offline, pending-completion, and duplicate-prevention checks on the primary device.
+Package 5 is implemented and awaiting full CI plus Xiaomi 14 acceptance. The acceptance build also corrects two earlier native delivery gaps: clean-install cloud connection/synchronization and the visual hierarchy of Today/Calendar. The implementation and manual acceptance paths are recorded in `docs/android-package5-native-timer.md`. Do not start Package 6 or raise progress to `6 / 9` until cloud restoration, the revised native surfaces, and the timer rotation/interruption/background/offline/pending-completion/duplicate-prevention paths pass on the primary device.

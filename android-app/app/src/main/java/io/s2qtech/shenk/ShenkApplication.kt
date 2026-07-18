@@ -3,6 +3,7 @@ package io.s2qtech.shenk
 import android.app.Application
 import io.s2qtech.shenk.sync.LocalFirstRepository
 import io.s2qtech.shenk.sync.CalendarRecordRepository
+import io.s2qtech.shenk.sync.CloudConnectionManager
 import io.s2qtech.shenk.sync.NativeTimerSessionRepository
 import io.s2qtech.shenk.sync.RoutineLibraryRepository
 import io.s2qtech.shenk.sync.ShenkDatabase
@@ -38,6 +39,10 @@ class ShenkApplication : Application() {
         NativeTimerSessionRepository(localFirstRepository)
     }
 
+    val cloudConnectionManager: CloudConnectionManager by lazy {
+        CloudConnectionManager(this)
+    }
+
     val nativeTimerCoordinator: NativeTimerCoordinator by lazy {
         NativeTimerCoordinator(this, timerSessionRepository, applicationScope)
     }
@@ -48,6 +53,11 @@ class ShenkApplication : Application() {
             ReminderScheduler(this@ShenkApplication).schedule(
                 ReminderSettingsStore(this@ShenkApplication).settings.first(),
             )
+            runCatching {
+                if (cloudConnectionManager.state().configured) {
+                    cloudConnectionManager.synchronizeNow()
+                }
+            }
         }
     }
 }

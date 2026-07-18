@@ -30,6 +30,7 @@ class MainActivityTest {
     @Test
     fun todayOpensOfflineAndMorningWorkspaceIsReachable() {
         composeRule.onNodeWithTag("today-screen").assertIsDisplayed()
+        composeRule.onNodeWithTag("cloud-setup-prompt").assertIsDisplayed()
         composeRule.onNodeWithText("晨起状态").assertIsDisplayed()
         composeRule.onNodeWithTag("morning-action").performClick()
         composeRule.onNodeWithText("今天身体怎么样？").assertIsDisplayed()
@@ -52,6 +53,15 @@ class MainActivityTest {
         composeRule.onNodeWithTag("calendar-open-data").performSemanticsAction(SemanticsActions.OnClick)
         composeRule.waitForIdle()
         composeRule.onNodeWithText("最近 30 天身体变化").assertIsDisplayed()
+    }
+
+    @Test
+    fun cloudConnectionIsDiscoverableFromTodayAndMore() {
+        composeRule.onNodeWithTag("cloud-setup-prompt").assertIsDisplayed()
+        composeRule.onNodeWithTag("today-open-more").performClick()
+        composeRule.onNodeWithTag("open-cloud-settings").assertIsDisplayed().performClick()
+        composeRule.onNodeWithTag("migration-code-input").assertIsDisplayed()
+        composeRule.onNodeWithTag("connect-cloud-data").assertIsDisplayed()
     }
 
     @Test

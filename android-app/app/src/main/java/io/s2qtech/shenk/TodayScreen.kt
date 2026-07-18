@@ -5,11 +5,9 @@ import android.content.pm.PackageManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -33,7 +31,6 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -52,6 +49,8 @@ import io.s2qtech.shenk.model.GuidanceSource
 import io.s2qtech.shenk.model.TodayGuidance
 import io.s2qtech.shenk.sync.TodayRecordRepository
 import io.s2qtech.shenk.sync.TodayRecords
+import io.s2qtech.shenk.sync.CloudConnectionManager
+import io.s2qtech.shenk.sync.CloudConnectionState
 import io.s2qtech.shenk.sync.SyncScheduler
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
@@ -59,13 +58,14 @@ import java.util.Locale
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
-private enum class TodaySheet { MORNING, PRE_WORKOUT, REMINDERS }
+private enum class TodaySheet { MORNING, PRE_WORKOUT, REMINDERS, MORE, CONNECTION }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TodayRoute(
     repository: TodayRecordRepository,
     reminderStore: ReminderSettingsStore,
+    cloudConnectionManager: CloudConnectionManager,
     onCalendar: () -> Unit = {},
     onRecords: () -> Unit = {},
     onData: () -> Unit = {},
@@ -78,7 +78,13 @@ fun TodayRoute(
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
     var reminders by remember { mutableStateOf(ReminderSettings()) }
-    LaunchedEffect(Unit) { reminders = reminderStore.settings.first() }
+    var connection by remember { mutableStateOf(CloudConnectionState(false, "")) }
+    var connectionBusy by remember { mutableStateOf(false) }
+    var connectionError by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(Unit) {
+        reminders = reminderStore.settings.first()
+        connection = cloudConnectionManager.state()
+    }
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission(),
     ) { }
@@ -94,6 +100,9 @@ fun TodayRoute(
             onMorning = { sheet = TodaySheet.MORNING },
             onPreWorkout = { sheet = TodaySheet.PRE_WORKOUT },
             onReminders = { sheet = TodaySheet.REMINDERS },
+            onMore = { sheet = TodaySheet.MORE },
+            onConnect = { sheet = TodaySheet.CONNECTION },
+            cloudConfigured = connection.configured,
             onCalendar = onCalendar,
             onRecords = onRecords,
             onData = onData,
@@ -156,6 +165,58 @@ fun TodayRoute(
                 },
             )
         }
+        TodaySheet.MORE -> ModalBottomSheet(onDismissRequest = { sheet = null }) {
+            MoreSpaceSheet(
+                cloudConfigured = connection.configured,
+                onRecords = { sheet = null; onRecords() },
+                onData = { sheet = null; onData() },
+                onReminders = { sheet = TodaySheet.REMINDERS },
+                onConnection = { sheet = TodaySheet.CONNECTION },
+            )
+        }
+        TodaySheet.CONNECTION -> ModalBottomSheet(onDismissRequest = { if (!connectionBusy) sheet = null }) {
+            CloudConnectionSheet(
+                state = connection,
+                busy = connectionBusy,
+                error = connectionError,
+                onConnect = { code ->
+                    connectionBusy = true
+                    connectionError = null
+                    scope.launch {
+                        runCatching { cloudConnectionManager.connectWithMigrationCode(code) }
+                            .onSuccess { result ->
+                                connection = cloudConnectionManager.state()
+                                connectionBusy = false
+                                sheet = null
+                                snackbar.showSnackbar("同步完成，读取 ${result.pulled} 条云端数据")
+                            }
+                            .onFailure {
+                                connectionBusy = false
+                                connectionError = when {
+                                    it.message?.contains("401") == true -> "迁移码无权读取该配置，请在 Web 身刻重新生成。"
+                                    else -> "连接失败，请检查迁移码和网络后重试。"
+                                }
+                            }
+                    }
+                },
+                onSync = {
+                    connectionBusy = true
+                    connectionError = null
+                    scope.launch {
+                        runCatching { cloudConnectionManager.synchronizeNow() }
+                            .onSuccess { result ->
+                                connectionBusy = false
+                                sheet = null
+                                snackbar.showSnackbar("同步完成，读取 ${result.pulled} 条，写入 ${result.pushed} 条")
+                            }
+                            .onFailure {
+                                connectionBusy = false
+                                connectionError = "同步失败，本地数据不受影响，请稍后重试。"
+                            }
+                    }
+                },
+            )
+        }
         null -> Unit
     }
 }
@@ -168,6 +229,9 @@ private fun TodayScreen(
     onMorning: () -> Unit,
     onPreWorkout: () -> Unit,
     onReminders: () -> Unit,
+    onMore: () -> Unit,
+    onConnect: () -> Unit,
+    cloudConfigured: Boolean,
     onCalendar: () -> Unit,
     onRecords: () -> Unit,
     onData: () -> Unit,
@@ -198,27 +262,21 @@ private fun TodayScreen(
                     color = MaterialTheme.colorScheme.secondary,
                 )
             }
-            Column(horizontalAlignment = Alignment.End) {
-                Row {
-                    TextButton(onClick = onCalendar, modifier = Modifier.testTag("today-open-calendar")) {
-                        Text("月历")
-                    }
-                    TextButton(onClick = onRecords, modifier = Modifier.testTag("today-open-records")) {
-                        Text("记录")
-                    }
-                    TextButton(onClick = onData, modifier = Modifier.testTag("today-open-data")) {
-                        Text("数据")
-                    }
-                    TextButton(onClick = onTraining, modifier = Modifier.testTag("today-open-training")) {
-                        Text("训练")
-                    }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FilledTonalButton(onClick = onCalendar, modifier = Modifier.testTag("today-open-calendar")) {
+                    Text("月历")
                 }
-                FilledTonalButton(onClick = onReminders, contentPadding = PaddingValues(horizontal = 16.dp)) {
-                    Text("提醒")
+                OutlinedButton(onClick = onMore, modifier = Modifier.testTag("today-open-more")) {
+                    Text("更多")
                 }
             }
         }
-        Spacer(Modifier.height(34.dp))
+        Spacer(Modifier.height(26.dp))
+
+        if (!cloudConfigured) {
+            CloudSetupPrompt(onClick = onConnect)
+            Spacer(Modifier.height(18.dp))
+        }
 
         AnimatedContent(records?.guidance, label = "today-guidance") { guidance ->
             if (guidance == null) {
@@ -226,7 +284,7 @@ private fun TodayScreen(
                     Text("正在读取今天…", color = MaterialTheme.colorScheme.secondary)
                 }
             } else {
-                GuidanceBlock(guidance)
+                GuidanceBlock(guidance, onTraining)
             }
         }
         Spacer(Modifier.height(30.dp))
@@ -267,7 +325,7 @@ private fun TodayScreen(
 }
 
 @Composable
-private fun GuidanceBlock(guidance: io.s2qtech.shenk.model.TodayGuidance) {
+private fun GuidanceBlock(guidance: io.s2qtech.shenk.model.TodayGuidance, onTraining: () -> Unit) {
     val source = when (guidance.source) {
         GuidanceSource.ACTUAL -> "今日已完成"
         GuidanceSource.FORMAL_PLAN -> "今日计划"
@@ -279,7 +337,9 @@ private fun GuidanceBlock(guidance: io.s2qtech.shenk.model.TodayGuidance) {
             GuidanceSource.FORMAL_PLAN -> MaterialTheme.colorScheme.secondaryContainer
             GuidanceSource.LOCAL_SUGGESTION -> MaterialTheme.colorScheme.tertiaryContainer
         },
-        shape = RoundedCornerShape(26.dp),
+        shape = RoundedCornerShape(28.dp),
+        shadowElevation = 8.dp,
+        tonalElevation = 2.dp,
     ) {
         Column(Modifier.fillMaxWidth().padding(24.dp)) {
             Text(source, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.secondary)
@@ -292,7 +352,61 @@ private fun GuidanceBlock(guidance: io.s2qtech.shenk.model.TodayGuidance) {
                 Spacer(Modifier.height(14.dp))
                 Text(it, style = MaterialTheme.typography.bodyLarge)
             }
+            if (guidance.source != GuidanceSource.ACTUAL) {
+                Spacer(Modifier.height(20.dp))
+                Button(
+                    onClick = onTraining,
+                    modifier = Modifier.fillMaxWidth().height(52.dp).testTag("today-open-training"),
+                ) { Text("进入训练") }
+            }
         }
+    }
+}
+
+@Composable
+private fun CloudSetupPrompt(onClick: () -> Unit) {
+    Surface(
+        modifier = Modifier.fillMaxWidth().testTag("cloud-setup-prompt"),
+        color = MaterialTheme.colorScheme.surfaceVariant,
+        shape = RoundedCornerShape(20.dp),
+        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(18.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(Modifier.weight(1f)) {
+                Text("连接已有数据", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                Text("粘贴迁移码，取回计划、记录和方案", color = MaterialTheme.colorScheme.secondary)
+            }
+            FilledTonalButton(onClick = onClick) { Text("连接") }
+        }
+    }
+}
+
+@Composable
+private fun MoreSpaceSheet(
+    cloudConfigured: Boolean,
+    onRecords: () -> Unit,
+    onData: () -> Unit,
+    onReminders: () -> Unit,
+    onConnection: () -> Unit,
+) {
+    Column(Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 24.dp, vertical = 14.dp)) {
+        Text("更多", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold)
+        Spacer(Modifier.height(16.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            OutlinedButton(onClick = onRecords, modifier = Modifier.weight(1f).testTag("today-open-records")) { Text("记录") }
+            OutlinedButton(onClick = onData, modifier = Modifier.weight(1f).testTag("today-open-data")) { Text("数据") }
+        }
+        Spacer(Modifier.height(10.dp))
+        OutlinedButton(onClick = onReminders, modifier = Modifier.fillMaxWidth()) { Text("提醒设置") }
+        Spacer(Modifier.height(10.dp))
+        Button(onClick = onConnection, modifier = Modifier.fillMaxWidth().testTag("open-cloud-settings")) {
+            Text(if (cloudConfigured) "数据同步" else "连接已有数据")
+        }
+        Spacer(Modifier.height(12.dp))
     }
 }
 
