@@ -129,6 +129,9 @@ data class TodayGuidance(
     val trainingType: String,
     val estimatedMinutes: Int? = null,
     val note: String? = null,
+    val routineId: String? = null,
+    val dailyPlanItemId: String? = null,
+    val planTemplateId: String? = null,
 )
 
 object TodayGuidanceResolver {

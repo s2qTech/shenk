@@ -70,6 +70,28 @@ class CalendarRecordRepositoryInstrumentedTest {
     }
 
     @Test
+    fun formalPlanPreservesTimerLaunchReferences() {
+        runBlocking {
+            val date = LocalDate.of(2100, 2, 4)
+            local.applyRemote(record("daily_plan_items", "daily-plan", buildJsonObject {
+                put("id", JsonPrimitive("daily-plan"))
+                put("date", JsonPrimitive(date.toString()))
+                put("title", JsonPrimitive("力量训练"))
+                put("trainingType", JsonPrimitive("strength"))
+                put("routineId", JsonPrimitive("routine-strength"))
+                put("planTemplateId", JsonPrimitive("plan-weekly"))
+            }))
+
+            val guidance = repository.observeDay(date).first().guidance
+
+            assertEquals(GuidanceSource.FORMAL_PLAN, guidance.source)
+            assertEquals("routine-strength", guidance.routineId)
+            assertEquals("daily-plan", guidance.dailyPlanItemId)
+            assertEquals("plan-weekly", guidance.planTemplateId)
+        }
+    }
+
+    @Test
     fun editingPreservesUnknownFieldsAndDeleteImmediatelyHidesRecord() {
         runBlocking {
             val date = LocalDate.of(2100, 2, 3)

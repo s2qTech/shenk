@@ -1,7 +1,9 @@
 package io.s2qtech.shenk
 
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.fetchSemanticsNodes
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
@@ -26,7 +28,7 @@ class MainActivityTest {
 
     @Test
     fun todayOpensOfflineAndMorningWorkspaceIsReachable() {
-        composeRule.onNodeWithText("今天").assertIsDisplayed()
+        composeRule.onNodeWithTag("today-screen").assertIsDisplayed()
         composeRule.onNodeWithText("晨起状态").assertIsDisplayed()
         composeRule.onNodeWithTag("morning-action").performClick()
         composeRule.onNodeWithText("今天身体怎么样？").assertIsDisplayed()
@@ -87,6 +89,11 @@ class MainActivityTest {
         composeRule.onNodeWithTag("today-open-training").performClick()
         composeRule.waitForIdle()
         composeRule.onNodeWithTag("training-screen").assertIsDisplayed()
+        composeRule.waitUntil(timeoutMillis = 5_000) {
+            composeRule.onAllNodesWithTag("routine-synthetic-native-timer")
+                .fetchSemanticsNodes()
+                .isNotEmpty()
+        }
         composeRule.onNodeWithTag("routine-synthetic-native-timer").performClick()
         composeRule.onNodeWithTag("timer-start").assertIsDisplayed()
         composeRule.onNodeWithText("原地慢走").assertIsDisplayed()

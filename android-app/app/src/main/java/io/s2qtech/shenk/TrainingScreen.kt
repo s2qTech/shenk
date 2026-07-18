@@ -61,6 +61,7 @@ import io.s2qtech.shenk.model.RoutineStep
 import io.s2qtech.shenk.model.RoutineTemplate
 import io.s2qtech.shenk.model.TimerSessionFact
 import io.s2qtech.shenk.model.TrainingLog
+import io.s2qtech.shenk.model.GuidanceSource
 import io.s2qtech.shenk.sync.CalendarRecordRepository
 import io.s2qtech.shenk.sync.NativeTimerSessionRepository
 import io.s2qtech.shenk.sync.PendingTimerCompletion
@@ -81,12 +82,12 @@ fun TrainingRoute(
     sessionRepository: NativeTimerSessionRepository,
     recordRepository: CalendarRecordRepository,
     coordinator: NativeTimerCoordinator,
+    launchRequest: TrainingLaunchRequest?,
+    onLaunchConsumed: () -> Unit,
     onToday: () -> Unit,
     onCalendar: () -> Unit,
 ) {
-    val library by routineRepository.observeLibrary().collectAsState(
-        initial = RoutineLibrary(RoutineScene.entries.associateWith { emptyList() }, 0),
-    )
+    val library by routineRepository.observeLibrary().collectAsState(initial = null)
     val pending by sessionRepository.observePendingCompletion().collectAsState(initial = emptyList())
     val snapshot by coordinator.snapshot.collectAsState()
     val context = LocalContext.current
@@ -95,12 +96,43 @@ fun TrainingRoute(
     val cuePlayer = remember { TimerCuePlayer(context) }
     val callMonitor = remember { TimerCallMonitor(context, coordinator::pauseForPhoneCall) }
     var completion by remember { mutableStateOf<TimerSessionFact?>(null) }
+    var preferredScene by remember { mutableStateOf<RoutineScene?>(null) }
+    var launchNotice by remember { mutableStateOf<String?>(null) }
+    var launchContext by remember { mutableStateOf<TrainingLaunchRequest?>(null) }
 
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions(),
     ) { callMonitor.registerIfPermitted() }
 
-    LaunchedEffect(library.routines) { coordinator.restoreIfPossible(library.routines) }
+    LaunchedEffect(library?.routines) {
+        library?.let { coordinator.restoreIfPossible(it.routines) }
+    }
+    LaunchedEffect(library, launchRequest, snapshot.state) {
+        val available = library ?: return@LaunchedEffect
+        val request = launchRequest ?: return@LaunchedEffect
+        if (snapshot.state != TimerEngineState.IDLE) return@LaunchedEffect
+        val guidance = request.guidance
+        launchContext = request
+        preferredScene = guidance?.trainingType?.let(::sceneForTrainingEntry)
+        launchNotice = null
+        if (guidance?.source == GuidanceSource.FORMAL_PLAN &&
+            guidance.trainingType in setOf("strength", "recovery")
+        ) {
+            val routineId = guidance.routineId
+            val routine = routineId?.let { id -> available.routines.firstOrNull { it.id == id } }
+            when {
+                routine != null -> coordinator.select(
+                    routine = routine,
+                    date = request.date,
+                    dailyPlanItemId = guidance.dailyPlanItemId,
+                    planTemplateId = guidance.planTemplateId,
+                )
+                routineId == null -> launchNotice = "今天的计划没有指定计时方案，请手动选择。"
+                else -> launchNotice = "计划指定的方案尚未缓存，请联网同步后重试。"
+            }
+        }
+        onLaunchConsumed()
+    }
     LaunchedEffect(coordinator) { coordinator.cues.collect(cuePlayer::speak) }
     LaunchedEffect(snapshot.state, snapshot.request?.sessionId) {
         if (snapshot.state in setOf(TimerEngineState.COMPLETED, TimerEngineState.STOPPED)) {
@@ -124,10 +156,26 @@ fun TrainingRoute(
     }
 
     when (snapshot.state) {
-        TimerEngineState.IDLE -> RoutineLibraryScreen(
-            library = library,
+        TimerEngineState.IDLE -> if (library == null) {
+            Box(
+                Modifier.fillMaxSize().testTag("training-screen"),
+                contentAlignment = Alignment.Center,
+            ) { Text("正在读取离线方案库…") }
+        } else RoutineLibraryScreen(
+            library = requireNotNull(library),
             pending = pending,
-            onSelect = { coordinator.select(it) },
+            preferredScene = preferredScene,
+            notice = launchNotice,
+            onSelect = { routine ->
+                val request = launchContext
+                coordinator.select(
+                    routine = routine,
+                    date = request?.date ?: java.time.LocalDate.now(),
+                    dailyPlanItemId = request?.guidance?.dailyPlanItemId,
+                    planTemplateId = request?.guidance?.planTemplateId,
+                )
+                launchContext = null
+            },
             onPending = { completion = it.session },
             onToday = onToday,
             onCalendar = onCalendar,
@@ -181,12 +229,14 @@ fun TrainingRoute(
 private fun RoutineLibraryScreen(
     library: RoutineLibrary,
     pending: List<PendingTimerCompletion>,
+    preferredScene: RoutineScene?,
+    notice: String?,
     onSelect: (RoutineTemplate) -> Unit,
     onPending: (PendingTimerCompletion) -> Unit,
     onToday: () -> Unit,
     onCalendar: () -> Unit,
 ) {
-    var scene by remember { mutableStateOf(RoutineScene.HOME) }
+    var scene by remember(preferredScene) { mutableStateOf(preferredScene ?: RoutineScene.HOME) }
     LaunchedEffect(library.routines) {
         if (library.byScene[scene].isNullOrEmpty()) {
             scene = RoutineScene.entries.firstOrNull { library.byScene[it].orEmpty().isNotEmpty() } ?: scene
@@ -235,6 +285,15 @@ private fun RoutineLibraryScreen(
                         Text("补记录", color = MaterialTheme.colorScheme.tertiary)
                     }
                 }
+            }
+        }
+        notice?.let { message ->
+            item {
+                Surface(
+                    color = MaterialTheme.colorScheme.tertiaryContainer,
+                    shape = RoundedCornerShape(18.dp),
+                    modifier = Modifier.fillMaxWidth(),
+                ) { Text(message, modifier = Modifier.padding(16.dp)) }
             }
         }
         item {
@@ -533,3 +592,11 @@ private fun formatDuration(seconds: Int): String = when {
 }
 
 private fun formatClock(seconds: Int): String = "%02d:%02d".format(seconds / 60, seconds % 60)
+
+private fun sceneForTrainingEntry(trainingType: String): RoutineScene? = when (trainingType) {
+    "easy_walk", "quality_walk" -> RoutineScene.WALK
+    "strength" -> RoutineScene.HOME
+    "recovery" -> RoutineScene.RECOVERY
+    "travel_strength", "seat_recovery" -> RoutineScene.TRAVEL
+    else -> null
+}

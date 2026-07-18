@@ -49,6 +49,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import io.s2qtech.shenk.model.GuidanceSource
+import io.s2qtech.shenk.model.TodayGuidance
 import io.s2qtech.shenk.sync.TodayRecordRepository
 import io.s2qtech.shenk.sync.TodayRecords
 import io.s2qtech.shenk.sync.SyncScheduler
@@ -68,7 +69,7 @@ fun TodayRoute(
     onCalendar: () -> Unit = {},
     onRecords: () -> Unit = {},
     onData: () -> Unit = {},
-    onTraining: () -> Unit = {},
+    onTraining: (TodayGuidance?) -> Unit = {},
 ) {
     val date = remember { LocalDate.now() }
     val records by repository.observe(date).collectAsState(initial = null)
@@ -96,7 +97,7 @@ fun TodayRoute(
             onCalendar = onCalendar,
             onRecords = onRecords,
             onData = onData,
-            onTraining = onTraining,
+            onTraining = { onTraining(records?.guidance) },
         )
     }
 
@@ -175,6 +176,7 @@ private fun TodayScreen(
     Column(
         modifier = modifier
             .fillMaxSize()
+            .testTag("today-screen")
             .verticalScroll(rememberScrollState())
             .statusBarsPadding()
             .navigationBarsPadding()

@@ -64,6 +64,11 @@ internal object GuidanceResolution {
                 trainingType = type,
                 estimatedMinutes = data.fieldDouble("estimatedMinutes")?.toInt(),
                 note = data.fieldString("notes") ?: data.fieldString("reason"),
+                routineId = data.fieldString("routineId"),
+                dailyPlanItemId = data.fieldString("dailyPlanItemId")
+                    ?: data.fieldString("id")
+                    ?: planRecord?.id,
+                planTemplateId = data.fieldString("planTemplateId"),
             )
         }
 

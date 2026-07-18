@@ -15,9 +15,16 @@ import io.s2qtech.shenk.sync.CalendarRecordRepository
 import io.s2qtech.shenk.sync.NativeTimerSessionRepository
 import io.s2qtech.shenk.sync.RoutineLibraryRepository
 import io.s2qtech.shenk.sync.TodayRecordRepository
+import io.s2qtech.shenk.model.TodayGuidance
+import java.time.LocalDate
 import kotlinx.coroutines.launch
 
 private enum class SecondarySpace { RECORDS, DATA }
+
+data class TrainingLaunchRequest(
+    val date: LocalDate,
+    val guidance: TodayGuidance?,
+)
 
 @Composable
 fun ShenkApp(
@@ -31,6 +38,7 @@ fun ShenkApp(
     val pager = rememberPagerState(initialPage = 1, pageCount = { 3 })
     val scope = rememberCoroutineScope()
     var secondary by remember { mutableStateOf<SecondarySpace?>(null) }
+    var trainingLaunch by remember { mutableStateOf<TrainingLaunchRequest?>(null) }
 
     Box(Modifier.fillMaxSize()) {
         when (secondary) {
@@ -56,13 +64,18 @@ fun ShenkApp(
                         onCalendar = { scope.launch { pager.animateScrollToPage(0) } },
                         onRecords = { secondary = SecondarySpace.RECORDS },
                         onData = { secondary = SecondarySpace.DATA },
-                        onTraining = { scope.launch { pager.animateScrollToPage(2) } },
+                        onTraining = { guidance ->
+                            trainingLaunch = TrainingLaunchRequest(LocalDate.now(), guidance)
+                            scope.launch { pager.animateScrollToPage(2) }
+                        },
                     )
                     else -> TrainingRoute(
                         routineRepository = routineLibraryRepository,
                         sessionRepository = timerSessionRepository,
                         recordRepository = calendarRepository,
                         coordinator = timerCoordinator,
+                        launchRequest = trainingLaunch,
+                        onLaunchConsumed = { trainingLaunch = null },
                         onToday = { scope.launch { pager.animateScrollToPage(1) } },
                         onCalendar = { scope.launch { pager.animateScrollToPage(0) } },
                     )
