@@ -9,7 +9,7 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTouchInput
-import androidx.compose.ui.test.swipeUp
+import androidx.compose.ui.test.swipeLeft
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import io.s2qtech.shenk.model.SharedEntityOwner
@@ -99,8 +99,8 @@ class MainActivityTest {
             )
         }
 
-        composeRule.onNodeWithTag("today-screen").performTouchInput { swipeUp() }
-        composeRule.onNodeWithTag("today-open-training").assertIsDisplayed().performClick()
+        composeRule.onNodeWithTag("primary-pager").performTouchInput { swipeLeft() }
+        composeRule.onNodeWithTag("training-screen").assertIsDisplayed()
         composeRule.waitUntil(timeoutMillis = 10_000) {
             composeRule.onAllNodesWithTag("routine-synthetic-native-timer")
                 .fetchSemanticsNodes()

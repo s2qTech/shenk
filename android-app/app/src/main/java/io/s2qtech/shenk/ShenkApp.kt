@@ -11,6 +11,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import io.s2qtech.shenk.sync.CalendarRecordRepository
 import io.s2qtech.shenk.sync.CloudConnectionManager
 import io.s2qtech.shenk.sync.NativeTimerSessionRepository
@@ -52,7 +53,11 @@ fun ShenkApp(
                 repository = calendarRepository,
                 onBack = { secondary = null },
             )
-            null -> HorizontalPager(state = pager, beyondViewportPageCount = 1) { page ->
+            null -> HorizontalPager(
+                state = pager,
+                beyondViewportPageCount = 1,
+                modifier = Modifier.testTag("primary-pager"),
+            ) { page ->
                 when (page) {
                     0 -> CalendarScreen(
                         repository = calendarRepository,
