@@ -10,6 +10,7 @@ import io.s2qtech.shenk.model.PainSide
 import io.s2qtech.shenk.model.SharedEntityOwner
 import io.s2qtech.shenk.model.SharedRecord
 import io.s2qtech.shenk.model.StatusCheckin
+import io.s2qtech.shenk.model.TodayGuidance
 import java.time.LocalDate
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
