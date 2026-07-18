@@ -15,6 +15,9 @@
 - `routine_templates` 是计时器可执行流程的主源。
 - `daily_plan_items.routineId` 必须引用一个可执行的 `routine_templates.id`。
 - UI 标题使用中文用户侧名称，不显示 routineId、英文下划线 ID、版本号。
+- routine 的完整权威规则见 `docs/coach-routine-contract.md`。
+- `scene`、`role` 和 `lifecycle` 必须显式填写，不得由标题、类型或 ID 推断。
+- `lifecycle` 只允许 `draft` / `published` / `archived`，旧值 `active` 必须被拒绝。
 
 ## 最小 Patch 模板
 
@@ -39,8 +42,12 @@
   "variant": "可选，简版/完整版/低压版",
   "trainingType": "strength",
   "scene": "home",
+  "role": "main",
+  "lifecycle": "published",
   "estimatedMinutes": 45,
   "timerVisible": true,
+  "calendarVisible": true,
+  "countsTowardTraining": true,
   "sortOrder": 10,
   "defaultOptions": {
     "defaultRestSeconds": 20,
@@ -137,8 +144,12 @@
       "variant": "低压版",
       "trainingType": "recovery",
       "scene": "recovery",
+      "role": "recovery",
+      "lifecycle": "published",
       "estimatedMinutes": 18,
       "timerVisible": true,
+      "calendarVisible": true,
+      "countsTowardTraining": true,
       "steps": [
         {
           "stepId": "breathing",
@@ -173,8 +184,12 @@
       "title": "走后拉伸",
       "trainingType": "stretch",
       "scene": "walk",
+      "role": "stretch",
+      "lifecycle": "published",
       "estimatedMinutes": 8,
       "timerVisible": true,
+      "calendarVisible": false,
+      "countsTowardTraining": false,
       "steps": [
         {
           "stepId": "stretch_calf_straight",
@@ -218,8 +233,12 @@
       "title": "公园普通走",
       "trainingType": "easy_walk",
       "scene": "walk",
+      "role": "main",
+      "lifecycle": "published",
       "estimatedMinutes": 45,
       "timerVisible": true,
+      "calendarVisible": true,
+      "countsTowardTraining": true,
       "steps": [
         {
           "stepId": "walk_easy",

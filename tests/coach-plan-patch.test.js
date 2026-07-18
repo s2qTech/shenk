@@ -106,7 +106,12 @@ function routinePatch(overrides = {}) {
     id: "routine_strength_a",
     title: "Strength A",
     trainingType: "strength",
+    scene: "home",
+    role: "main",
+    lifecycle: "draft",
     timerVisible: true,
+    calendarVisible: true,
+    countsTowardTraining: true,
     steps: [{ stepId: "warmup", name: "Warmup", durationSeconds: 60 }],
     ...overrides
   };
@@ -119,14 +124,12 @@ function routinePatch(overrides = {}) {
   assert.equal(archived.lifecycle, "archived");
   assert.equal(archived.timerVisible, false);
   assert.equal(archived.needsTimer, false);
-  const walk = api.normalizeRoutineTemplateData(routinePatch({ trainingType: "stretch" }));
-  assert.equal(walk.scene, "walk");
-  const misclassifiedWarmup = api.normalizeRoutineTemplateData(routinePatch({ title: "健走前热身", trainingType: "recovery", scene: "recovery" }));
-  assert.equal(misclassifiedWarmup.trainingType, "warmup");
-  assert.equal(misclassifiedWarmup.scene, "walk");
-  const recoveryStretch = api.normalizeRoutineTemplateData(routinePatch({ title: "恢复拉伸", trainingType: "stretch", scene: "walk" }));
-  assert.equal(recoveryStretch.scene, "recovery");
-  const seated = api.normalizeRoutineTemplateData(routinePatch({ title: "座位活动", trainingType: "seat_recovery", scene: "recovery" }));
+  const explicitWalk = api.normalizeRoutineTemplateData(routinePatch({ trainingType: "stretch", scene: "walk", role: "stretch" }));
+  assert.equal(explicitWalk.scene, "walk");
+  const mismatchedTitle = api.normalizeRoutineTemplateData(routinePatch({ title: "健走前热身", trainingType: "recovery", scene: "recovery", role: "recovery" }));
+  assert.equal(mismatchedTitle.trainingType, "recovery");
+  assert.equal(mismatchedTitle.scene, "recovery");
+  const seated = api.normalizeRoutineTemplateData(routinePatch({ title: "座位活动", trainingType: "seat_recovery", scene: "travel", role: "auxiliary" }));
   assert.equal(seated.scene, "travel");
 }
 
@@ -510,6 +513,34 @@ function routinePatch(overrides = {}) {
   });
   assert.equal(preview.valid, false);
   assert.match(preview.warnings.join("\n"), /不可原地修改/);
+}
+
+{
+  const api = loadAppTestApi();
+  reset(api);
+  const missingRole = api.previewPlanPatch({
+    schema: "coach_plan_patch",
+    effectiveFrom: "2099-10-01",
+    routineTemplates: [routinePatch({ id: "routine_missing_role", role: undefined })]
+  });
+  assert.equal(missingRole.valid, false);
+  assert.match(missingRole.warnings.join("\n"), /role 必须显式填写/);
+
+  const legacyLifecycle = api.previewPlanPatch({
+    schema: "coach_plan_patch",
+    effectiveFrom: "2099-10-01",
+    routineTemplates: [routinePatch({ id: "routine_legacy_active", lifecycle: "active" })]
+  });
+  assert.equal(legacyLifecycle.valid, false);
+  assert.match(legacyLifecycle.warnings.join("\n"), /active 是旧值/);
+
+  const missingVisibility = api.previewPlanPatch({
+    schema: "coach_plan_patch",
+    effectiveFrom: "2099-10-01",
+    routineTemplates: [routinePatch({ id: "routine_missing_visibility", calendarVisible: undefined })]
+  });
+  assert.equal(missingVisibility.valid, false);
+  assert.match(missingVisibility.warnings.join("\n"), /calendarVisible 必须显式填写/);
 }
 
 console.log("coach-plan-patch tests passed");

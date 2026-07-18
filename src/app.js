@@ -752,36 +752,30 @@
     "bilateral_reps"
   ]);
 
+  const ROUTINE_SCENES = new Set(["home", "walk", "recovery", "travel"]);
+  const ROUTINE_ROLES = new Set(["main", "warmup", "stretch", "cooldown", "recovery", "auxiliary"]);
+  const ROUTINE_LIFECYCLES = new Set(["draft", "published", "archived"]);
+  const ROUTINE_TRAINING_TYPES = new Set([
+    "strength", "easy_walk", "quality_walk", "indoor_cardio", "warmup",
+    "cooldown", "recovery", "travel_strength", "seat_recovery", "stretch", "rest"
+  ]);
+
   function normalizeRoutineTemplateLifecycle(value) {
-    const lifecycle = String(value || "active").trim().toLowerCase();
+    const lifecycle = String(value || "").trim().toLowerCase();
+    if (lifecycle === "active") return "published";
     return ["archived", "retired", "inactive", "disabled", "deleted"].includes(lifecycle)
       ? "archived"
-      : lifecycle || "active";
+      : lifecycle;
   }
 
   function inferRoutineTrainingType(value, title = "", routineId = "") {
-    const text = `${title} ${routineId}`.toLowerCase();
-    if (/热身/.test(text)) return "warmup";
-    if (/拉伸/.test(text) && !/恢复|低压/.test(text)) return "stretch";
-    if (/恢复|低压|座位/.test(text)) return "recovery";
-    if (/提高走|跑跳/.test(text)) return "quality_walk";
-    if (/普通走|健走|慢走/.test(text)) return "easy_walk";
-    return normalizeTimerTrainingType(value || inferTrainingTypeFromRoutineId(routineId));
+    const explicit = String(value || "").trim();
+    return explicit ? normalizeTimerTrainingType(explicit) : "";
   }
 
   function normalizeRoutineScene(value, trainingType, title = "", routineId = "") {
-    const text = `${title} ${routineId}`.toLowerCase();
-    if (/座位|外出|旅行|酒店/.test(text)) return "travel";
-    if (/恢复|低压|座位/.test(text)) return "recovery";
-    if (/热身|拉伸|提高走|普通走|健走|慢走|公园/.test(text)) return "walk";
-    const type = normalizeTimerTrainingType(trainingType);
-    if (type === "seat_recovery") return "travel";
     const scene = String(value || "").trim().toLowerCase();
-    if (["home", "walk", "recovery", "travel"].includes(scene)) return scene;
-    if (["warmup", "stretch"].includes(type)) return "walk";
-    if (type === "recovery") return "recovery";
-    if (type === "travel_strength") return "travel";
-    return "home";
+    return ROUTINE_SCENES.has(scene) ? scene : "";
   }
 
   function normalizeRoutineTemplateData(data) {
@@ -824,6 +818,7 @@
     const calendarVisible = explicitCalendarVisible ?? true;
     const title = data.title || data.name || data.displayName || data.display_name || TYPE_META[toLegacyTrainingType(trainingType)]?.label || "训练方案";
     const scene = normalizeRoutineScene(data.scene, trainingType, title, id);
+    const role = String(data.role || "").trim().toLowerCase();
     const countsTowardTraining = explicitCountsTowardTraining ?? calendarVisible;
     const defaultOptions = data.defaultOptions || data.default_options || data.timerOptions || data.timer_options || {};
     return {
@@ -836,6 +831,7 @@
       variant: data.variant || data.routineVariant || data.routine_variant || "",
       trainingType,
       scene,
+      role: ROUTINE_ROLES.has(role) ? role : "",
       estimatedMinutes: toNullableNumber(data.estimatedMinutes ?? data.estimated_minutes),
       steps: normalizedSteps.length ? normalizedSteps : data.steps,
       defaultOptions,
@@ -2979,7 +2975,7 @@
   }
 
   function getRoutineLibraryEntries() {
-    const order = { active: 0, archived: 1 };
+    const order = { published: 0, draft: 1, archived: 2 };
     return (state.records.routine_templates || [])
       .filter((item) => !item.deletedAt && !item.data?.deletedAt)
       .sort((left, right) => {
@@ -3026,7 +3022,7 @@
     const type = getTimerTypeMeta(inferRoutineTrainingType(data.trainingType || data.type, getPlanItemDisplayTitle(data), data.routineId || data.id)).label;
     const title = getRoutineLibraryTitle(data, peers);
     const minutes = toNullableNumber(data.estimatedMinutes);
-    const visibility = data.timerVisible === false || lifecycle !== "active" ? "不显示在计时器" : "计时器可用";
+    const visibility = data.timerVisible === false || lifecycle !== "published" ? "不显示在计时器" : "计时器可用";
     return `
       <div class="routine-library-row is-${meta.className}">
         <div class="routine-library-main">
@@ -3034,7 +3030,7 @@
           <span>${escapeHtml(type)}${minutes ? ` · ${minutes} 分` : ""} · ${visibility}</span>
         </div>
         <div class="routine-library-actions">
-          ${lifecycle === "active" ? `<button type="button" data-action="archive-routine-template" data-routine-id="${escapeHtml(envelope.id)}">停用</button>` : ""}
+          ${lifecycle === "published" ? `<button type="button" data-action="archive-routine-template" data-routine-id="${escapeHtml(envelope.id)}">停用</button>` : ""}
           ${lifecycle === "archived" ? `<button type="button" data-action="activate-routine-template" data-routine-id="${escapeHtml(envelope.id)}">启用</button>` : ""}
           ${lifecycle !== "deleted" ? `<button type="button" class="danger subtle-danger" data-action="delete-routine-template" data-routine-id="${escapeHtml(envelope.id)}">删除</button>` : ""}
         </div>
@@ -3047,7 +3043,7 @@
     const counts = entries.reduce((result, item) => {
       result[getRoutineTemplateLifecycle(item)] += 1;
       return result;
-    }, { active: 0, archived: 0 });
+    }, { published: 0, draft: 0, archived: 0 });
     return `
       <section class="routine-library" aria-label="方案库">
         <div class="settings-subsection-head">
@@ -3056,7 +3052,7 @@
             <span>按计时器场景整理。现行方案会显示在计时器中；停用和删除的方案保留历史，不会再作为可选流程。</span>
           </div>
           <div class="routine-library-counts">
-            <span>现行 ${counts.active}</span>
+            <span>现行 ${counts.published}</span>
             <span>已停用 ${counts.archived}</span>
           </div>
         </div>
@@ -4300,6 +4296,7 @@
           if (!getPatchItemId(routine)) errors.push(`routineTemplates[${routineIndex}] 删除操作缺少 id。`);
           return;
         }
+        validateRoutineTemplateAuthority(routine, routineIndex, errors);
         validateRoutineTemplateSteps(routine, routineIndex, errors);
       });
     }
@@ -4315,6 +4312,24 @@
       });
     }
     return errors;
+  }
+
+  function validateRoutineTemplateAuthority(routine, routineIndex, errors) {
+    const path = `routineTemplates[${routineIndex}]`;
+    if (!getPatchItemId(routine)) errors.push(`${path}.id 必填。`);
+    if (!String(routine.title || "").trim()) errors.push(`${path}.title 必填。`);
+    const trainingType = String(routine.trainingType || "").trim();
+    if (!ROUTINE_TRAINING_TYPES.has(trainingType)) errors.push(`${path}.trainingType 必须是受支持的显式值。`);
+    const scene = String(routine.scene || "").trim();
+    if (!ROUTINE_SCENES.has(scene)) errors.push(`${path}.scene 必须显式填写 home / walk / recovery / travel。`);
+    const role = String(routine.role || "").trim();
+    if (!ROUTINE_ROLES.has(role)) errors.push(`${path}.role 必须显式填写 main / warmup / stretch / cooldown / recovery / auxiliary。`);
+    const lifecycle = String(routine.lifecycle || "").trim();
+    if (!ROUTINE_LIFECYCLES.has(lifecycle)) errors.push(`${path}.lifecycle 必须显式填写 draft / published / archived；active 是旧值，不再接受。`);
+    ["timerVisible", "calendarVisible", "countsTowardTraining"].forEach((field) => {
+      if (typeof routine[field] !== "boolean") errors.push(`${path}.${field} 必须显式填写 true 或 false。`);
+    });
+    if (!Array.isArray(routine.steps) || !routine.steps.length) errors.push(`${path}.steps 必须是非空动作数组。`);
   }
 
   function validateRoutineTemplateSteps(routine, routineIndex, errors) {
@@ -4489,21 +4504,21 @@
   async function setRoutineTemplateLifecycle(id, lifecycle) {
     const existing = findSharedRecordById("routine_templates", id, true);
     if (!existing || existing.deletedAt) return;
-    const nextLifecycle = lifecycle === "archived" ? "archived" : "active";
+    const nextLifecycle = lifecycle === "archived" ? "archived" : "published";
     const now = new Date().toISOString();
     const data = normalizeRoutineTemplateData({
       ...(existing.data || {}),
       id: existing.id,
       lifecycle: nextLifecycle,
-      timerVisible: nextLifecycle === "active",
-      needsTimer: nextLifecycle === "active",
+      timerVisible: nextLifecycle === "published",
+      needsTimer: nextLifecycle === "published",
       archivedAt: nextLifecycle === "archived" ? now : null,
       updatedAt: now
     });
     upsertSharedEnvelope(state.records, "routine_templates", data, existing);
     refreshLegacyCachesFromSharedRecords();
     await saveSnapshot();
-    await autoPushDirtyRecords(nextLifecycle === "active" ? "方案已启用" : "方案已停用");
+    await autoPushDirtyRecords(nextLifecycle === "published" ? "方案已启用" : "方案已停用");
     render();
   }
 

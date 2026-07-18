@@ -1,6 +1,8 @@
 # Codex 计划协作交接说明
 
-更新时间：2026-06-28
+更新时间：2026-07-18
+
+> `routineTemplates` 的权威字段、分类、生命周期、发布和自检规则见 `docs/coach-routine-contract.md`。如本文件旧示例与该契约冲突，以该契约、Contract v2 schema 和 ADR 0005 为准。
 
 ## 计划端输出约定
 
@@ -150,9 +152,14 @@ Codex 根据摘要输出两部分：
       "title": "低压恢复",
       "version": "2.0.0",
       "trainingType": "recovery",
+      "scene": "recovery",
+      "role": "recovery",
+      "lifecycle": "published",
       "estimatedMinutes": 18,
       "timerVisible": true,
       "needsTimer": true,
+      "calendarVisible": true,
+      "countsTowardTraining": true,
       "defaultOptions": {
         "voice": true,
         "wakeLock": true,
@@ -178,9 +185,9 @@ Codex 根据摘要输出两部分：
 
 如果本次只修改 `routineTemplates`，示例到这里结束即可。不要为了“完整模板”额外附带 `dailyPlanItems: []`、`planAdjustments: []` 或其它空数组。
 
-## routineTemplates 建议字段
+## routineTemplates 强制字段
 
-`routineTemplates` 是计时器可执行流程。只要包含 `steps`，身刻导入时会自动补齐计时器可见标记；仍建议显式写 `timerVisible: true` 和 `needsTimer: true`，避免它被当成纯计划元数据。
+`routineTemplates` 是计时器可执行流程。不得依赖身刻自动补齐。每条新增或替换记录必须显式包含 `id`、`title`、`trainingType`、`scene`、`role`、`lifecycle`、`timerVisible`、`calendarVisible`、`countsTowardTraining` 和非空 `steps`。
 
 计时器方案的数据源规则：
 - Cloudflare D1 的 `routine_templates` 是计时器方案主源。
@@ -205,8 +212,10 @@ Codex 根据摘要输出两部分：
 - `trainingType`：`strength` / `indoor_cardio` / `warmup` / `stretch` / `recovery` / `travel_strength` / `seat_recovery`。
 - `estimatedMinutes`：预计分钟数。
 - `timerVisible`：是否进入计时器方案列表。
-- `lifecycle`：`active` / `published` / `archived`。`archived` 表示历史停用，身刻会强制从计时器选择器移除；不要用空数组清空历史方案。
-- `scene`：计时器分组，建议 `home` / `walk` / `recovery` / `travel`。
+- `lifecycle`：只允许 `draft` / `published` / `archived`。旧值 `active` 已废弃；`archived` 表示历史停用。
+- `scene`：计时器权威分组，必须显式填写 `home` / `walk` / `recovery` / `travel`。
+- `role`：执行角色，必须显式填写 `main` / `warmup` / `stretch` / `cooldown` / `recovery` / `auxiliary`。
+- 禁止身刻、计时器或计划对话根据标题、trainingType、routineId、版本号或动作内容推断、覆盖 `scene` 和 `role`。
 - `sortOrder`：同组排序，数字越小越靠前。
 - 同名流程的不同长度必须显式给 `variant`，例如 `简版`、`完整版`、`公园版`；不要只用同一个标题和不同分钟数区分。
 - `trainingType` 与标题语义必须一致：走前热身用 `warmup`，走后拉伸用 `stretch`，恢复拉伸或低压恢复用 `recovery`。
@@ -310,6 +319,9 @@ Codex 根据摘要输出两部分：
       "title": "恢复拉伸",
       "version": "2.0.0",
       "trainingType": "recovery",
+      "scene": "recovery",
+      "role": "recovery",
+      "lifecycle": "published",
       "timerVisible": true,
       "needsTimer": true,
       "calendarVisible": true,

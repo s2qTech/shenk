@@ -179,7 +179,12 @@ function upsert(api, entity, data) {
       id: "routine_quality_walk_test",
       title: "Quality Walk",
       trainingType: "quality_walk",
+      scene: "walk",
+      role: "main",
+      lifecycle: "published",
       timerVisible: true,
+      calendarVisible: true,
+      countsTowardTraining: true,
       steps: [{ stepId: "warmup", name: "Warmup", durationSeconds: 60 }]
     }],
     dailyPlanItems: [{

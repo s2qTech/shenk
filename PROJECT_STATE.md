@@ -50,6 +50,7 @@ Timer modules write:
 - Timer step `execution` expansion for preparation and bilateral actions.
 - `timer_sessions` read in 身刻 and used only to prefill editable formal-record drafts.
 - Routine `calendarVisible` and `countsTowardTraining` boundaries.
+- Canonical coach routine rules in `docs/coach-routine-contract.md`; new patches must provide explicit `scene`, `role`, lifecycle, visibility booleans, and non-empty steps. Web and Android reject incomplete routines instead of inferring classification or silently running a built-in fallback.
 - Desktop Web UI is currently the accepted product baseline.
 
 ## Current Risks
@@ -59,6 +60,7 @@ Timer modules write:
 3. Published templates are protected when explicitly marked `lifecycle: "published"`, `publishedAt`, or `immutable: true`; legacy templates without a marker remain mutable for migration compatibility.
 4. Both frontends remain large single files; the first extracted timer-session core is only the start of modularization.
 5. Pull pagination is available and both Web clients follow it. IndexedDB still stores a whole snapshot, so the entity-store outbox remains work package 4.
+6. The 11 legacy cloud `routine_templates` still require the user-approved one-time authority migration recorded in `docs/coach-routine-contract.md`. The prepared migration updates only explicit `scene`, `role`, and legacy `active` to `published`; it deletes nothing and preserves steps and visibility fields. Until that migration is applied and synchronized, Android correctly excludes those routines as invalid.
 
 ## Work Package Progress
 
@@ -143,4 +145,4 @@ The earlier seven Web/foundation work packages remain completed historical work.
 
 ## Immediate Next Step
 
-Package 5 is implemented and awaiting full CI plus Xiaomi 14 acceptance. The acceptance build also corrects two earlier native delivery gaps: clean-install cloud connection/synchronization and the visual hierarchy of Today/Calendar. The implementation and manual acceptance paths are recorded in `docs/android-package5-native-timer.md`. Do not start Package 6 or raise progress to `6 / 9` until cloud restoration, the revised native surfaces, and the timer rotation/interruption/background/offline/pending-completion/duplicate-prevention paths pass on the primary device.
+Package 5 is implemented and awaiting full CI plus Xiaomi 14 acceptance. Cloud restoration now succeeds, but the existing 11 cloud routines cannot pass the intentional strict authority gate until the approved one-time metadata migration is applied. The acceptance build also corrects two earlier native delivery gaps: clean-install cloud connection/synchronization and the visual hierarchy of Today/Calendar. The implementation and manual acceptance paths are recorded in `docs/android-package5-native-timer.md`. Do not start Package 6 or raise progress to `6 / 9` until the routine migration, revised native surfaces, and timer rotation/interruption/background/offline/pending-completion/duplicate-prevention paths pass on the primary device.
