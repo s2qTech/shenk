@@ -13,6 +13,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import io.s2qtech.shenk.model.SharedEntityOwner
 import io.s2qtech.shenk.model.SharedRecord
 import io.s2qtech.shenk.timer.TimerEngineState
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonArray
@@ -92,7 +93,13 @@ class MainActivityTest {
                 .fetchSemanticsNodes()
                 .isNotEmpty()
         }
-        composeRule.onNodeWithTag("routine-synthetic-native-timer").performClick()
+        val routine = runBlocking {
+            app.routineLibraryRepository.observeLibrary().first().routines
+                .single { it.id == "synthetic-native-timer" }
+        }
+        composeRule.runOnIdle {
+            app.nativeTimerCoordinator.select(routine)
+        }
         composeRule.waitUntil(timeoutMillis = 5_000) {
             app.nativeTimerCoordinator.snapshot.value.state == TimerEngineState.PREVIEW
         }
