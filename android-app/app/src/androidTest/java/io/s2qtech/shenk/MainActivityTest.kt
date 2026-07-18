@@ -2,7 +2,6 @@ package io.s2qtech.shenk
 
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
-import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
@@ -12,6 +11,8 @@ import androidx.compose.ui.semantics.SemanticsActions
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import io.s2qtech.shenk.model.SharedEntityOwner
 import io.s2qtech.shenk.model.SharedRecord
+import java.time.LocalDate
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonArray
@@ -83,17 +84,31 @@ class MainActivityTest {
                 ),
                 SharedEntityOwner.PLANNING,
             )
+            app.localFirstRepository.persistAndEnqueue(
+                SharedRecord.create(
+                    entity = "daily_plan_items",
+                    id = "synthetic-today-plan",
+                    data = buildJsonObject {
+                        put("id", JsonPrimitive("synthetic-today-plan"))
+                        put("date", JsonPrimitive(LocalDate.now().toString()))
+                        put("title", JsonPrimitive("离线恢复训练"))
+                        put("trainingType", JsonPrimitive("recovery"))
+                        put("status", JsonPrimitive("planned"))
+                        put("routineId", JsonPrimitive("synthetic-native-timer"))
+                    },
+                    contractVersion = "2.0",
+                ),
+                SharedEntityOwner.PLANNING,
+            )
+            app.todayRepository.observe(LocalDate.now()).first {
+                it.guidance.routineId == "synthetic-native-timer"
+            }
         }
 
         composeRule.onNodeWithTag("today-open-training").performClick()
-        composeRule.waitForIdle()
-        composeRule.onNodeWithTag("training-screen").assertIsDisplayed()
         composeRule.waitUntil(timeoutMillis = 5_000) {
-            composeRule.onAllNodesWithTag("routine-synthetic-native-timer")
-                .fetchSemanticsNodes()
-                .isNotEmpty()
+            runCatching { composeRule.onNodeWithTag("timer-start").assertIsDisplayed() }.isSuccess
         }
-        composeRule.onNodeWithTag("routine-synthetic-native-timer").performClick()
         composeRule.onNodeWithTag("timer-start").assertIsDisplayed()
         composeRule.onNodeWithText("原地慢走").assertIsDisplayed()
     }
