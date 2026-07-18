@@ -31,7 +31,7 @@ class MainActivityTest {
     fun todayOpensOfflineAndMorningWorkspaceIsReachable() {
         composeRule.onNodeWithTag("today-screen").assertIsDisplayed()
         composeRule.onNodeWithTag("cloud-setup-prompt").assertIsDisplayed()
-        composeRule.onNodeWithText("晨起状态").assertIsDisplayed()
+        composeRule.onNodeWithText("晨起状态").performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithTag("morning-action").performClick()
         composeRule.onNodeWithText("今天身体怎么样？").assertIsDisplayed()
         composeRule.onNodeWithText("保存晨起状态").performScrollTo().assertIsDisplayed()
@@ -97,7 +97,7 @@ class MainActivityTest {
             )
         }
 
-        composeRule.onNodeWithTag("today-open-training").performClick()
+        composeRule.onNodeWithTag("today-open-training").performScrollTo().performClick()
         composeRule.waitUntil(timeoutMillis = 10_000) {
             composeRule.onAllNodesWithTag("routine-synthetic-native-timer")
                 .fetchSemanticsNodes()
