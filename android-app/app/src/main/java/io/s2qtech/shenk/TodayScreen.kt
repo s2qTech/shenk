@@ -49,12 +49,15 @@ import io.s2qtech.shenk.model.GuidanceSource
 import io.s2qtech.shenk.model.TodayGuidance
 import io.s2qtech.shenk.sync.TodayRecordRepository
 import io.s2qtech.shenk.sync.TodayRecords
+import io.s2qtech.shenk.sync.CloudConnectionException
+import io.s2qtech.shenk.sync.CloudConnectionFailure
 import io.s2qtech.shenk.sync.CloudConnectionManager
 import io.s2qtech.shenk.sync.CloudConnectionState
 import io.s2qtech.shenk.sync.SyncScheduler
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.util.Locale
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
@@ -183,36 +186,35 @@ fun TodayRoute(
                     connectionBusy = true
                     connectionError = null
                     scope.launch {
-                        runCatching { cloudConnectionManager.connectWithMigrationCode(code) }
-                            .onSuccess { result ->
-                                connection = cloudConnectionManager.state()
-                                connectionBusy = false
-                                sheet = null
-                                snackbar.showSnackbar("同步完成，读取 ${result.pulled} 条云端数据")
-                            }
-                            .onFailure {
-                                connectionBusy = false
-                                connectionError = when {
-                                    it.message?.contains("401") == true -> "迁移码无权读取该配置，请在 Web 身刻重新生成。"
-                                    else -> "连接失败，请检查迁移码和网络后重试。"
-                                }
-                            }
+                        try {
+                            val result = cloudConnectionManager.connectWithMigrationCode(code)
+                            connection = cloudConnectionManager.state()
+                            sheet = null
+                            snackbar.showSnackbar("同步完成，读取 ${result.pulled} 条云端数据")
+                        } catch (error: CancellationException) {
+                            throw error
+                        } catch (error: Exception) {
+                            connectionError = cloudConnectionMessage(error)
+                        } finally {
+                            connectionBusy = false
+                        }
                     }
                 },
                 onSync = {
                     connectionBusy = true
                     connectionError = null
                     scope.launch {
-                        runCatching { cloudConnectionManager.synchronizeNow() }
-                            .onSuccess { result ->
-                                connectionBusy = false
-                                sheet = null
-                                snackbar.showSnackbar("同步完成，读取 ${result.pulled} 条，写入 ${result.pushed} 条")
-                            }
-                            .onFailure {
-                                connectionBusy = false
-                                connectionError = "同步失败，本地数据不受影响，请稍后重试。"
-                            }
+                        try {
+                            val result = cloudConnectionManager.synchronizeNow()
+                            sheet = null
+                            snackbar.showSnackbar("同步完成，读取 ${result.pulled} 条，写入 ${result.pushed} 条")
+                        } catch (error: CancellationException) {
+                            throw error
+                        } catch (error: Exception) {
+                            connectionError = "同步失败，本地数据不受影响，请稍后重试。"
+                        } finally {
+                            connectionBusy = false
+                        }
                     }
                 },
             )
@@ -360,6 +362,19 @@ private fun GuidanceBlock(guidance: io.s2qtech.shenk.model.TodayGuidance, onTrai
                 ) { Text("进入训练") }
             }
         }
+    }
+}
+
+private fun cloudConnectionMessage(error: Exception): String {
+    val failure = (error as? CloudConnectionException)?.failure
+    return when (failure) {
+        CloudConnectionFailure.INVALID_MIGRATION_CODE -> "迁移码格式不正确，请完整粘贴后重试。"
+        CloudConnectionFailure.PROFILE_UNAVAILABLE -> "迁移码无效或已过期，请在 Web 身刻重新生成。"
+        CloudConnectionFailure.NETWORK_UNAVAILABLE -> "无法连接云端，请检查网络后重试。"
+        CloudConnectionFailure.INVALID_PROFILE -> "云端配置无法解密或内容不完整，请重新生成迁移码。"
+        CloudConnectionFailure.CLOUD_SYNC_FAILED -> "配置已验证，但云端数据同步失败，请稍后重试。"
+        CloudConnectionFailure.LOCAL_CONFIGURATION_FAILED -> "配置已验证，但未能安全保存到本机，请重试。"
+        null -> "连接失败，请检查迁移码和网络后重试。"
     }
 }
 

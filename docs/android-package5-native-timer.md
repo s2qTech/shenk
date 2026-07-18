@@ -22,6 +22,7 @@ Package 5 adds the production native routine library and timer to `android-app/`
 - Today-plan entry preserves `routineId`, `dailyPlanItemId`, and `planTemplateId`. Formal strength/recovery plans may preselect an exact cached routine; walking plans open the walking scene and require a manual routine choice.
 - Missing or uncached plan routines show an explicit message and never silently fall back to an old built-in flow.
 - A new device can connect to the existing cloud dataset with the Web-generated migration code. The app decrypts the profile locally, stores secrets in Android Keystore, immediately synchronizes Room, and never persists the migration code.
+- The Android application declares network access explicitly. Profile download, PBKDF2 decryption, and initial synchronization run off the main thread; invalid, expired, offline, malformed, and local secure-storage failures remain recoverable in the connection sheet instead of terminating the activity.
 - A connected device synchronizes on process start; local saves continue to enqueue the existing WorkManager path, and manual sync remains available from Today > More > Data Sync.
 - Today presents the effective instruction as the elevated primary card with one training action. Calendar presents a whole-month rhythm in weekly bands: actual facts are solid, formal plans are patterned, local suggestions remain quiet, and Today is visually elevated.
 

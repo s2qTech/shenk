@@ -8,6 +8,7 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipeLeft
 import androidx.compose.ui.semantics.SemanticsActions
@@ -64,6 +65,13 @@ class MainActivityTest {
         composeRule.onNodeWithTag("open-cloud-settings").assertIsDisplayed().performClick()
         composeRule.onNodeWithTag("migration-code-input").assertIsDisplayed()
         composeRule.onNodeWithTag("connect-cloud-data").assertIsDisplayed()
+        composeRule.onNodeWithTag("migration-code-input").performTextInput("invalid migration code!")
+        composeRule.onNodeWithTag("connect-cloud-data").performClick()
+        composeRule.waitUntil(timeoutMillis = 5_000) {
+            composeRule.onAllNodesWithTag("cloud-connection-error").fetchSemanticsNodes().isNotEmpty()
+        }
+        composeRule.onNodeWithTag("cloud-connection-error").assertIsDisplayed()
+        composeRule.onNodeWithTag("today-screen").assertIsDisplayed()
     }
 
     @Test

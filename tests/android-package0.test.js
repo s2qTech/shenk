@@ -50,6 +50,7 @@ test("native Android uses the accepted current-stable platform baseline", () => 
 });
 
 test("Package 5 keeps local-first records and adds the native routine and timer path", () => {
+  const manifest = read("android-app/app/src/main/AndroidManifest.xml");
   const versions = read("android-app/gradle/libs.versions.toml");
   const repository = read("android-app/core/data-sync/src/main/kotlin/io/s2qtech/shenk/sync/LocalFirstRepository.kt");
   const store = read("android-app/core/data-sync/src/main/kotlin/io/s2qtech/shenk/sync/LocalStore.kt");
@@ -57,6 +58,7 @@ test("Package 5 keeps local-first records and adds the native routine and timer 
   const secrets = read("android-app/core/data-sync/src/main/kotlin/io/s2qtech/shenk/sync/DeviceConfiguration.kt");
   const backup = read("android-app/core/data-sync/src/main/kotlin/io/s2qtech/shenk/sync/BusinessBackup.kt");
   const todayRepository = read("android-app/core/data-sync/src/main/kotlin/io/s2qtech/shenk/sync/TodayRecordRepository.kt");
+  const cloudConnection = read("android-app/core/data-sync/src/main/kotlin/io/s2qtech/shenk/sync/CloudConnectionManager.kt");
   const todayScreen = read("android-app/app/src/main/java/io/s2qtech/shenk/TodayScreen.kt");
   const checkinSheet = read("android-app/app/src/main/java/io/s2qtech/shenk/CheckInSheets.kt");
   const reminders = read("android-app/app/src/main/java/io/s2qtech/shenk/ReminderSettings.kt");
@@ -70,6 +72,7 @@ test("Package 5 keeps local-first records and adds the native routine and timer 
   const trainingScreen = read("android-app/app/src/main/java/io/s2qtech/shenk/TrainingScreen.kt");
   const timerPlatform = read("android-app/app/src/main/java/io/s2qtech/shenk/NativeTimerPlatform.kt");
 
+  assert.match(manifest, /android\.permission\.INTERNET/);
   assert.match(versions, /room-runtime/);
   assert.match(versions, /work-runtime-ktx/);
   assert.match(versions, /datastore-preferences/);
@@ -82,6 +85,8 @@ test("Package 5 keeps local-first records and adds the native routine and timer 
   assert.match(backup, /shenk_business_backup\/v1/);
   assert.doesNotMatch(backup, /SHENK_TOKEN|TIMER_TOKEN|AI_PROVIDER_KEY/);
   assert.match(todayRepository, /persistBatchAndEnqueue/);
+  assert.match(cloudConnection, /withContext\(Dispatchers\.IO\)/);
+  assert.match(cloudConnection, /CloudConnectionFailure\.INVALID_MIGRATION_CODE/);
   assert.match(todayScreen, /TodayRoute/);
   assert.match(checkinSheet, /MorningCheckInSheet/);
   assert.match(checkinSheet, /PreWorkoutSheet/);

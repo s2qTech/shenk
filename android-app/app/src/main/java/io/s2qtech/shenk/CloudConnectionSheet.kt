@@ -84,7 +84,7 @@ fun CloudConnectionSheet(
         )
         error?.let {
             Spacer(Modifier.height(8.dp))
-            Text(it, color = MaterialTheme.colorScheme.error)
+            Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.testTag("cloud-connection-error"))
         }
         Spacer(Modifier.height(14.dp))
         Button(
