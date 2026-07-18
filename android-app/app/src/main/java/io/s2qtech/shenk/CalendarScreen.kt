@@ -84,7 +84,8 @@ fun CalendarScreen(
                 .fillMaxSize()
                 .padding(inner)
                 .statusBarsPadding()
-                .navigationBarsPadding(),
+                .navigationBarsPadding()
+                .testTag("calendar-screen"),
         ) {
             CalendarHeader(
                 month = month,

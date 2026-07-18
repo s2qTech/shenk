@@ -31,7 +31,7 @@ class MainActivityTest {
     fun calendarRecordsAndDataAreReachableWithoutNetwork() {
         composeRule.onNodeWithTag("today-open-calendar").performSemanticsAction(SemanticsActions.OnClick)
         composeRule.waitForIdle()
-        composeRule.onNodeWithText("月历").assertIsDisplayed()
+        composeRule.onNodeWithTag("calendar-screen").assertIsDisplayed()
         composeRule.onNodeWithText("回到今天").assertIsDisplayed()
 
         composeRule.onNodeWithTag("calendar-open-records").performSemanticsAction(SemanticsActions.OnClick)
