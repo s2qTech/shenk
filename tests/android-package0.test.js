@@ -75,6 +75,8 @@ test("Package 5 keeps local-first records and adds the native routine and timer 
   assert.match(manifest, /android\.permission\.INTERNET/);
   assert.match(manifest, /android\.permission\.ACCESS_NETWORK_STATE/);
   assert.match(manifest, /android\.intent\.action\.TTS_SERVICE/);
+  assert.match(manifest, /android:icon="@mipmap\/ic_launcher"/);
+  assert.match(manifest, /android:roundIcon="@mipmap\/ic_launcher_round"/);
   assert.match(versions, /room-runtime/);
   assert.match(versions, /work-runtime-ktx/);
   assert.match(versions, /datastore-preferences/);
