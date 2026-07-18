@@ -92,6 +92,9 @@ class MainActivityTest {
                 .isNotEmpty()
         }
         composeRule.onNodeWithTag("routine-synthetic-native-timer").performClick()
+        composeRule.waitUntil(timeoutMillis = 5_000) {
+            runCatching { composeRule.onNodeWithTag("timer-start").assertIsDisplayed() }.isSuccess
+        }
         composeRule.onNodeWithTag("timer-start").assertIsDisplayed()
         composeRule.onNodeWithText("原地慢走").assertIsDisplayed()
     }
