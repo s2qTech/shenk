@@ -31,7 +31,7 @@ internal object GuidanceResolution {
     ): ResolvedDay {
         val dateText = date.toString()
         val actualLogs = logs
-            .filter { it.data.string("date") == dateText && it.data.boolean("calendarVisible") != false }
+            .filter { it.data.fieldString("date") == dateText && it.data.fieldBoolean("calendarVisible") != false }
             .mapNotNull(::decodeTrainingLog)
             .sortedWith(compareByDescending<TrainingLog> { it.updatedAt.orEmpty() }.thenBy { it.id })
         val actual = actualLogs.firstOrNull()?.let { log ->
@@ -45,11 +45,11 @@ internal object GuidanceResolution {
         }
 
         val planRecord = plans
-            .filter { it.data.string("date") == dateText }
+            .filter { it.data.fieldString("date") == dateText }
             .maxByOrNull { it.updatedAt.orEmpty() }
         val latestAdjustment = adjustments
-            .filter { it.data.string("date") == dateText }
-            .maxByOrNull { it.data.string("adjustedAt") ?: it.updatedAt.orEmpty() }
+            .filter { it.data.fieldString("date") == dateText }
+            .maxByOrNull { it.data.fieldString("adjustedAt") ?: it.updatedAt.orEmpty() }
         val effectiveData = latestAdjustment?.data?.let { adjustment ->
             adjustment["toSnapshot"]
                 ?.takeUnless { it is JsonNull }
@@ -57,13 +57,13 @@ internal object GuidanceResolution {
                 ?: adjustment
         } ?: planRecord?.data
         val plan = effectiveData?.let { data ->
-            val type = data.string("trainingType") ?: data.string("type") ?: "other"
+            val type = data.fieldString("trainingType") ?: data.fieldString("type") ?: "other"
             TodayGuidance(
                 source = GuidanceSource.FORMAL_PLAN,
-                title = data.string("title") ?: trainingTypeTitle(type),
+                title = data.fieldString("title") ?: trainingTypeTitle(type),
                 trainingType = type,
-                estimatedMinutes = data.double("estimatedMinutes")?.toInt(),
-                note = data.string("notes") ?: data.string("reason"),
+                estimatedMinutes = data.fieldDouble("estimatedMinutes")?.toInt(),
+                note = data.fieldString("notes") ?: data.fieldString("reason"),
             )
         }
 
@@ -77,38 +77,38 @@ internal object GuidanceResolution {
 internal fun decodeTrainingLog(record: SharedRecord): TrainingLog? = runCatching {
     val data = record.data
     TrainingLog(
-        id = data.string("id") ?: record.id,
-        date = requireNotNull(data.string("date")),
-        type = requireNotNull(data.string("type")),
-        status = data.string("status") ?: "completed",
-        source = data.string("source") ?: "manual",
-        title = data.string("title"),
-        durationSec = data.int("durationSec"),
-        distanceKm = data.double("distanceKm"),
-        averageHeartRate = data.int("averageHeartRate"),
-        perceivedEffort = data.int("perceivedEffort"),
-        subjectiveResult = data.string("subjectiveResult"),
-        notes = data.string("notes"),
-        timerSessionId = data.string("timerSessionId"),
+        id = data.fieldString("id") ?: record.id,
+        date = requireNotNull(data.fieldString("date")),
+        type = requireNotNull(data.fieldString("type")),
+        status = data.fieldString("status") ?: "completed",
+        source = data.fieldString("source") ?: "manual",
+        title = data.fieldString("title"),
+        durationSec = data.fieldInt("durationSec"),
+        distanceKm = data.fieldDouble("distanceKm"),
+        averageHeartRate = data.fieldInt("averageHeartRate"),
+        perceivedEffort = data.fieldInt("perceivedEffort"),
+        subjectiveResult = data.fieldString("subjectiveResult"),
+        notes = data.fieldString("notes"),
+        timerSessionId = data.fieldString("timerSessionId"),
         timerSessionIds = data["timerSessionIds"]
             ?.takeUnless { it is JsonNull }
             ?.jsonArray
             ?.mapNotNull { it.jsonPrimitive.content.takeIf(String::isNotBlank) }
             .orEmpty(),
-        calendarVisible = data.boolean("calendarVisible") ?: true,
-        countsTowardTraining = data.boolean("countsTowardTraining") ?: true,
+        calendarVisible = data.fieldBoolean("calendarVisible") ?: true,
+        countsTowardTraining = data.fieldBoolean("countsTowardTraining") ?: true,
         updatedAt = record.updatedAt,
     )
 }.getOrNull()
 
-internal fun JsonObject.string(key: String): String? =
+internal fun JsonObject.fieldString(key: String): String? =
     this[key]?.takeUnless { it is JsonNull }?.jsonPrimitive?.content
 
-internal fun JsonObject.int(key: String): Int? =
+internal fun JsonObject.fieldInt(key: String): Int? =
     this[key]?.takeUnless { it is JsonNull }?.jsonPrimitive?.intOrNull
 
-internal fun JsonObject.double(key: String): Double? =
+internal fun JsonObject.fieldDouble(key: String): Double? =
     this[key]?.takeUnless { it is JsonNull }?.jsonPrimitive?.doubleOrNull
 
-internal fun JsonObject.boolean(key: String): Boolean? =
+internal fun JsonObject.fieldBoolean(key: String): Boolean? =
     this[key]?.takeUnless { it is JsonNull }?.jsonPrimitive?.booleanOrNull

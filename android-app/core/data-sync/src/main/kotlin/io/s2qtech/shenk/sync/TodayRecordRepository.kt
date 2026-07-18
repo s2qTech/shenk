@@ -162,27 +162,27 @@ private fun BodyMetric.toJson(): JsonObject = buildJsonObject {
 private fun decodeCheckin(record: SharedRecord): StatusCheckin? = runCatching {
     val data = record.data
     StatusCheckin(
-        id = data.string("id") ?: record.id,
-        date = requireNotNull(data.string("date")),
-        kind = CheckinKind.entries.first { it.wireValue == data.string("kind") },
-        observedAt = requireNotNull(data.string("observedAt")),
-        baseCheckinId = data.string("baseCheckinId"),
-        sleepDurationMinutes = data.int("sleepDurationMinutes"),
-        deepSleepMinutes = data.int("deepSleepMinutes"),
-        sleepQuality = data.int("sleepQuality"),
-        energy = data.int("energy"),
-        fatigue = data.int("fatigue"),
-        workPressure = data.int("workPressure"),
+        id = data.fieldString("id") ?: record.id,
+        date = requireNotNull(data.fieldString("date")),
+        kind = CheckinKind.entries.first { it.wireValue == data.fieldString("kind") },
+        observedAt = requireNotNull(data.fieldString("observedAt")),
+        baseCheckinId = data.fieldString("baseCheckinId"),
+        sleepDurationMinutes = data.fieldInt("sleepDurationMinutes"),
+        deepSleepMinutes = data.fieldInt("deepSleepMinutes"),
+        sleepQuality = data.fieldInt("sleepQuality"),
+        energy = data.fieldInt("energy"),
+        fatigue = data.fieldInt("fatigue"),
+        workPressure = data.fieldInt("workPressure"),
         pain = data["pain"]?.takeUnless { it is JsonNull }?.jsonArray?.map { pain ->
             val item = pain.jsonObject
             PainEntry(
-                region = PainRegion.entries.first { it.wireValue == item.string("region") },
-                severity = requireNotNull(item.int("severity")),
-                side = PainSide.entries.firstOrNull { it.wireValue == item.string("side") }
+                region = PainRegion.entries.first { it.wireValue == item.fieldString("region") },
+                severity = requireNotNull(item.fieldInt("severity")),
+                side = PainSide.entries.firstOrNull { it.wireValue == item.fieldString("side") }
                     ?: PainSide.UNSPECIFIED,
             )
         },
-        note = data.string("note"),
+        note = data.fieldString("note"),
     )
 }.getOrNull()
 

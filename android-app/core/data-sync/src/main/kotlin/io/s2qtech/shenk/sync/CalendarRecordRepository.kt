@@ -138,16 +138,16 @@ private fun TrainingLog.toJson(): JsonObject = buildJsonObject {
 internal fun decodeBodyMetric(record: SharedRecord): BodyMetric? = runCatching {
     val data = record.data
     BodyMetric(
-        id = data.string("id") ?: record.id,
-        date = requireNotNull(data.string("date")),
-        observedAt = requireNotNull(data.string("observedAt")),
-        context = data.string("context") ?: "other",
-        source = data.string("source") ?: "legacy",
-        sourceRecordId = data.string("sourceRecordId"),
-        weightKg = data.double("weightKg"),
-        bodyFatPct = data.double("bodyFatPct"),
-        muscleKg = data.double("muscleKg"),
-        waistCm = data.double("waistCm"),
+        id = data.fieldString("id") ?: record.id,
+        date = requireNotNull(data.fieldString("date")),
+        observedAt = requireNotNull(data.fieldString("observedAt")),
+        context = data.fieldString("context") ?: "other",
+        source = data.fieldString("source") ?: "legacy",
+        sourceRecordId = data.fieldString("sourceRecordId"),
+        weightKg = data.fieldDouble("weightKg"),
+        bodyFatPct = data.fieldDouble("bodyFatPct"),
+        muscleKg = data.fieldDouble("muscleKg"),
+        waistCm = data.fieldDouble("waistCm"),
     )
 }.getOrNull()
 
