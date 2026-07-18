@@ -10,6 +10,7 @@ import io.s2qtech.shenk.model.trainingTypeTitle
 import java.time.LocalDate
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.doubleOrNull
 import kotlinx.serialization.json.intOrNull
@@ -107,13 +108,13 @@ internal fun decodeTrainingLog(record: SharedRecord): TrainingLog? = runCatching
 }.getOrNull()
 
 internal fun JsonObject.fieldString(key: String): String? =
-    this[key]?.takeUnless { it is JsonNull }?.jsonPrimitive?.content
+    (this[key] as? JsonPrimitive)?.content
 
 internal fun JsonObject.fieldInt(key: String): Int? =
-    this[key]?.takeUnless { it is JsonNull }?.jsonPrimitive?.intOrNull
+    (this[key] as? JsonPrimitive)?.intOrNull
 
 internal fun JsonObject.fieldDouble(key: String): Double? =
-    this[key]?.takeUnless { it is JsonNull }?.jsonPrimitive?.doubleOrNull
+    (this[key] as? JsonPrimitive)?.doubleOrNull
 
 internal fun JsonObject.fieldBoolean(key: String): Boolean? =
-    this[key]?.takeUnless { it is JsonNull }?.jsonPrimitive?.booleanOrNull
+    (this[key] as? JsonPrimitive)?.booleanOrNull

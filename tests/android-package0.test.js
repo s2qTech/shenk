@@ -73,6 +73,7 @@ test("Package 5 keeps local-first records and adds the native routine and timer 
   const timerPlatform = read("android-app/app/src/main/java/io/s2qtech/shenk/NativeTimerPlatform.kt");
 
   assert.match(manifest, /android\.permission\.INTERNET/);
+  assert.match(manifest, /android\.permission\.ACCESS_NETWORK_STATE/);
   assert.match(versions, /room-runtime/);
   assert.match(versions, /work-runtime-ktx/);
   assert.match(versions, /datastore-preferences/);
