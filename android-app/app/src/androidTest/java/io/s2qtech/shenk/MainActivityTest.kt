@@ -105,8 +105,11 @@ class MainActivityTest {
             }
         }
 
-        composeRule.onNodeWithTag("today-open-training").performClick()
         composeRule.waitUntil(timeoutMillis = 5_000) {
+            runCatching { composeRule.onNodeWithText("离线恢复训练").assertIsDisplayed() }.isSuccess
+        }
+        composeRule.onNodeWithTag("today-open-training").performClick()
+        composeRule.waitUntil(timeoutMillis = 10_000) {
             runCatching { composeRule.onNodeWithTag("timer-start").assertIsDisplayed() }.isSuccess
         }
         composeRule.onNodeWithTag("timer-start").assertIsDisplayed()
