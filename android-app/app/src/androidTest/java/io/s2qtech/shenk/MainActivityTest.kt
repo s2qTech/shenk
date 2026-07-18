@@ -97,7 +97,8 @@ class MainActivityTest {
             )
         }
 
-        composeRule.onNodeWithTag("today-open-training").performScrollTo().performClick()
+        composeRule.onNodeWithTag("today-open-training")
+            .performSemanticsAction(SemanticsActions.OnClick)
         composeRule.waitUntil(timeoutMillis = 10_000) {
             composeRule.onAllNodesWithTag("routine-synthetic-native-timer")
                 .fetchSemanticsNodes()
