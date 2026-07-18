@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -28,18 +29,27 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedIconButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Pause
+import androidx.compose.material.icons.rounded.PlayArrow
+import androidx.compose.material.icons.rounded.SkipNext
+import androidx.compose.material.icons.rounded.SkipPrevious
+import androidx.compose.material.icons.rounded.StopCircle
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -55,6 +65,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import io.s2qtech.shenk.model.RoutineScene
 import io.s2qtech.shenk.model.RoutineStep
@@ -69,6 +80,7 @@ import io.s2qtech.shenk.sync.RoutineLibrary
 import io.s2qtech.shenk.sync.RoutineLibraryRepository
 import io.s2qtech.shenk.sync.SyncScheduler
 import io.s2qtech.shenk.timer.TimerEngineState
+import io.s2qtech.shenk.timer.RuntimeStep
 import io.s2qtech.shenk.timer.TimerSnapshot
 import io.s2qtech.shenk.timer.expandRoutine
 import java.util.UUID
@@ -93,7 +105,10 @@ fun TrainingRoute(
     val context = LocalContext.current
     val activity = context as Activity
     val scope = rememberCoroutineScope()
-    val cuePlayer = remember { TimerCuePlayer(context) }
+    var voiceNotice by remember { mutableStateOf<String?>(null) }
+    val cuePlayer = remember {
+        TimerCuePlayer(context) { message -> voiceNotice = message }
+    }
     val callMonitor = remember { TimerCallMonitor(context, coordinator::pauseForPhoneCall) }
     var completion by remember { mutableStateOf<TimerSessionFact?>(null) }
     var preferredScene by remember { mutableStateOf<RoutineScene?>(null) }
@@ -198,6 +213,7 @@ fun TrainingRoute(
         )
         else -> ActiveTimerScreen(
             snapshot = snapshot,
+            voiceNotice = voiceNotice,
             onPause = { if (snapshot.state == TimerEngineState.RUNNING) coordinator.pause() else coordinator.resume() },
             onPrevious = coordinator::previous,
             onNext = coordinator::next,
@@ -434,6 +450,7 @@ private fun DetailList(title: String, values: List<String>) {
 @Composable
 private fun ActiveTimerScreen(
     snapshot: TimerSnapshot,
+    voiceNotice: String?,
     onPause: () -> Unit,
     onPrevious: () -> Unit,
     onNext: () -> Unit,
@@ -445,32 +462,88 @@ private fun ActiveTimerScreen(
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
         bottomBar = {
-            Row(
-                Modifier.fillMaxWidth().navigationBarsPadding().padding(14.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                OutlinedButton(onClick = onPrevious, enabled = snapshot.state in ACTIVE_TIMER_STATES, modifier = Modifier.weight(1f)) { Text("上一个") }
-                Button(
-                    onClick = if (snapshot.state in TERMINAL_TIMER_STATES) onFinish else onPause,
-                    modifier = Modifier.weight(1.4f),
-                ) { Text(if (snapshot.state == TimerEngineState.RUNNING) "暂停" else if (snapshot.state == TimerEngineState.PAUSED) "继续" else "补训练记录") }
-                OutlinedButton(onClick = onNext, enabled = snapshot.state in ACTIVE_TIMER_STATES, modifier = Modifier.weight(1f)) { Text("下一个") }
-                TextButton(onClick = onStop, enabled = snapshot.state in ACTIVE_TIMER_STATES) { Text("结束") }
-            }
+            TimerControlBar(snapshot, onPause, onPrevious, onNext, onStop, onFinish)
         },
     ) { padding ->
         BoxWithConstraints(Modifier.fillMaxSize().padding(padding).statusBarsPadding()) {
             val landscape = maxWidth > maxHeight
             if (landscape) {
-                Row(Modifier.fillMaxSize().padding(20.dp), horizontalArrangement = Arrangement.spacedBy(18.dp)) {
-                    TimerHero(snapshot, progress, Modifier.weight(1.35f).fillMaxHeight())
-                    TimerDetails(step, Modifier.weight(1f).fillMaxHeight())
+                Row(Modifier.fillMaxSize().padding(16.dp), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+                    Column(
+                        Modifier.weight(1.15f).fillMaxHeight(),
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        TimerHero(snapshot, progress, Modifier.fillMaxWidth().weight(1f))
+                        NextActionStrip(snapshot.nextStep, Modifier.fillMaxWidth())
+                    }
+                    TimerDetails(step, voiceNotice, Modifier.weight(0.85f).fillMaxHeight())
                 }
             } else {
-                Column(Modifier.fillMaxSize().padding(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                    TimerHero(snapshot, progress, Modifier.fillMaxWidth().weight(1.1f))
-                    TimerDetails(step, Modifier.fillMaxWidth().weight(1f))
+                Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    TimerHero(snapshot, progress, Modifier.fillMaxWidth().weight(0.84f))
+                    NextActionStrip(snapshot.nextStep, Modifier.fillMaxWidth())
+                    TimerDetails(step, voiceNotice, Modifier.fillMaxWidth().weight(1.16f))
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun TimerControlBar(
+    snapshot: TimerSnapshot,
+    onPause: () -> Unit,
+    onPrevious: () -> Unit,
+    onNext: () -> Unit,
+    onStop: () -> Unit,
+    onFinish: () -> Unit,
+) {
+    val active = snapshot.state in ACTIVE_TIMER_STATES
+    val terminal = snapshot.state in TERMINAL_TIMER_STATES
+    Surface(tonalElevation = 2.dp) {
+        Row(
+            Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 16.dp, vertical = 10.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            OutlinedIconButton(
+                onClick = onPrevious,
+                enabled = active && snapshot.currentStepIndex > 0,
+                modifier = Modifier.size(54.dp),
+            ) {
+                Icon(Icons.Rounded.SkipPrevious, contentDescription = "上一个动作")
+            }
+            Button(
+                onClick = if (terminal) onFinish else onPause,
+                modifier = Modifier.weight(1f).height(54.dp),
+            ) {
+                when (snapshot.state) {
+                    TimerEngineState.RUNNING -> {
+                        Icon(Icons.Rounded.Pause, contentDescription = null)
+                        Spacer(Modifier.size(8.dp))
+                        Text("暂停", maxLines = 1)
+                    }
+                    TimerEngineState.PAUSED -> {
+                        Icon(Icons.Rounded.PlayArrow, contentDescription = null)
+                        Spacer(Modifier.size(8.dp))
+                        Text("继续", maxLines = 1)
+                    }
+                    else -> Text("补训练记录", maxLines = 1)
+                }
+            }
+            OutlinedIconButton(
+                onClick = onNext,
+                enabled = active,
+                modifier = Modifier.size(54.dp),
+            ) {
+                Icon(Icons.Rounded.SkipNext, contentDescription = "下一个动作")
+            }
+            FilledIconButton(
+                onClick = onStop,
+                enabled = active,
+                modifier = Modifier.size(54.dp),
+            ) {
+                Icon(Icons.Rounded.StopCircle, contentDescription = "结束训练")
             }
         }
     }
@@ -488,7 +561,13 @@ private fun TimerHero(snapshot: TimerSnapshot, progress: Float, modifier: Modifi
                 Text(if (snapshot.state == TimerEngineState.PAUSED) "已暂停" else "训练中", color = MaterialTheme.colorScheme.primary)
             }
             Column {
-                Text(snapshot.currentStep?.name ?: "训练完成", style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.SemiBold)
+                Text(
+                    snapshot.currentStep?.name ?: "训练完成",
+                    style = MaterialTheme.typography.headlineLarge,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
                 Text(formatClock(snapshot.remainingSeconds), style = MaterialTheme.typography.displayLarge, fontWeight = FontWeight.Bold)
             }
             LinearProgressIndicator(progress = { progress.coerceIn(0f, 1f) }, modifier = Modifier.fillMaxWidth())
@@ -497,20 +576,73 @@ private fun TimerHero(snapshot: TimerSnapshot, progress: Float, modifier: Modifi
 }
 
 @Composable
-private fun TimerDetails(step: io.s2qtech.shenk.timer.RuntimeStep?, modifier: Modifier) {
+private fun NextActionStrip(next: RuntimeStep?, modifier: Modifier) {
+    Surface(
+        modifier = modifier,
+        color = MaterialTheme.colorScheme.secondaryContainer,
+        shape = RoundedCornerShape(20.dp),
+    ) {
+        Row(
+            Modifier.padding(horizontal = 18.dp, vertical = 13.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(Modifier.weight(1f)) {
+                Text("接下来", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
+                Text(
+                    next?.name ?: "这是最后一项",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            next?.let {
+                Text(formatClock(it.seconds), style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
+            }
+        }
+    }
+}
+
+@Composable
+private fun TimerDetails(step: RuntimeStep?, voiceNotice: String?, modifier: Modifier) {
+    val cues = step?.cues.orEmpty()
+    val breath = step?.breath?.takeIf(String::isNotBlank)
+    val warnings = step?.warnings.orEmpty()
     Surface(modifier = modifier, color = MaterialTheme.colorScheme.surfaceVariant, shape = RoundedCornerShape(28.dp)) {
-        Column(Modifier.fillMaxSize().padding(24.dp)) {
-            Text("动作要领", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
-            Spacer(Modifier.height(12.dp))
-            if (step?.cues.isNullOrEmpty()) Text("保持稳定、自然呼吸。", color = MaterialTheme.colorScheme.secondary)
-            step?.cues.orEmpty().forEach { Text("· $it", style = MaterialTheme.typography.bodyLarge) }
-            step?.breath?.let { Text("呼吸：$it", color = MaterialTheme.colorScheme.primary) }
-            if (!step?.warnings.isNullOrEmpty()) {
-                Spacer(Modifier.height(22.dp))
-                HorizontalDivider()
-                Spacer(Modifier.height(18.dp))
-                Text("注意事项", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                step?.warnings.orEmpty().forEach { Text("· $it", color = MaterialTheme.colorScheme.error) }
+        LazyColumn(
+            Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(24.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            voiceNotice?.let { notice ->
+                item {
+                    Surface(color = MaterialTheme.colorScheme.errorContainer, shape = RoundedCornerShape(14.dp)) {
+                        Text(
+                            notice,
+                            modifier = Modifier.fillMaxWidth().padding(12.dp),
+                            color = MaterialTheme.colorScheme.onErrorContainer,
+                        )
+                    }
+                }
+            }
+            item { Text("动作要领", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold) }
+            if (cues.isEmpty()) {
+                item { Text("保持稳定、自然呼吸。", color = MaterialTheme.colorScheme.secondary) }
+            } else {
+                items(cues) { cue -> Text("· $cue", style = MaterialTheme.typography.bodyLarge) }
+            }
+            breath?.let {
+                item { Text("呼吸：$breath", color = MaterialTheme.colorScheme.primary) }
+            }
+            if (warnings.isNotEmpty()) {
+                item {
+                    Spacer(Modifier.height(6.dp))
+                    HorizontalDivider()
+                    Spacer(Modifier.height(6.dp))
+                    Text("注意事项", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                }
+                items(warnings) { warning -> Text("· $warning", color = MaterialTheme.colorScheme.error) }
             }
         }
     }

@@ -45,6 +45,7 @@ class NativeTimerCoordinator(
     private var lastCheckpointAt = 0L
     private var lastCueStep = -1
     private var lastCountdown = -1
+    private var lastUpcomingStep = -1
 
     val snapshot: StateFlow<TimerSnapshot> = mutableSnapshot.asStateFlow()
     val cues: SharedFlow<String> = mutableCues.asSharedFlow()
@@ -109,6 +110,7 @@ class NativeTimerCoordinator(
         foregroundServiceActive = false
         lastCueStep = -1
         lastCountdown = -1
+        lastUpcomingStep = -1
         publish(engine.reset(), announce = false)
     }
 
@@ -158,12 +160,19 @@ class NativeTimerCoordinator(
         if (step.runtimeIndex != lastCueStep) {
             lastCueStep = step.runtimeIndex
             lastCountdown = -1
+            lastUpcomingStep = -1
             val detail = buildList {
                 add(step.speechText)
-                step.cues.firstOrNull()?.let(::add)
+                addAll(step.cues)
                 step.breath?.takeIf(String::isNotBlank)?.let(::add)
             }.joinToString("。")
             mutableCues.tryEmit(detail)
+        }
+        if (value.remainingSeconds == 5 && lastUpcomingStep != step.runtimeIndex) {
+            value.nextStep?.let { next ->
+                lastUpcomingStep = step.runtimeIndex
+                mutableCues.tryEmit("下一项，${next.speechText}")
+            }
         }
         if (value.remainingSeconds in 1..3 && value.remainingSeconds != lastCountdown) {
             lastCountdown = value.remainingSeconds

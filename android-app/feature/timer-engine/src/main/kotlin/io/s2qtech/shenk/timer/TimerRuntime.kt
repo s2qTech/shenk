@@ -52,6 +52,7 @@ data class TimerSnapshot(
     val interruptionReason: String? = null,
 ) {
     val currentStep: RuntimeStep? get() = steps.getOrNull(currentStepIndex)
+    val nextStep: RuntimeStep? get() = steps.getOrNull(currentStepIndex + 1)
     val logicalActionCount: Int get() = steps.maxOfOrNull { it.logicalIndex + 1 } ?: 0
     val currentLogicalAction: Int get() = currentStep?.logicalIndex?.plus(1) ?: logicalActionCount
     val totalPlannedSeconds: Int get() = steps.sumOf(RuntimeStep::seconds)

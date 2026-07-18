@@ -62,24 +62,38 @@ class NativeTimerForegroundService : Service() {
     }
 }
 
-class TimerCuePlayer(context: Context) : TextToSpeech.OnInitListener {
+class TimerCuePlayer(
+    context: Context,
+    private val onStatus: (String?) -> Unit = {},
+) : TextToSpeech.OnInitListener {
     private val audioManager = context.getSystemService(AudioManager::class.java)
+    private val audioAttributes = AudioAttributes.Builder()
+        .setUsage(AudioAttributes.USAGE_ASSISTANCE_NAVIGATION_GUIDANCE)
+        .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
+        .build()
     private val audioFocusRequest = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK)
-        .setAudioAttributes(
-            AudioAttributes.Builder()
-                .setUsage(AudioAttributes.USAGE_ASSISTANCE_ACCESSIBILITY)
-                .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
-                .build(),
-        )
+        .setAudioAttributes(audioAttributes)
         .setWillPauseWhenDucked(false)
         .build()
+    private val pendingSpeech = ArrayDeque<String>()
     private val tts = TextToSpeech(context.applicationContext, this)
+    @Volatile
     private var ready = false
 
     override fun onInit(status: Int) {
-        ready = status == TextToSpeech.SUCCESS
-        if (!ready) return
-        tts.language = Locale.SIMPLIFIED_CHINESE
+        if (status != TextToSpeech.SUCCESS) {
+            onStatus("语音服务初始化失败，请检查系统文字转语音设置。")
+            return
+        }
+        val locale = listOf(Locale.SIMPLIFIED_CHINESE, Locale.CHINESE).firstOrNull {
+            tts.isLanguageAvailable(it) >= TextToSpeech.LANG_AVAILABLE
+        }
+        if (locale == null) {
+            onStatus("当前语音服务缺少中文语音，请在系统中安装中文语音包。")
+            return
+        }
+        tts.language = locale
+        tts.setAudioAttributes(audioAttributes)
         val preferred = tts.voices
             ?.filter { it.locale.language == Locale.CHINESE.language }
             ?.sortedByDescending { voice ->
@@ -90,6 +104,8 @@ class TimerCuePlayer(context: Context) : TextToSpeech.OnInitListener {
         preferred?.let { tts.voice = it }
         tts.setPitch(1.03f)
         tts.setSpeechRate(0.96f)
+        ready = true
+        onStatus(null)
         tts.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
             override fun onStart(utteranceId: String?) = Unit
             override fun onDone(utteranceId: String?) { audioManager.abandonAudioFocusRequest(audioFocusRequest) }
@@ -99,15 +115,36 @@ class TimerCuePlayer(context: Context) : TextToSpeech.OnInitListener {
             @Deprecated("Deprecated in Java")
             override fun onError(utteranceId: String?) { audioManager.abandonAudioFocusRequest(audioFocusRequest) }
         })
+        val queued = synchronized(pendingSpeech) {
+            pendingSpeech.removeLastOrNull().also { pendingSpeech.clear() }
+        }
+        queued?.let(::speakNow)
     }
 
     fun speak(text: String) {
-        if (!ready || text.isBlank()) return
+        if (text.isBlank()) return
+        if (!ready) {
+            if (text.any { !it.isDigit() }) {
+                synchronized(pendingSpeech) {
+                    pendingSpeech.clear()
+                    pendingSpeech.addLast(text)
+                }
+            }
+            return
+        }
+        speakNow(text)
+    }
+
+    private fun speakNow(text: String) {
         audioManager.requestAudioFocus(audioFocusRequest)
-        tts.speak(text, TextToSpeech.QUEUE_FLUSH, null, UUID.randomUUID().toString())
+        if (tts.speak(text, TextToSpeech.QUEUE_FLUSH, null, UUID.randomUUID().toString()) == TextToSpeech.ERROR) {
+            audioManager.abandonAudioFocusRequest(audioFocusRequest)
+            onStatus("语音提示播放失败，请检查媒体音量和文字转语音设置。")
+        }
     }
 
     fun close() {
+        synchronized(pendingSpeech) { pendingSpeech.clear() }
         audioManager.abandonAudioFocusRequest(audioFocusRequest)
         tts.stop()
         tts.shutdown()

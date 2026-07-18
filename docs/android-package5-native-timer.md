@@ -1,5 +1,7 @@
 # Android Package 5: Native Timer and Routine Library
 
+Status: accepted on Xiaomi 14 on 2026-07-19; Android delivery progress `6 / 9`.
+
 Updated: 2026-07-18
 Status: implemented; CI and Xiaomi 14 acceptance pending
 
@@ -16,6 +18,8 @@ Package 5 adds the production native routine library and timer to `android-app/`
 - Preserves optional step `execution` data and expands preparation, alternating, and bilateral execution at runtime.
 - Shows logical exercises in the library and preview while the running timer uses expanded execution steps.
 - Supports preview, start, pause, resume, previous, next, stop, reset, portrait/landscape layouts, TTS cues, audio ducking, active-training screen-on behavior, and phone-call pause.
+- The running surface keeps the immediate next runtime action visible in portrait and landscape, including during rest. Previous, next, and stop use fixed-size icon controls, while long cues and warnings scroll instead of being clipped.
+- TTS queues the first non-countdown cue until initialization completes, verifies Chinese voice availability, reports an actionable error in the running surface, reads all stored action cues, and announces the upcoming action five seconds before transition.
 - Checkpoints active state and rebuilds the timer engine after Activity or process recreation.
 - Persists terminal `timer_sessions` locally before opening post-workout completion. The timer module is the only writer of this entity.
 - Keeps `timer_sessions` separate from formal `training_logs`. Closing completion leaves a pending item; saving the editable completion creates a linked formal log through the record module.
@@ -49,7 +53,7 @@ Required Xiaomi 14 acceptance:
 
 1. Open a cached routine with networking disabled.
 2. Preview logical exercises and inspect exercise details.
-3. Start and complete a routine with voice cues and music ducking.
+3. Start and complete a routine with voice cues and music ducking. Confirm the first action cue is spoken, every action includes its stored cues, and the upcoming action is announced before transition. If Chinese TTS is unavailable, confirm the screen explains how to fix it instead of failing silently.
 4. Rotate between portrait and landscape without resetting or duplicating the clock.
 5. Background and reopen the app without losing progress.
 6. Receive a phone call while running and confirm automatic pause.
@@ -60,6 +64,9 @@ Required Xiaomi 14 acceptance:
 11. Restart the app and confirm the cloud connection remains available, startup sync runs, and the migration code is not requested again.
 12. Open More > Data Sync and confirm manual sync reports pulled/pushed counts without changing local data on failure.
 13. Review Today and Calendar in light and dark themes: the primary guidance is visibly a card, the current day is elevated, and actual/plan/suggestion remain distinguishable without losing the full month.
+14. Run a long-cue action and a rest step in portrait and landscape. Confirm cues and warnings remain scrollable, the next action is always visible, and previous/next labels cannot wrap because the controls are icons.
+
+Acceptance result: passed. The primary device completed the routine, rotation, persistence, offline/sync, completion, portrait/landscape UI, Chinese TTS, upcoming-action, and music-ducking gates without a crash or duplicate record.
 
 ## Risks and Rollback
 

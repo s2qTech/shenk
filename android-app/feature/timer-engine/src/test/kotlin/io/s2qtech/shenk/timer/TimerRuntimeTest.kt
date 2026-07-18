@@ -68,6 +68,24 @@ class TimerRuntimeTest {
     }
 
     @Test
+    fun snapshotAlwaysExposesTheImmediateNextRuntimeStep() {
+        val engine = NativeTimerEngine()
+        engine.preview(
+            TimerPreviewRequest(
+                routine(simpleStep(10), simpleStep(20).copy(stepId = "next", name = "椅子坐站")),
+                "session",
+                "idem",
+                "2026-07-18",
+            ),
+        )
+
+        assertEquals("椅子坐站", engine.snapshot.nextStep?.name)
+        engine.start(1_000)
+        engine.next(2_000)
+        assertEquals(null, engine.snapshot.nextStep)
+    }
+
+    @Test
     fun processRestorePausesInsteadOfCountingOfflineGapAsActiveTraining() {
         val engine = NativeTimerEngine()
         engine.preview(TimerPreviewRequest(routine(simpleStep(60)), "session", "idem", "2026-07-18"))
