@@ -3,6 +3,8 @@ package io.s2qtech.shenk
 import android.app.Application
 import io.s2qtech.shenk.sync.LocalFirstRepository
 import io.s2qtech.shenk.sync.CalendarRecordRepository
+import io.s2qtech.shenk.sync.NativeTimerSessionRepository
+import io.s2qtech.shenk.sync.RoutineLibraryRepository
 import io.s2qtech.shenk.sync.ShenkDatabase
 import io.s2qtech.shenk.sync.TodayRecordRepository
 import kotlinx.coroutines.CoroutineScope
@@ -26,6 +28,18 @@ class ShenkApplication : Application() {
 
     val calendarRepository: CalendarRecordRepository by lazy {
         CalendarRecordRepository(localFirstRepository)
+    }
+
+    val routineLibraryRepository: RoutineLibraryRepository by lazy {
+        RoutineLibraryRepository(localFirstRepository)
+    }
+
+    val timerSessionRepository: NativeTimerSessionRepository by lazy {
+        NativeTimerSessionRepository(localFirstRepository)
+    }
+
+    val nativeTimerCoordinator: NativeTimerCoordinator by lazy {
+        NativeTimerCoordinator(this, timerSessionRepository, applicationScope)
     }
 
     override fun onCreate() {

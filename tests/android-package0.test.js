@@ -49,7 +49,7 @@ test("native Android uses the accepted current-stable platform baseline", () => 
   }
 });
 
-test("Package 4 keeps local-first storage and adds calendar records and trends", () => {
+test("Package 5 keeps local-first records and adds the native routine and timer path", () => {
   const versions = read("android-app/gradle/libs.versions.toml");
   const repository = read("android-app/core/data-sync/src/main/kotlin/io/s2qtech/shenk/sync/LocalFirstRepository.kt");
   const store = read("android-app/core/data-sync/src/main/kotlin/io/s2qtech/shenk/sync/LocalStore.kt");
@@ -64,6 +64,11 @@ test("Package 4 keeps local-first storage and adds calendar records and trends",
   const calendarScreen = read("android-app/app/src/main/java/io/s2qtech/shenk/CalendarScreen.kt");
   const recordsScreen = read("android-app/app/src/main/java/io/s2qtech/shenk/RecordsScreen.kt");
   const dataScreen = read("android-app/app/src/main/java/io/s2qtech/shenk/DataScreen.kt");
+  const routineModels = read("android-app/core/model-domain/src/main/kotlin/io/s2qtech/shenk/model/RoutineModels.kt");
+  const timerRepositories = read("android-app/core/data-sync/src/main/kotlin/io/s2qtech/shenk/sync/TimerRepositories.kt");
+  const timerRuntime = read("android-app/feature/timer-engine/src/main/kotlin/io/s2qtech/shenk/timer/TimerRuntime.kt");
+  const trainingScreen = read("android-app/app/src/main/java/io/s2qtech/shenk/TrainingScreen.kt");
+  const timerPlatform = read("android-app/app/src/main/java/io/s2qtech/shenk/NativeTimerPlatform.kt");
 
   assert.match(versions, /room-runtime/);
   assert.match(versions, /work-runtime-ktx/);
@@ -87,20 +92,22 @@ test("Package 4 keeps local-first storage and adds calendar records and trends",
   assert.match(calendarScreen, /RecordEditPolicy/);
   assert.match(recordsScreen, /TrainingLogEditorSheet/);
   assert.match(dataScreen, /TrendCanvas/);
-
-  const appSources = walkFiles(path.join(root, "android-app/app/src/main"))
-    .filter((file) => file.endsWith(".kt"))
-    .map((file) => fs.readFileSync(file, "utf8"))
-    .join("\n");
-  assert.doesNotMatch(appSources, /TrainingScreen|TimerScreen|AiReviewScreen/);
+  assert.match(routineModels, /requiredEnum<RoutineScene>\("scene"\)/);
+  assert.match(routineModels, /requiredEnum<RoutineRole>\("role"\)/);
+  assert.match(timerRepositories, /SharedEntityOwner\.TIMER/);
+  assert.match(timerRuntime, /restoreTimerSnapshot/);
+  assert.match(timerRuntime, /execution\.sideSeconds/);
+  assert.match(trainingScreen, /RoutineLibraryScreen/);
+  assert.match(trainingScreen, /PostWorkoutSheet/);
+  assert.match(timerPlatform, /AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK/);
 });
 
-test("native CI gates emulator tests behind Package 4 verification", () => {
+test("native CI gates emulator tests behind Package 5 verification", () => {
   const workflow = read(".github/workflows/android-native.yml");
   const instrumentationScript = read("android-app/ci/run-instrumentation.sh");
 
   assert.match(workflow, /needs: verify/);
-  assert.match(workflow, /package4Check/);
+  assert.match(workflow, /package5Check/);
   assert.match(workflow, /timeout-minutes: 30/);
   assert.match(workflow, /java-version: "25"/);
   assert.match(workflow, /api-level: 36/);

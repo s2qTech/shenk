@@ -31,23 +31,23 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
       - name: Install pinned Android SDK
         run: sdkmanager "platforms;android-36" "build-tools;36.0.0"
-      - name: Verify Package 4 repository boundaries
+      - name: Verify Package 5 repository boundaries
         run: node --test ../tests/android-package0.test.js
       - name: Verify source, tests, lint, and debug APK
         shell: bash
         run: |
           set +e
-          ./gradlew package4Check 2>&1 | tee package4-check.log
+          ./gradlew package5Check 2>&1 | tee package5-check.log
           result=${PIPESTATUS[0]}
           if [ "$result" -ne 0 ]; then
             {
               echo "### Native Android verification failed"
               echo
               echo '```text'
-              tail -n 160 package4-check.log
+              tail -n 160 package5-check.log
               echo '```'
             } >> "$GITHUB_STEP_SUMMARY"
-            failure_tail=$(tail -n 80 package4-check.log)
+            failure_tail=$(tail -n 80 package5-check.log)
             failure_tail=${failure_tail//'%'/'%25'}
             failure_tail=${failure_tail//$'\r'/'%0D'}
             failure_tail=${failure_tail//$'\n'/'%0A'}
@@ -56,7 +56,7 @@ jobs:
           exit "$result"
       - uses: actions/upload-artifact@v4
         with:
-          name: shenk-package4-debug
+          name: shenk-package5-debug
           path: android-app/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
 

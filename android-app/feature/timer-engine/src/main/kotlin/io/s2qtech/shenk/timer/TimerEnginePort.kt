@@ -10,11 +10,15 @@ enum class TimerEngineState {
 }
 
 interface TimerEnginePort {
-    val state: TimerEngineState
+    val snapshot: TimerSnapshot
 
-    fun preview(routineId: String)
-    fun start()
-    fun pause()
-    fun resume()
-    fun stop()
+    fun preview(request: TimerPreviewRequest): TimerSnapshot
+    fun start(nowEpochMillis: Long): TimerSnapshot
+    fun tick(nowEpochMillis: Long): TimerSnapshot
+    fun pause(nowEpochMillis: Long, reason: String? = null): TimerSnapshot
+    fun resume(nowEpochMillis: Long): TimerSnapshot
+    fun next(nowEpochMillis: Long): TimerSnapshot
+    fun previous(nowEpochMillis: Long): TimerSnapshot
+    fun stop(nowEpochMillis: Long, reason: String? = null): TimerSnapshot
+    fun reset(): TimerSnapshot
 }

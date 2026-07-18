@@ -15,6 +15,8 @@ kotlin {
 }
 
 dependencies {
+    implementation(project(":core:model-domain"))
+    implementation(libs.kotlinx.serialization.json)
     testImplementation(libs.junit)
 }
 

@@ -15,6 +15,9 @@ class MainActivity : ComponentActivity() {
                 ShenkApp(
                     todayRepository = app.todayRepository,
                     calendarRepository = app.calendarRepository,
+                    routineLibraryRepository = app.routineLibraryRepository,
+                    timerSessionRepository = app.timerSessionRepository,
+                    timerCoordinator = app.nativeTimerCoordinator,
                     reminderStore = ReminderSettingsStore(this),
                 )
             }

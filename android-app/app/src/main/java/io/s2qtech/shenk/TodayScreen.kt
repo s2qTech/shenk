@@ -68,6 +68,7 @@ fun TodayRoute(
     onCalendar: () -> Unit = {},
     onRecords: () -> Unit = {},
     onData: () -> Unit = {},
+    onTraining: () -> Unit = {},
 ) {
     val date = remember { LocalDate.now() }
     val records by repository.observe(date).collectAsState(initial = null)
@@ -95,6 +96,7 @@ fun TodayRoute(
             onCalendar = onCalendar,
             onRecords = onRecords,
             onData = onData,
+            onTraining = onTraining,
         )
     }
 
@@ -168,6 +170,7 @@ private fun TodayScreen(
     onCalendar: () -> Unit,
     onRecords: () -> Unit,
     onData: () -> Unit,
+    onTraining: () -> Unit,
 ) {
     Column(
         modifier = modifier
@@ -203,6 +206,9 @@ private fun TodayScreen(
                     }
                     TextButton(onClick = onData, modifier = Modifier.testTag("today-open-data")) {
                         Text("数据")
+                    }
+                    TextButton(onClick = onTraining, modifier = Modifier.testTag("today-open-training")) {
+                        Text("训练")
                     }
                 }
                 FilledTonalButton(onClick = onReminders, contentPadding = PaddingValues(horizontal = 16.dp)) {
