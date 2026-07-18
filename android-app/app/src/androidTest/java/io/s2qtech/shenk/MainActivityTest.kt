@@ -1,6 +1,7 @@
 package io.s2qtech.shenk
 
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertExists
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithText
@@ -12,6 +13,7 @@ import androidx.compose.ui.semantics.SemanticsActions
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import io.s2qtech.shenk.model.SharedEntityOwner
 import io.s2qtech.shenk.model.SharedRecord
+import io.s2qtech.shenk.timer.TimerEngineState
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonArray
@@ -93,9 +95,10 @@ class MainActivityTest {
         }
         composeRule.onNodeWithTag("routine-synthetic-native-timer").performClick()
         composeRule.waitUntil(timeoutMillis = 5_000) {
-            runCatching { composeRule.onNodeWithTag("timer-start").assertIsDisplayed() }.isSuccess
+            app.nativeTimerCoordinator.snapshot.value.state == TimerEngineState.PREVIEW
         }
-        composeRule.onNodeWithTag("timer-start").assertIsDisplayed()
-        composeRule.onNodeWithText("原地慢走").assertIsDisplayed()
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag("timer-start").assertExists()
+        composeRule.onNodeWithText("原地慢走").assertExists()
     }
 }
