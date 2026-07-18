@@ -2,7 +2,6 @@ package io.s2qtech.shenk.sync
 
 import io.s2qtech.shenk.model.BodyMetric
 import io.s2qtech.shenk.model.CheckinKind
-import io.s2qtech.shenk.model.GuidanceSource
 import io.s2qtech.shenk.model.EffectiveStatus
 import io.s2qtech.shenk.model.EffectiveStatusResolver
 import io.s2qtech.shenk.model.PainEntry
@@ -11,9 +10,6 @@ import io.s2qtech.shenk.model.PainSide
 import io.s2qtech.shenk.model.SharedEntityOwner
 import io.s2qtech.shenk.model.SharedRecord
 import io.s2qtech.shenk.model.StatusCheckin
-import io.s2qtech.shenk.model.TodayGuidance
-import io.s2qtech.shenk.model.TodayGuidanceResolver
-import java.time.DayOfWeek
 import java.time.LocalDate
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
@@ -62,7 +58,7 @@ class TodayRecordRepository(
             metric = parsedMetrics.firstOrNull { it.date == dateText && it.context == "morning" },
             latestMetric = parsedMetrics.maxByOrNull { it.observedAt },
             effectiveStatus = EffectiveStatusResolver.resolve(morning, preWorkout),
-            guidance = resolveGuidance(date, logs, plans, adjustments),
+            guidance = GuidanceResolution.resolve(date, logs, plans, adjustments).guidance,
         )
     }
 
@@ -122,77 +118,6 @@ class TodayRecordRepository(
             })
         }
     }
-}
-
-private fun resolveGuidance(
-    date: LocalDate,
-    logs: List<SharedRecord>,
-    plans: List<SharedRecord>,
-    adjustments: List<SharedRecord>,
-): TodayGuidance {
-    val dateText = date.toString()
-    val actual = logs
-        .filter { it.data.string("date") == dateText && it.data.boolean("calendarVisible") != false }
-        .maxByOrNull { it.updatedAt.orEmpty() }
-        ?.let { record ->
-            TodayGuidance(
-                source = GuidanceSource.ACTUAL,
-                title = record.data.string("title") ?: trainingTypeTitle(record.data.string("type")),
-                trainingType = record.data.string("type") ?: "other",
-                estimatedMinutes = record.data.double("durationSec")?.div(60.0)?.toInt(),
-                note = record.data.string("subjectiveResult") ?: record.data.string("notes"),
-            )
-        }
-    val planRecord = plans
-        .filter { it.data.string("date") == dateText }
-        .maxByOrNull { it.updatedAt.orEmpty() }
-    val latestAdjustment = adjustments
-        .filter { it.data.string("date") == dateText }
-        .maxByOrNull { it.data.string("adjustedAt") ?: it.updatedAt.orEmpty() }
-    val effectiveData = latestAdjustment?.data?.let { adjustment ->
-        adjustment["toSnapshot"]
-            ?.takeUnless { it is JsonNull }
-            ?.jsonObject
-            ?: adjustment
-    } ?: planRecord?.data
-    val plan = effectiveData?.let { data ->
-        TodayGuidance(
-            source = GuidanceSource.FORMAL_PLAN,
-            title = data.string("title") ?: trainingTypeTitle(data.string("trainingType")),
-            trainingType = data.string("trainingType") ?: "other",
-            estimatedMinutes = data.double("estimatedMinutes")?.toInt(),
-            note = data.string("notes") ?: data.string("reason"),
-        )
-    }
-    return TodayGuidanceResolver.resolve(actual, plan, fallbackFor(date))
-}
-
-private fun fallbackFor(date: LocalDate): TodayGuidance = when (date.dayOfWeek) {
-    DayOfWeek.MONDAY -> suggestion("普通走", "easy_walk", 35)
-    DayOfWeek.TUESDAY -> suggestion("力量训练", "strength", 45)
-    DayOfWeek.WEDNESDAY -> suggestion("普通走", "easy_walk", 35)
-    DayOfWeek.THURSDAY -> suggestion("提高走", "quality_walk", 45)
-    DayOfWeek.FRIDAY -> suggestion("普通走", "easy_walk", 35)
-    DayOfWeek.SATURDAY -> suggestion("力量训练", "strength", 45)
-    DayOfWeek.SUNDAY -> suggestion("恢复活动", "recovery", 15)
-}
-
-private fun suggestion(title: String, type: String, minutes: Int) = TodayGuidance(
-    source = GuidanceSource.LOCAL_SUGGESTION,
-    title = title,
-    trainingType = type,
-    estimatedMinutes = minutes,
-    note = "当前没有正式计划，这是离线兜底建议。",
-)
-
-private fun trainingTypeTitle(type: String?): String = when (type) {
-    "strength" -> "力量训练"
-    "quality_walk" -> "提高走"
-    "easy_walk" -> "普通走"
-    "indoor_cardio" -> "室内有氧"
-    "recovery" -> "恢复活动"
-    "rest" -> "休息"
-    else -> "今日记录"
 }
 
 private fun StatusCheckin.toJson(): JsonObject = buildJsonObject {
@@ -261,33 +186,7 @@ private fun decodeCheckin(record: SharedRecord): StatusCheckin? = runCatching {
     )
 }.getOrNull()
 
-private fun decodeMetric(record: SharedRecord): BodyMetric? = runCatching {
-    val data = record.data
-    BodyMetric(
-        id = data.string("id") ?: record.id,
-        date = requireNotNull(data.string("date")),
-        observedAt = requireNotNull(data.string("observedAt")),
-        context = data.string("context") ?: "other",
-        source = data.string("source") ?: "legacy",
-        sourceRecordId = data.string("sourceRecordId"),
-        weightKg = data.double("weightKg"),
-        bodyFatPct = data.double("bodyFatPct"),
-        muscleKg = data.double("muscleKg"),
-        waistCm = data.double("waistCm"),
-    )
-}.getOrNull()
-
-private fun JsonObject.string(key: String): String? =
-    this[key]?.takeUnless { it is JsonNull }?.jsonPrimitive?.content
-
-private fun JsonObject.int(key: String): Int? =
-    this[key]?.takeUnless { it is JsonNull }?.jsonPrimitive?.intOrNull
-
-private fun JsonObject.double(key: String): Double? =
-    this[key]?.takeUnless { it is JsonNull }?.jsonPrimitive?.doubleOrNull
-
-private fun JsonObject.boolean(key: String): Boolean? =
-    this[key]?.takeUnless { it is JsonNull }?.jsonPrimitive?.content?.toBooleanStrictOrNull()
+private fun decodeMetric(record: SharedRecord): BodyMetric? = decodeBodyMetric(record)
 
 private fun kotlinx.serialization.json.JsonObjectBuilder.putOptional(key: String, value: String?) {
     value?.let { put(key, JsonPrimitive(it)) }

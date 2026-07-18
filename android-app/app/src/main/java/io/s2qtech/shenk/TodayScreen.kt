@@ -33,6 +33,7 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -44,6 +45,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import io.s2qtech.shenk.model.GuidanceSource
@@ -63,6 +65,9 @@ private enum class TodaySheet { MORNING, PRE_WORKOUT, REMINDERS }
 fun TodayRoute(
     repository: TodayRecordRepository,
     reminderStore: ReminderSettingsStore,
+    onCalendar: () -> Unit = {},
+    onRecords: () -> Unit = {},
+    onData: () -> Unit = {},
 ) {
     val date = remember { LocalDate.now() }
     val records by repository.observe(date).collectAsState(initial = null)
@@ -87,6 +92,9 @@ fun TodayRoute(
             onMorning = { sheet = TodaySheet.MORNING },
             onPreWorkout = { sheet = TodaySheet.PRE_WORKOUT },
             onReminders = { sheet = TodaySheet.REMINDERS },
+            onCalendar = onCalendar,
+            onRecords = onRecords,
+            onData = onData,
         )
     }
 
@@ -157,6 +165,9 @@ private fun TodayScreen(
     onMorning: () -> Unit,
     onPreWorkout: () -> Unit,
     onReminders: () -> Unit,
+    onCalendar: () -> Unit,
+    onRecords: () -> Unit,
+    onData: () -> Unit,
 ) {
     Column(
         modifier = modifier
@@ -182,8 +193,15 @@ private fun TodayScreen(
                     color = MaterialTheme.colorScheme.secondary,
                 )
             }
-            FilledTonalButton(onClick = onReminders, contentPadding = PaddingValues(horizontal = 16.dp)) {
-                Text("提醒")
+            Column(horizontalAlignment = Alignment.End) {
+                Row {
+                    TextButton(onClick = onCalendar) { Text("月历") }
+                    TextButton(onClick = onRecords) { Text("记录") }
+                    TextButton(onClick = onData) { Text("数据") }
+                }
+                FilledTonalButton(onClick = onReminders, contentPadding = PaddingValues(horizontal = 16.dp)) {
+                    Text("提醒")
+                }
             }
         }
         Spacer(Modifier.height(34.dp))
@@ -205,6 +223,7 @@ private fun TodayScreen(
             title = "晨起状态",
             action = if (records?.morning == null) "记录" else "调整",
             onAction = onMorning,
+            actionTag = "morning-action",
         )
         Spacer(Modifier.height(14.dp))
         MorningSummary(records)
@@ -264,14 +283,22 @@ private fun GuidanceBlock(guidance: io.s2qtech.shenk.model.TodayGuidance) {
 }
 
 @Composable
-private fun SectionHeader(title: String, action: String, onAction: () -> Unit) {
+private fun SectionHeader(
+    title: String,
+    action: String,
+    onAction: () -> Unit,
+    actionTag: String? = null,
+) {
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
-        OutlinedButton(onClick = onAction) { Text(action) }
+        OutlinedButton(
+            onClick = onAction,
+            modifier = if (actionTag == null) Modifier else Modifier.testTag(actionTag),
+        ) { Text(action) }
     }
 }
 

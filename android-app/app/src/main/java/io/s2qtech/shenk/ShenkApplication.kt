@@ -2,6 +2,7 @@ package io.s2qtech.shenk
 
 import android.app.Application
 import io.s2qtech.shenk.sync.LocalFirstRepository
+import io.s2qtech.shenk.sync.CalendarRecordRepository
 import io.s2qtech.shenk.sync.ShenkDatabase
 import io.s2qtech.shenk.sync.TodayRecordRepository
 import kotlinx.coroutines.CoroutineScope
@@ -21,6 +22,10 @@ class ShenkApplication : Application() {
 
     val todayRepository: TodayRecordRepository by lazy {
         TodayRecordRepository(localFirstRepository)
+    }
+
+    val calendarRepository: CalendarRecordRepository by lazy {
+        CalendarRecordRepository(localFirstRepository)
     }
 
     override fun onCreate() {

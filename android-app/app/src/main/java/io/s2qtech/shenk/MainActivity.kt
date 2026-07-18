@@ -12,8 +12,9 @@ class MainActivity : ComponentActivity() {
         val app = application as ShenkApplication
         setContent {
             ShenkTheme {
-                TodayRoute(
-                    repository = app.todayRepository,
+                ShenkApp(
+                    todayRepository = app.todayRepository,
+                    calendarRepository = app.calendarRepository,
                     reminderStore = ReminderSettingsStore(this),
                 )
             }
