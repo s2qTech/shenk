@@ -41,6 +41,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.s2qtech.shenk.model.CalendarDay
@@ -222,8 +223,12 @@ private fun CalendarHeader(
         }
         Column(horizontalAlignment = Alignment.End) {
             Row {
-                TextButton(onClick = onRecords) { Text("记录") }
-                TextButton(onClick = onData) { Text("数据") }
+                TextButton(onClick = onRecords, modifier = Modifier.testTag("calendar-open-records")) {
+                    Text("记录")
+                }
+                TextButton(onClick = onData, modifier = Modifier.testTag("calendar-open-data")) {
+                    Text("数据")
+                }
             }
             FilledTonalButton(onClick = onToday) { Text("回到今天") }
         }

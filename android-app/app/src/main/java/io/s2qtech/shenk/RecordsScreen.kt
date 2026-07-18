@@ -35,6 +35,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import io.s2qtech.shenk.model.RecordEditPolicy
 import io.s2qtech.shenk.model.TrainingLog
@@ -154,7 +155,7 @@ internal fun SpaceHeader(title: String, subtitle: String, onBack: () -> Unit) {
             Text(title, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.SemiBold)
             Text(subtitle, color = MaterialTheme.colorScheme.secondary)
         }
-        TextButton(onClick = onBack) { Text("返回今天") }
+        TextButton(onClick = onBack, modifier = Modifier.testTag("space-back")) { Text("返回今天") }
     }
 }
 

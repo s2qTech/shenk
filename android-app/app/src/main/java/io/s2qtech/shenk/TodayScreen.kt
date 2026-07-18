@@ -195,9 +195,15 @@ private fun TodayScreen(
             }
             Column(horizontalAlignment = Alignment.End) {
                 Row {
-                    TextButton(onClick = onCalendar) { Text("月历") }
-                    TextButton(onClick = onRecords) { Text("记录") }
-                    TextButton(onClick = onData) { Text("数据") }
+                    TextButton(onClick = onCalendar, modifier = Modifier.testTag("today-open-calendar")) {
+                        Text("月历")
+                    }
+                    TextButton(onClick = onRecords, modifier = Modifier.testTag("today-open-records")) {
+                        Text("记录")
+                    }
+                    TextButton(onClick = onData, modifier = Modifier.testTag("today-open-data")) {
+                        Text("数据")
+                    }
                 }
                 FilledTonalButton(onClick = onReminders, contentPadding = PaddingValues(horizontal = 16.dp)) {
                     Text("提醒")
