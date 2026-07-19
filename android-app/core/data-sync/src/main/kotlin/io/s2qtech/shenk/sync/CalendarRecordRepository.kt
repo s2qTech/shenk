@@ -31,6 +31,27 @@ data class CalendarDayDetails(
 class CalendarRecordRepository(
     private val records: LocalFirstRepository,
 ) {
+    fun observeRange(start: LocalDate, endInclusive: LocalDate): Flow<List<CalendarDay>> {
+        require(!endInclusive.isBefore(start))
+        return combine(
+            records.observeActive("training_logs"),
+            records.observeActive("daily_plan_items"),
+            records.observeActive("plan_adjustments"),
+        ) { logs, plans, adjustments ->
+            generateSequence(start) { current ->
+                current.plusDays(1).takeIf { it <= endInclusive }
+            }.map { date ->
+                val resolved = GuidanceResolution.resolve(date, logs, plans, adjustments)
+                CalendarDay(
+                    date = date,
+                    guidance = resolved.guidance,
+                    actualLogs = resolved.actualLogs,
+                    isInMonth = true,
+                )
+            }.toList()
+        }
+    }
+
     fun observeMonth(month: YearMonth): Flow<CalendarMonth> = combine(
         records.observeActive("training_logs"),
         records.observeActive("daily_plan_items"),

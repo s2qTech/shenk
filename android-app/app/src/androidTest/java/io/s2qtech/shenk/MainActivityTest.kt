@@ -48,15 +48,20 @@ class MainActivityTest {
         composeRule.onNodeWithTag("today-open-calendar").performSemanticsAction(SemanticsActions.OnClick)
         composeRule.waitForIdle()
         composeRule.onNodeWithTag("calendar-screen").assertIsDisplayed()
-        composeRule.onNodeWithText("回到今天").assertIsDisplayed()
+        composeRule.onNodeWithTag("calendar-agenda").assertIsDisplayed()
+        composeRule.onNodeWithTag("calendar-return-today").assertIsDisplayed().performClick()
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag("today-screen").assertIsDisplayed()
 
-        composeRule.onNodeWithTag("calendar-open-records").performSemanticsAction(SemanticsActions.OnClick)
+        composeRule.onNodeWithTag("today-open-more").performClick()
+        composeRule.onNodeWithTag("today-open-records").performSemanticsAction(SemanticsActions.OnClick)
         composeRule.waitForIdle()
         composeRule.onNodeWithText("正式训练事实").assertIsDisplayed()
         composeRule.onNodeWithTag("space-back").performSemanticsAction(SemanticsActions.OnClick)
         composeRule.waitForIdle()
 
-        composeRule.onNodeWithTag("calendar-open-data").performSemanticsAction(SemanticsActions.OnClick)
+        composeRule.onNodeWithTag("today-open-more").performClick()
+        composeRule.onNodeWithTag("today-open-data").performSemanticsAction(SemanticsActions.OnClick)
         composeRule.waitForIdle()
         composeRule.onNodeWithText("最近 30 天身体变化").assertIsDisplayed()
     }

@@ -1,7 +1,13 @@
 package io.s2qtech.shenk
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -13,17 +19,19 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.material3.Button
+import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
@@ -31,9 +39,10 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -41,13 +50,22 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.DirectionsBike
+import androidx.compose.material.icons.automirrored.rounded.DirectionsRun
+import androidx.compose.material.icons.automirrored.rounded.DirectionsWalk
+import androidx.compose.material.icons.rounded.AccessibilityNew
+import androidx.compose.material.icons.rounded.Bedtime
+import androidx.compose.material.icons.rounded.CalendarToday
+import androidx.compose.material.icons.rounded.FitnessCenter
+import androidx.compose.material.icons.rounded.SelfImprovement
 import io.s2qtech.shenk.model.CalendarDay
 import io.s2qtech.shenk.model.GuidanceSource
 import io.s2qtech.shenk.model.RecordEditPolicy
@@ -59,31 +77,51 @@ import io.s2qtech.shenk.sync.SyncScheduler
 import java.time.LocalDate
 import java.time.YearMonth
 import java.time.format.DateTimeFormatter
+import java.time.temporal.ChronoUnit
+import java.time.temporal.TemporalAdjusters
 import java.util.Locale
 import kotlinx.coroutines.launch
-
-private val weekdayNames = listOf("一", "二", "三", "四", "五", "六", "日")
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CalendarScreen(
     repository: CalendarRecordRepository,
     onToday: () -> Unit,
-    onRecords: () -> Unit,
-    onData: () -> Unit,
 ) {
     val today = remember { LocalDate.now() }
-    var month by remember { mutableStateOf(YearMonth.from(today)) }
-    val calendar by repository.observeMonth(month).collectAsState(initial = null)
+    val rangeStart = remember(today) { today.minusMonths(6).withDayOfMonth(1) }
+    val rangeEnd = remember(today) { today.plusMonths(6).withDayOfMonth(1).plusMonths(1).minusDays(1) }
+    val days by repository.observeRange(rangeStart, rangeEnd).collectAsState(initial = emptyList())
     var selectedDate by remember { mutableStateOf<LocalDate?>(null) }
     var editing by remember { mutableStateOf<TrainingLog?>(null) }
     var creating by remember { mutableStateOf(false) }
     val snackbar = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     val context = androidx.compose.ui.platform.LocalContext.current
+    val listState = rememberLazyListState()
+    val visibleDate by remember(days) {
+        derivedStateOf { days.getOrNull(listState.firstVisibleItemIndex)?.date ?: today }
+    }
+    val visibleMonth by remember {
+        derivedStateOf { YearMonth.from(visibleDate) }
+    }
+    val weekDistance by remember {
+        derivedStateOf {
+            val thisWeek = today.with(TemporalAdjusters.previousOrSame(java.time.DayOfWeek.MONDAY))
+            val visibleWeek = visibleDate.with(TemporalAdjusters.previousOrSame(java.time.DayOfWeek.MONDAY))
+            ChronoUnit.WEEKS.between(thisWeek, visibleWeek).toInt()
+        }
+    }
+
+    LaunchedEffect(days.size) {
+        if (days.isNotEmpty()) {
+            val todayIndex = days.indexOfFirst { it.date == today }.coerceAtLeast(0)
+            listState.scrollToItem((todayIndex - 2).coerceAtLeast(0))
+        }
+    }
 
     Scaffold(snackbarHost = { SnackbarHost(snackbar) }) { inner ->
-        Column(
+        Box(
             Modifier
                 .fillMaxSize()
                 .padding(inner)
@@ -91,41 +129,46 @@ fun CalendarScreen(
                 .navigationBarsPadding()
                 .testTag("calendar-screen"),
         ) {
-            CalendarHeader(
-                month = month,
-                onPrevious = { month = month.minusMonths(1) },
-                onNext = { month = month.plusMonths(1) },
-                onToday = onToday,
-                onRecords = onRecords,
-                onData = onData,
-            )
-            Row(Modifier.fillMaxWidth().padding(horizontal = 18.dp)) {
-                weekdayNames.forEach { name ->
-                    Text(
-                        name,
-                        modifier = Modifier.weight(1f),
-                        textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-                        color = MaterialTheme.colorScheme.outline,
-                        style = MaterialTheme.typography.labelMedium,
-                    )
-                }
-            }
-            Spacer(Modifier.height(10.dp))
-            LazyColumn(
-                modifier = Modifier.fillMaxSize(),
-                contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 12.dp, vertical = 4.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp),
-            ) {
-                calendar?.weeks?.let { weeks ->
-                    items(weeks) { week ->
-                        WeekBand(
-                            week = week,
-                            today = today,
-                            onDay = { selectedDate = it },
-                        )
+            Column(Modifier.fillMaxSize()) {
+                CalendarHeader(month = visibleMonth)
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize().testTag("calendar-agenda"),
+                    state = listState,
+                    contentPadding = androidx.compose.foundation.layout.PaddingValues(
+                        start = 16.dp,
+                        end = 16.dp,
+                        top = 6.dp,
+                        bottom = 92.dp,
+                    ),
+                    verticalArrangement = Arrangement.spacedBy(2.dp),
+                ) {
+                    items(
+                        items = days,
+                        key = { it.date },
+                    ) { day ->
+                        AgendaDayRow(day = day, today = today) {
+                            selectedDate = day.date
+                        }
                     }
                 }
             }
+            AnimatedVisibility(
+                visible = listState.isScrollInProgress,
+                modifier = Modifier.align(Alignment.Center).testTag("calendar-week-distance"),
+                enter = fadeIn() + scaleIn(initialScale = 0.88f),
+                exit = fadeOut() + scaleOut(targetScale = 0.94f),
+            ) {
+                WeekDistanceHud(weekDistance)
+            }
+            ExtendedFloatingActionButton(
+                onClick = onToday,
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(bottom = 14.dp)
+                    .testTag("calendar-return-today"),
+                icon = { Icon(Icons.Rounded.CalendarToday, contentDescription = null) },
+                text = { Text("今天") },
+            )
         }
     }
 
@@ -195,172 +238,204 @@ fun CalendarScreen(
 @Composable
 private fun CalendarHeader(
     month: YearMonth,
-    onPrevious: () -> Unit,
-    onNext: () -> Unit,
-    onToday: () -> Unit,
-    onRecords: () -> Unit,
-    onData: () -> Unit,
 ) {
     Row(
         modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 16.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
+        horizontalArrangement = Arrangement.spacedBy(14.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Column {
-            Text("月历", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.SemiBold)
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                TextButton(onClick = onPrevious) { Text("‹") }
-                Text("${month.year}年${month.monthValue}月", fontWeight = FontWeight.Medium)
-                TextButton(onClick = onNext) { Text("›") }
-            }
-        }
-        Column(horizontalAlignment = Alignment.End) {
-            Row {
-                TextButton(onClick = onRecords, modifier = Modifier.testTag("calendar-open-records")) {
-                    Text("记录")
-                }
-                TextButton(onClick = onData, modifier = Modifier.testTag("calendar-open-data")) {
-                    Text("数据")
-                }
-            }
-            FilledTonalButton(onClick = onToday) { Text("回到今天") }
-        }
+        Text("月历", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.SemiBold)
+        Text(
+            "${month.year}年${month.monthValue}月",
+            color = MaterialTheme.colorScheme.secondary,
+            fontWeight = FontWeight.Medium,
+        )
     }
 }
 
 @Composable
-private fun WeekBand(
-    week: List<CalendarDay?>,
-    today: LocalDate,
-    onDay: (LocalDate) -> Unit,
-) {
+private fun WeekDistanceHud(distance: Int) {
+    val amount = kotlin.math.abs(distance)
     Surface(
-        modifier = Modifier.fillMaxWidth(),
-        color = MaterialTheme.colorScheme.surface,
-        shape = RoundedCornerShape(22.dp),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.65f)),
-        tonalElevation = 1.dp,
+        color = MaterialTheme.colorScheme.inverseSurface.copy(alpha = 0.92f),
+        contentColor = MaterialTheme.colorScheme.inverseOnSurface,
+        shape = RoundedCornerShape(24.dp),
+        shadowElevation = 10.dp,
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(6.dp),
-            horizontalArrangement = Arrangement.spacedBy(4.dp),
+        Column(
+            modifier = Modifier.padding(horizontal = 28.dp, vertical = 20.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            week.forEach { day ->
-                if (day == null) {
-                    Spacer(Modifier.weight(1f).height(92.dp))
-                } else {
-                    DayTile(
-                        day = day,
-                        isToday = day.date == today,
-                        modifier = Modifier.weight(1f),
-                        onClick = { onDay(day.date) },
-                    )
-                }
+            Text(
+                if (distance == 0) "本周" else amount.toString(),
+                style = MaterialTheme.typography.displaySmall,
+                fontWeight = FontWeight.SemiBold,
+            )
+            if (distance != 0) {
+                Text("周${if (distance < 0) "前" else "后"}", style = MaterialTheme.typography.titleMedium)
+                Text("距今", style = MaterialTheme.typography.labelMedium)
             }
         }
     }
 }
 
 @Composable
-private fun DayTile(
+private fun AgendaDayRow(
     day: CalendarDay,
-    isToday: Boolean,
-    modifier: Modifier,
+    today: LocalDate,
     onClick: () -> Unit,
 ) {
+    val isToday = day.date == today
     val source = day.guidance.source
-    val baseColor = trainingColor(day.guidance.trainingType)
-    val scale by animateFloatAsState(if (isToday) 1.045f else 1f, label = "day-scale")
+    val accent = trainingColor(day.guidance.trainingType)
     val container = when (source) {
-        GuidanceSource.ACTUAL -> baseColor.copy(alpha = 0.27f)
-        GuidanceSource.FORMAL_PLAN -> baseColor.copy(alpha = 0.10f)
-        GuidanceSource.LOCAL_SUGGESTION -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
+        GuidanceSource.ACTUAL -> accent.copy(alpha = 0.17f)
+        GuidanceSource.FORMAL_PLAN -> accent.copy(alpha = 0.075f)
+        GuidanceSource.LOCAL_SUGGESTION -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.38f)
     }
-    Surface(
-        modifier = modifier
-            .height(92.dp)
-            .graphicsLayer {
-                scaleX = scale
-                scaleY = scale
-                shadowElevation = if (isToday) 12.dp.toPx() else 0f
-                shape = RoundedCornerShape(16.dp)
-                clip = false
-            }
-            .clickable(onClick = onClick),
-        color = container,
-        shape = RoundedCornerShape(16.dp),
-        border = when {
-            isToday -> BorderStroke(1.5.dp, MaterialTheme.colorScheme.primary)
-            source == GuidanceSource.ACTUAL -> BorderStroke(1.dp, baseColor.copy(alpha = 0.35f))
-            else -> null
-        },
-        tonalElevation = if (isToday) 5.dp else 0.dp,
+    val stripeColor = when (source) {
+        GuidanceSource.ACTUAL -> Color.Transparent
+        GuidanceSource.FORMAL_PLAN -> accent.copy(alpha = 0.11f)
+        GuidanceSource.LOCAL_SUGGESTION -> MaterialTheme.colorScheme.outline.copy(alpha = 0.055f)
+    }
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 5.dp)
+            .testTag("calendar-day-${day.date}"),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        Box {
-            if (source == GuidanceSource.FORMAL_PLAN) {
-                Canvas(Modifier.fillMaxSize()) {
-                    val gap = 13.dp.toPx()
-                    var x = -size.height
-                    while (x < size.width) {
-                        drawLine(
-                            color = baseColor.copy(alpha = 0.13f),
-                            start = Offset(x, size.height),
-                            end = Offset(x + size.height, 0f),
-                            strokeWidth = 4.dp.toPx(),
-                        )
-                        x += gap
+        DateRail(day.date, isToday)
+        Spacer(Modifier.width(10.dp))
+        Surface(
+            modifier = Modifier
+                .weight(1f)
+                .clickable(onClick = onClick),
+            color = container,
+            shape = RoundedCornerShape(10.dp),
+            border = when {
+                isToday -> BorderStroke(1.5.dp, MaterialTheme.colorScheme.primary)
+                source == GuidanceSource.ACTUAL -> BorderStroke(1.dp, accent.copy(alpha = 0.34f))
+                else -> BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f))
+            },
+            tonalElevation = if (isToday) 3.dp else 0.dp,
+        ) {
+            Box {
+                if (source != GuidanceSource.ACTUAL) {
+                    Canvas(Modifier.fillMaxSize()) {
+                        val gap = 16.dp.toPx()
+                        var x = -size.height
+                        while (x < size.width) {
+                            drawLine(
+                                color = stripeColor,
+                                start = Offset(x, size.height),
+                                end = Offset(x + size.height, 0f),
+                                strokeWidth = 3.dp.toPx(),
+                            )
+                            x += gap
+                        }
+                    }
+                }
+                Row(
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 13.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Box(
+                        Modifier
+                            .width(4.dp)
+                            .height(54.dp)
+                            .background(
+                                color = if (source == GuidanceSource.LOCAL_SUGGESTION) {
+                                    MaterialTheme.colorScheme.outline.copy(alpha = 0.55f)
+                                } else {
+                                    accent
+                                },
+                                shape = RoundedCornerShape(2.dp),
+                            ),
+                    )
+                    Spacer(Modifier.width(10.dp))
+                    Icon(
+                        imageVector = trainingIcon(day.guidance.trainingType),
+                        contentDescription = day.guidance.title,
+                        modifier = Modifier.size(30.dp),
+                        tint = if (source == GuidanceSource.LOCAL_SUGGESTION) {
+                            MaterialTheme.colorScheme.outline
+                        } else {
+                            accent
+                        },
+                    )
+                    Spacer(Modifier.width(10.dp))
+                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(
+                                day.guidance.title,
+                                modifier = Modifier.weight(1f),
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = if (source == GuidanceSource.ACTUAL) FontWeight.SemiBold else FontWeight.Medium,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            Text(
+                                when (source) {
+                                    GuidanceSource.ACTUAL -> "记录"
+                                    GuidanceSource.FORMAL_PLAN -> "计划"
+                                    GuidanceSource.LOCAL_SUGGESTION -> "建议"
+                                },
+                                color = if (source == GuidanceSource.LOCAL_SUGGESTION) {
+                                    MaterialTheme.colorScheme.outline
+                                } else {
+                                    accent
+                                },
+                                style = MaterialTheme.typography.labelMedium,
+                            )
+                        }
+                        day.guidance.estimatedMinutes?.let { minutes ->
+                            Text("约 $minutes 分钟", color = MaterialTheme.colorScheme.secondary)
+                        }
+                        day.guidance.note?.takeIf(String::isNotBlank)?.let { note ->
+                            Text(
+                                note,
+                                color = MaterialTheme.colorScheme.secondary,
+                                style = MaterialTheme.typography.bodySmall,
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
                     }
                 }
             }
-            Column(
-                Modifier.fillMaxSize().padding(horizontal = 6.dp, vertical = 7.dp),
-                verticalArrangement = Arrangement.SpaceBetween,
-            ) {
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                    Text(
-                        day.date.dayOfMonth.toString(),
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 14.sp,
-                        color = if (isToday) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
-                    )
-                    Text(
-                        when (source) {
-                            GuidanceSource.ACTUAL -> "记"
-                            GuidanceSource.FORMAL_PLAN -> "计"
-                            GuidanceSource.LOCAL_SUGGESTION -> "荐"
-                        },
-                        fontSize = 9.sp,
-                        color = if (source == GuidanceSource.LOCAL_SUGGESTION) MaterialTheme.colorScheme.outline
-                        else baseColor,
-                    )
-                }
-                Text(
-                    compactTrainingTitle(day.guidance.trainingType, day.guidance.title),
-                    maxLines = 1,
-                    fontSize = 12.sp,
-                    fontWeight = if (source == GuidanceSource.ACTUAL) FontWeight.SemiBold else FontWeight.Normal,
-                    color = if (source == GuidanceSource.LOCAL_SUGGESTION) {
-                        MaterialTheme.colorScheme.outline
-                    } else {
-                        MaterialTheme.colorScheme.onSurface
-                    },
-                )
-                day.guidance.estimatedMinutes?.let {
-                    Text("$it 分", fontSize = 9.sp, color = MaterialTheme.colorScheme.outline)
-                }
-            }
         }
     }
 }
 
-private fun compactTrainingTitle(type: String, fallback: String): String = when (type) {
-    "strength", "travel_strength" -> "力量"
-    "quality_walk" -> "提高"
-    "indoor_cardio" -> "有氧"
-    "easy_walk" -> "普通"
-    "recovery", "stretch", "warmup", "cooldown" -> "恢复"
-    "rest" -> "休息"
-    else -> fallback.take(2)
+@Composable
+private fun DateRail(
+    date: LocalDate,
+    isToday: Boolean,
+) {
+    Surface(
+        modifier = Modifier.width(58.dp),
+        color = if (isToday) MaterialTheme.colorScheme.primary else Color.Transparent,
+        contentColor = if (isToday) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
+        shape = RoundedCornerShape(12.dp),
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 6.dp, vertical = 9.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            Text(
+                date.format(DateTimeFormatter.ofPattern("EEE", Locale.CHINA)),
+                style = MaterialTheme.typography.labelSmall,
+                color = if (isToday) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.outline,
+            )
+            Text(date.dayOfMonth.toString(), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold)
+        }
+    }
 }
 
 @Composable
@@ -439,6 +514,17 @@ private fun trainingColor(type: String): Color = when (type) {
     "recovery", "stretch", "warmup", "cooldown" -> Color(0xFFD6A43A)
     "rest" -> Color(0xFF9B9385)
     else -> Color(0xFF6D8F7A)
+}
+
+private fun trainingIcon(type: String): ImageVector = when (type) {
+    "strength", "travel_strength" -> Icons.Rounded.FitnessCenter
+    "quality_walk" -> Icons.AutoMirrored.Rounded.DirectionsRun
+    "easy_walk" -> Icons.AutoMirrored.Rounded.DirectionsWalk
+    "indoor_cardio" -> Icons.AutoMirrored.Rounded.DirectionsBike
+    "recovery", "stretch", "cooldown" -> Icons.Rounded.SelfImprovement
+    "warmup", "seat_recovery" -> Icons.Rounded.AccessibilityNew
+    "rest" -> Icons.Rounded.Bedtime
+    else -> Icons.AutoMirrored.Rounded.DirectionsWalk
 }
 
 private fun logSummary(log: TrainingLog): String = buildList {

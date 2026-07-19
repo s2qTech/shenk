@@ -140,9 +140,13 @@ Today is one adaptable canvas rather than a dashboard of nested cards.
 
 The user wants the entire month visible, but not as a cramped desktop seven-column grid.
 
-The design prototype should explore a continuous month rhythm:
+The Android month surface uses a continuous vertical date stream rather than a seven-column miniature grid:
 
-- Week bands or a vertically flowing month stream preserve month context.
+- A compact date rail on the left and a full-width day summary on the right preserve month context and readable training information.
+- The date stream is continuous across month boundaries; it must not compress titles and durations into phone-width mini tiles or require top-edge month paging controls.
+- Fast scrolling reports the visible week's distance from the current week in a centered transient HUD.
+- A persistent bottom thumb-zone action returns to the Today canvas; Calendar and Today move through a shared-axis horizontal transition instead of a hard page jump.
+- Every day summary includes a direct, unframed activity icon alongside its title so training type remains recognizable at a glance.
 - Actual records, formal plans, and local suggestions have distinct visual languages.
 - Actual execution is strongest; formal plans use structured patterned treatment; local suggestions are quieter.
 - Today is always easy to return to and can expand through a container transformation rather than a hard page jump.

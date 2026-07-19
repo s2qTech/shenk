@@ -12,7 +12,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.unit.dp
 import io.s2qtech.shenk.sync.CalendarRecordRepository
 import io.s2qtech.shenk.sync.CloudConnectionManager
 import io.s2qtech.shenk.sync.NativeTimerSessionRepository
@@ -20,6 +22,7 @@ import io.s2qtech.shenk.sync.RoutineLibraryRepository
 import io.s2qtech.shenk.sync.TodayRecordRepository
 import io.s2qtech.shenk.model.TodayGuidance
 import java.time.LocalDate
+import kotlin.math.absoluteValue
 import kotlinx.coroutines.launch
 
 private enum class SecondarySpace { RECORDS, DATA }
@@ -64,37 +67,50 @@ fun ShenkApp(
             null -> HorizontalPager(
                 state = pager,
                 beyondViewportPageCount = 1,
+                pageSpacing = 12.dp,
                 modifier = Modifier.testTag("primary-pager"),
             ) { page ->
-                when (page) {
-                    0 -> CalendarScreen(
-                        repository = calendarRepository,
-                        onToday = { scope.launch { pager.animateScrollToPage(1) } },
-                        onRecords = { secondary = SecondarySpace.RECORDS },
-                        onData = { secondary = SecondarySpace.DATA },
-                    )
-                    1 -> TodayRoute(
-                        repository = todayRepository,
-                        reminderStore = reminderStore,
-                        cloudConnectionManager = cloudConnectionManager,
-                        onCalendar = { scope.launch { pager.animateScrollToPage(0) } },
-                        onRecords = { secondary = SecondarySpace.RECORDS },
-                        onData = { secondary = SecondarySpace.DATA },
-                        onTraining = { guidance ->
-                            trainingLaunch = TrainingLaunchRequest(LocalDate.now(), guidance)
-                            scope.launch { pager.animateScrollToPage(2) }
+                val pageOffset = (
+                    (pager.currentPage - page) + pager.currentPageOffsetFraction
+                ).absoluteValue.coerceIn(0f, 1f)
+                Box(
+                    Modifier
+                        .fillMaxSize()
+                        .graphicsLayer {
+                            val scale = 1f - (pageOffset * 0.035f)
+                            scaleX = scale
+                            scaleY = scale
+                            alpha = 1f - (pageOffset * 0.16f)
                         },
-                    )
-                    else -> TrainingRoute(
-                        routineRepository = routineLibraryRepository,
-                        sessionRepository = timerSessionRepository,
-                        recordRepository = calendarRepository,
-                        coordinator = timerCoordinator,
-                        launchRequest = trainingLaunch,
-                        onLaunchConsumed = { trainingLaunch = null },
-                        onToday = { scope.launch { pager.animateScrollToPage(1) } },
-                        onCalendar = { scope.launch { pager.animateScrollToPage(0) } },
-                    )
+                ) {
+                    when (page) {
+                        0 -> CalendarScreen(
+                            repository = calendarRepository,
+                            onToday = { scope.launch { pager.animateScrollToPage(1) } },
+                        )
+                        1 -> TodayRoute(
+                            repository = todayRepository,
+                            reminderStore = reminderStore,
+                            cloudConnectionManager = cloudConnectionManager,
+                            onCalendar = { scope.launch { pager.animateScrollToPage(0) } },
+                            onRecords = { secondary = SecondarySpace.RECORDS },
+                            onData = { secondary = SecondarySpace.DATA },
+                            onTraining = { guidance ->
+                                trainingLaunch = TrainingLaunchRequest(LocalDate.now(), guidance)
+                                scope.launch { pager.animateScrollToPage(2) }
+                            },
+                        )
+                        else -> TrainingRoute(
+                            routineRepository = routineLibraryRepository,
+                            sessionRepository = timerSessionRepository,
+                            recordRepository = calendarRepository,
+                            coordinator = timerCoordinator,
+                            launchRequest = trainingLaunch,
+                            onLaunchConsumed = { trainingLaunch = null },
+                            onToday = { scope.launch { pager.animateScrollToPage(1) } },
+                            onCalendar = { scope.launch { pager.animateScrollToPage(0) } },
+                        )
+                    }
                 }
             }
         }
