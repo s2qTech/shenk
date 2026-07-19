@@ -1,8 +1,10 @@
 package io.s2qtech.shenk
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
@@ -11,26 +13,47 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.gestures.snapping.rememberSnapFlingBehavior
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.clickable
 import androidx.compose.material3.Button
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Slider
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Close
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.graphics.Color
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import io.s2qtech.shenk.model.BodyMetric
 import io.s2qtech.shenk.model.CheckinKind
@@ -41,9 +64,18 @@ import io.s2qtech.shenk.model.StatusCheckin
 import io.s2qtech.shenk.sync.TodayRecords
 import java.time.Instant
 import java.time.LocalDate
+import kotlin.math.abs
 import kotlin.math.roundToInt
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.launch
 
 private data class PainDraft(val severity: Int = 1, val side: PainSide = PainSide.UNSPECIFIED)
+
+private enum class DurationField { SLEEP, DEEP_SLEEP }
+
+private enum class MeasurementField { WEIGHT, BODY_FAT, MUSCLE, WAIST }
 
 @Composable
 fun MorningCheckInSheet(
@@ -58,6 +90,7 @@ fun MorningCheckInSheet(
     var energy by remember(previous) { mutableStateOf(previous?.energy) }
     var fatigue by remember(previous) { mutableStateOf(previous?.fatigue) }
     var painRecorded by remember(previous) { mutableStateOf(previous?.pain != null) }
+    var painHasDiscomfort by remember(previous) { mutableStateOf(previous?.pain?.isNotEmpty() == true) }
     val pain = remember(previous) {
         mutableStateMapOf<PainRegion, PainDraft>().apply {
             previous?.pain?.forEach { put(it.region, PainDraft(it.severity, it.side)) }
@@ -68,6 +101,8 @@ fun MorningCheckInSheet(
     var bodyFat by remember(existing?.metric) { mutableStateOf(existing?.metric?.bodyFatPct) }
     var muscle by remember(existing?.metric) { mutableStateOf(existing?.metric?.muscleKg) }
     var waist by remember(existing?.metric) { mutableStateOf(existing?.metric?.waistCm) }
+    var activeDuration by remember { mutableStateOf<DurationField?>(null) }
+    var activeMeasurement by remember { mutableStateOf<MeasurementField?>(null) }
     val latest = existing?.latestMetric
 
     SheetFrame(
@@ -76,8 +111,50 @@ fun MorningCheckInSheet(
         subtitle = "不确定的项目可以留空，不需要事后补齐。",
     ) {
         SheetSection("睡眠") {
-            DurationStepper("睡眠时长", sleepMinutes, 15) { sleepMinutes = it }
-            DurationStepper("深睡时长", deepSleepMinutes, 15, max = sleepMinutes) { deepSleepMinutes = it }
+            DurationInputGrid(
+                sleepMinutes = sleepMinutes,
+                deepSleepMinutes = deepSleepMinutes,
+                active = activeDuration,
+                onSelect = { field ->
+                    activeDuration = field
+                    when (field) {
+                        DurationField.SLEEP -> if (sleepMinutes == null) sleepMinutes = 8 * 60
+                        DurationField.DEEP_SLEEP -> if (deepSleepMinutes == null) {
+                            deepSleepMinutes = minOf(2 * 60, sleepMinutes ?: 2 * 60)
+                        }
+                    }
+                },
+            )
+            activeDuration?.let { field ->
+                val duration = when (field) {
+                    DurationField.SLEEP -> sleepMinutes ?: 8 * 60
+                    DurationField.DEEP_SLEEP -> deepSleepMinutes ?: minOf(2 * 60, sleepMinutes ?: 2 * 60)
+                }
+                DurationWheelEditor(
+                    label = if (field == DurationField.SLEEP) "睡眠时长" else "深睡时长",
+                    valueMinutes = duration,
+                    maxMinutes = if (field == DurationField.DEEP_SLEEP) sleepMinutes else 16 * 60,
+                    onValueChange = { changed ->
+                        when (field) {
+                            DurationField.SLEEP -> {
+                                sleepMinutes = changed
+                                deepSleepMinutes = deepSleepMinutes?.coerceAtMost(changed)
+                            }
+                            DurationField.DEEP_SLEEP -> deepSleepMinutes = changed.coerceAtMost(sleepMinutes ?: changed)
+                        }
+                    },
+                    onClear = {
+                        when (field) {
+                            DurationField.SLEEP -> {
+                                sleepMinutes = null
+                                deepSleepMinutes = null
+                            }
+                            DurationField.DEEP_SLEEP -> deepSleepMinutes = null
+                        }
+                        activeDuration = null
+                    },
+                )
+            }
             ScoreSlider("睡眠感受", sleepQuality, "差", "好") { sleepQuality = it }
         }
         SheetSection("今日状态") {
@@ -86,8 +163,10 @@ fun MorningCheckInSheet(
         }
         PainEditor(
             recorded = painRecorded,
+            hasDiscomfort = painHasDiscomfort,
             pain = pain,
             onRecordedChange = { painRecorded = it },
+            onHasDiscomfortChange = { painHasDiscomfort = it },
         )
         SheetSection("身体测量") {
             Text(
@@ -95,10 +174,53 @@ fun MorningCheckInSheet(
                 color = MaterialTheme.colorScheme.secondary,
                 style = MaterialTheme.typography.bodySmall,
             )
-            NumericStepper("体重", "kg", weight, latest?.weightKg, 0.1) { weight = it }
-            NumericStepper("体脂率", "%", bodyFat, latest?.bodyFatPct, 0.1) { bodyFat = it }
-            NumericStepper("肌肉量", "kg", muscle, latest?.muscleKg, 0.1) { muscle = it }
-            NumericStepper("腰围", "cm", waist, latest?.waistCm, 0.5) { waist = it }
+            MeasurementInputGrid(
+                weight = weight,
+                bodyFat = bodyFat,
+                muscle = muscle,
+                waist = waist,
+                latest = latest,
+                active = activeMeasurement,
+                onSelect = { field ->
+                    activeMeasurement = field
+                    when (field) {
+                        MeasurementField.WEIGHT -> if (weight == null) weight = latest?.weightKg ?: 70.0
+                        MeasurementField.BODY_FAT -> if (bodyFat == null) bodyFat = latest?.bodyFatPct ?: 20.0
+                        MeasurementField.MUSCLE -> if (muscle == null) muscle = latest?.muscleKg ?: 50.0
+                        MeasurementField.WAIST -> if (waist == null) waist = latest?.waistCm ?: 80.0
+                    }
+                },
+            )
+            activeMeasurement?.let { field ->
+                val config = measurementConfig(field)
+                val current = when (field) {
+                    MeasurementField.WEIGHT -> weight ?: latest?.weightKg ?: config.defaultValue
+                    MeasurementField.BODY_FAT -> bodyFat ?: latest?.bodyFatPct ?: config.defaultValue
+                    MeasurementField.MUSCLE -> muscle ?: latest?.muscleKg ?: config.defaultValue
+                    MeasurementField.WAIST -> waist ?: latest?.waistCm ?: config.defaultValue
+                }
+                MeasurementWheelEditor(
+                    config = config,
+                    value = current,
+                    onValueChange = { changed ->
+                        when (field) {
+                            MeasurementField.WEIGHT -> weight = changed
+                            MeasurementField.BODY_FAT -> bodyFat = changed
+                            MeasurementField.MUSCLE -> muscle = changed
+                            MeasurementField.WAIST -> waist = changed
+                        }
+                    },
+                    onClear = {
+                        when (field) {
+                            MeasurementField.WEIGHT -> weight = null
+                            MeasurementField.BODY_FAT -> bodyFat = null
+                            MeasurementField.MUSCLE -> muscle = null
+                            MeasurementField.WAIST -> waist = null
+                        }
+                        activeMeasurement = null
+                    },
+                )
+            }
         }
         SheetSection("补充") {
             OutlinedTextField(
@@ -122,9 +244,14 @@ fun MorningCheckInSheet(
                     sleepQuality = sleepQuality,
                     energy = energy,
                     fatigue = fatigue,
-                    pain = if (painRecorded) pain.map { (region, draft) ->
-                        PainEntry(region, draft.severity, draft.side)
-                    } else null,
+                    pain = when {
+                        !painRecorded -> null
+                        !painHasDiscomfort -> emptyList()
+                        pain.isNotEmpty() -> pain.map { (region, draft) ->
+                            PainEntry(region, draft.severity, draft.side)
+                        }
+                        else -> null
+                    },
                     note = note.takeIf { it.isNotBlank() },
                 )
                 val metric = BodyMetric(
@@ -227,26 +354,35 @@ fun PreWorkoutSheet(
 @Composable
 private fun PainEditor(
     recorded: Boolean,
+    hasDiscomfort: Boolean,
     pain: MutableMap<PainRegion, PainDraft>,
     onRecordedChange: (Boolean) -> Unit,
+    onHasDiscomfortChange: (Boolean) -> Unit,
 ) {
     SheetSection("疼痛与不适") {
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             FilterChip(
-                selected = recorded && pain.isEmpty(),
+                selected = recorded && !hasDiscomfort,
                 onClick = {
                     pain.clear()
                     onRecordedChange(true)
+                    onHasDiscomfortChange(false)
                 },
                 label = { Text("无异常") },
             )
             FilterChip(
-                selected = pain.isNotEmpty(),
-                onClick = { onRecordedChange(true) },
+                selected = recorded && hasDiscomfort,
+                onClick = {
+                    onRecordedChange(true)
+                    onHasDiscomfortChange(true)
+                },
                 label = { Text("有不适") },
             )
         }
-        if (recorded && pain.isNotEmpty()) PainRegionEditor(pain)
+        if (recorded && hasDiscomfort) {
+            Text("选择不适部位", color = MaterialTheme.colorScheme.secondary)
+            PainRegionEditor(pain)
+        }
         if (!recorded) Text("尚未记录", color = MaterialTheme.colorScheme.outline)
     }
 }
@@ -313,70 +449,306 @@ private fun ScoreSlider(
     }
 }
 
-@Composable
-private fun DurationStepper(
-    label: String,
-    value: Int?,
-    step: Int,
-    max: Int? = null,
-    onValueChange: (Int?) -> Unit,
-) {
-    StepperRow(
-        label = label,
-        value = value?.let { "${it / 60}小时${it % 60}分" } ?: "未记录",
-        onMinus = { onValueChange(value?.minus(step)?.takeIf { it > 0 }) },
-        onPlus = { onValueChange(((value ?: 0) + step).coerceAtMost(max ?: 1440)) },
-        onClear = { onValueChange(null) },
-    )
+private data class MeasurementWheelConfig(
+    val field: MeasurementField,
+    val label: String,
+    val unit: String,
+    val min: Double,
+    val max: Double,
+    val step: Double,
+    val defaultValue: Double,
+)
+
+private fun measurementConfig(field: MeasurementField): MeasurementWheelConfig = when (field) {
+    MeasurementField.WEIGHT -> MeasurementWheelConfig(field, "体重", "kg", 30.0, 250.0, 0.1, 70.0)
+    MeasurementField.BODY_FAT -> MeasurementWheelConfig(field, "体脂率", "%", 3.0, 70.0, 0.1, 20.0)
+    MeasurementField.MUSCLE -> MeasurementWheelConfig(field, "肌肉量", "kg", 10.0, 150.0, 0.1, 50.0)
+    MeasurementField.WAIST -> MeasurementWheelConfig(field, "腰围", "cm", 40.0, 200.0, 0.5, 80.0)
 }
 
 @Composable
-private fun NumericStepper(
-    label: String,
-    unit: String,
-    value: Double?,
-    anchor: Double?,
-    step: Double,
-    onValueChange: (Double?) -> Unit,
+private fun DurationInputGrid(
+    sleepMinutes: Int?,
+    deepSleepMinutes: Int?,
+    active: DurationField?,
+    onSelect: (DurationField) -> Unit,
 ) {
-    StepperRow(
-        label = label,
-        value = value?.let { "%.1f %s".format(it, unit) }
-            ?: anchor?.let { "未记录 · 最近 %.1f".format(it) }
-            ?: "未记录",
-        onMinus = {
-            val base = value ?: anchor ?: step
-            onValueChange((base - step).coerceAtLeast(0.0))
-        },
-        onPlus = {
-            val base = value ?: anchor ?: 0.0
-            onValueChange(base + step)
-        },
-        onClear = { onValueChange(null) },
-    )
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        ValueInputCell(
+            label = "睡眠时长",
+            value = sleepMinutes?.let(::formatDuration) ?: "未记录",
+            selected = active == DurationField.SLEEP,
+            modifier = Modifier.weight(1f),
+            onClick = { onSelect(DurationField.SLEEP) },
+        )
+        ValueInputCell(
+            label = "深睡时长",
+            value = deepSleepMinutes?.let(::formatDuration) ?: "未记录",
+            selected = active == DurationField.DEEP_SLEEP,
+            modifier = Modifier.weight(1f),
+            onClick = { onSelect(DurationField.DEEP_SLEEP) },
+        )
+    }
 }
 
 @Composable
-private fun StepperRow(
+private fun MeasurementInputGrid(
+    weight: Double?,
+    bodyFat: Double?,
+    muscle: Double?,
+    waist: Double?,
+    latest: BodyMetric?,
+    active: MeasurementField?,
+    onSelect: (MeasurementField) -> Unit,
+) {
+    val rows = listOf(
+        listOf(
+            Triple(MeasurementField.WEIGHT, weight, latest?.weightKg),
+            Triple(MeasurementField.BODY_FAT, bodyFat, latest?.bodyFatPct),
+        ),
+        listOf(
+            Triple(MeasurementField.MUSCLE, muscle, latest?.muscleKg),
+            Triple(MeasurementField.WAIST, waist, latest?.waistCm),
+        ),
+    )
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        rows.forEach { row ->
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                row.forEach { (field, value, anchor) ->
+                    val config = measurementConfig(field)
+                    ValueInputCell(
+                        label = config.label,
+                        value = value?.let { "%.1f %s".format(it, config.unit) } ?: "未记录",
+                        supporting = if (value == null && anchor != null) {
+                            "上次 %.1f %s".format(anchor, config.unit)
+                        } else null,
+                        selected = active == field,
+                        modifier = Modifier.weight(1f),
+                        onClick = { onSelect(field) },
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ValueInputCell(
     label: String,
     value: String,
-    onMinus: () -> Unit,
-    onPlus: () -> Unit,
+    selected: Boolean,
+    modifier: Modifier = Modifier,
+    supporting: String? = null,
+    onClick: () -> Unit,
+) {
+    Surface(
+        modifier = modifier
+            .height(92.dp)
+            .clickable(onClick = onClick)
+            .semantics { contentDescription = "$label，$value" },
+        shape = RoundedCornerShape(8.dp),
+        color = if (selected) MaterialTheme.colorScheme.primaryContainer else Color.Transparent,
+        border = BorderStroke(
+            1.dp,
+            if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant,
+        ),
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.Center,
+        ) {
+            Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.secondary)
+            Text(value, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+            supporting?.let {
+                Text(it, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
+            }
+        }
+    }
+}
+
+@Composable
+private fun DurationWheelEditor(
+    label: String,
+    valueMinutes: Int,
+    maxMinutes: Int?,
+    onValueChange: (Int) -> Unit,
     onClear: () -> Unit,
 ) {
-    Row(
-        modifier = Modifier.fillMaxWidth().padding(vertical = 5.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Column(Modifier.weight(1f)) {
-            Text(label, style = MaterialTheme.typography.labelLarge)
-            Text(value, color = MaterialTheme.colorScheme.secondary)
+    val safeMaximum = (maxMinutes ?: (16 * 60)).coerceAtLeast(1)
+    val safeValue = valueMinutes.coerceIn(1, safeMaximum)
+    WheelEditorFrame(label = label, onClear = onClear) {
+        key(label) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                IntWheelColumn(
+                    values = 0..(safeMaximum / 60),
+                    selected = safeValue / 60,
+                    suffix = "小时",
+                    modifier = Modifier.weight(1f),
+                    onSelected = { hour ->
+                        val minute = safeValue % 60
+                        onValueChange((hour * 60 + minute).coerceIn(1, safeMaximum))
+                    },
+                )
+                IntWheelColumn(
+                    values = 0..59,
+                    selected = safeValue % 60,
+                    suffix = "分",
+                    modifier = Modifier.weight(1f),
+                    onSelected = { minute ->
+                        val hour = safeValue / 60
+                        onValueChange((hour * 60 + minute).coerceIn(1, safeMaximum))
+                    },
+                )
+            }
         }
-        OutlinedButton(onClick = onMinus) { Text("−") }
-        OutlinedButton(onClick = onPlus) { Text("+") }
-        OutlinedButton(onClick = onClear) { Text("清空") }
     }
+}
+
+@Composable
+private fun MeasurementWheelEditor(
+    config: MeasurementWheelConfig,
+    value: Double,
+    onValueChange: (Double) -> Unit,
+    onClear: () -> Unit,
+) {
+    val itemCount = (((config.max - config.min) / config.step).roundToInt() + 1).coerceAtLeast(1)
+    val selectedIndex = (((value - config.min) / config.step).roundToInt()).coerceIn(0, itemCount - 1)
+    WheelEditorFrame(label = config.label, onClear = onClear) {
+        key(config.field) {
+            WheelColumn(
+                itemCount = itemCount,
+                selectedIndex = selectedIndex,
+                textAt = { index -> "%.1f %s".format(config.min + index * config.step, config.unit) },
+                modifier = Modifier.fillMaxWidth(),
+                onSelected = { index ->
+                    val selected = config.min + index * config.step
+                    onValueChange((selected * 10.0).roundToInt() / 10.0)
+                },
+            )
+        }
+    }
+}
+
+@Composable
+private fun WheelEditorFrame(
+    label: String,
+    onClear: () -> Unit,
+    content: @Composable () -> Unit,
+) {
+    Surface(
+        modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
+        shape = RoundedCornerShape(8.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+    ) {
+        Column(Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text("滑动调整$label", style = MaterialTheme.typography.labelLarge)
+                IconButton(onClick = onClear) {
+                    Icon(Icons.Rounded.Close, contentDescription = "清除$label")
+                }
+            }
+            content()
+        }
+    }
+}
+
+@Composable
+private fun IntWheelColumn(
+    values: IntRange,
+    selected: Int,
+    suffix: String,
+    modifier: Modifier = Modifier,
+    onSelected: (Int) -> Unit,
+) {
+    val items = remember(values.first, values.last) { values.toList() }
+    WheelColumn(
+        itemCount = items.size,
+        selectedIndex = items.indexOf(selected).coerceAtLeast(0),
+        textAt = { index -> "${items[index]} $suffix" },
+        modifier = modifier,
+        onSelected = { index -> onSelected(items[index]) },
+    )
+}
+
+@Composable
+private fun WheelColumn(
+    itemCount: Int,
+    selectedIndex: Int,
+    textAt: (Int) -> String,
+    modifier: Modifier = Modifier,
+    onSelected: (Int) -> Unit,
+) {
+    val initialIndex = selectedIndex.coerceIn(0, itemCount - 1)
+    val listState = rememberLazyListState(initialFirstVisibleItemIndex = initialIndex)
+    val flingBehavior = rememberSnapFlingBehavior(lazyListState = listState)
+    val scope = rememberCoroutineScope()
+    val centeredIndex by remember(listState, initialIndex) {
+        derivedStateOf {
+            val layout = listState.layoutInfo
+            val center = (layout.viewportStartOffset + layout.viewportEndOffset) / 2
+            layout.visibleItemsInfo.minByOrNull { item ->
+                abs(item.offset + item.size / 2 - center)
+            }?.index ?: initialIndex
+        }
+    }
+
+    LaunchedEffect(listState, itemCount) {
+        snapshotFlow { listState.isScrollInProgress to centeredIndex }
+            .map { (scrolling, index) -> if (scrolling) null else index }
+            .filter { it != null }
+            .map { requireNotNull(it) }
+            .distinctUntilChanged()
+            .collect(onSelected)
+    }
+
+    Box(modifier.height(152.dp)) {
+        Column(
+            modifier = Modifier.align(Alignment.Center).fillMaxWidth(),
+        ) {
+            HorizontalDivider(color = MaterialTheme.colorScheme.primary.copy(alpha = 0.35f))
+            Spacer(Modifier.height(48.dp))
+            HorizontalDivider(color = MaterialTheme.colorScheme.primary.copy(alpha = 0.35f))
+        }
+        LazyColumn(
+            modifier = Modifier.fillMaxWidth().height(152.dp),
+            state = listState,
+            flingBehavior = flingBehavior,
+            contentPadding = PaddingValues(vertical = 52.dp),
+        ) {
+            items(count = itemCount, key = { it }) { index ->
+                Text(
+                    text = textAt(index),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(48.dp)
+                        .clickable { scope.launch { listState.animateScrollToItem(index) } }
+                        .padding(top = 10.dp)
+                        .alpha(if (index == centeredIndex) 1f else 0.34f),
+                    textAlign = TextAlign.Center,
+                    style = if (index == centeredIndex) {
+                        MaterialTheme.typography.headlineSmall
+                    } else {
+                        MaterialTheme.typography.bodyLarge
+                    },
+                    fontWeight = if (index == centeredIndex) FontWeight.SemiBold else FontWeight.Normal,
+                )
+            }
+        }
+    }
+}
+
+private fun formatDuration(minutes: Int): String = buildString {
+    if (minutes >= 60) append("${minutes / 60}小时")
+    if (minutes % 60 > 0 || minutes < 60) append("${minutes % 60}分")
 }
 
 @Composable
