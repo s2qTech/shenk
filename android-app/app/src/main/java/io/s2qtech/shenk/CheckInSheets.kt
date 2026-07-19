@@ -73,6 +73,8 @@ import kotlinx.coroutines.launch
 
 private data class PainDraft(val severity: Int = 1, val side: PainSide = PainSide.UNSPECIFIED)
 
+private const val DEFAULT_WELLNESS_SCORE = 3
+
 private enum class DurationField { SLEEP, DEEP_SLEEP }
 
 private enum class MeasurementField { WEIGHT, BODY_FAT, MUSCLE, WAIST }
@@ -87,9 +89,15 @@ fun MorningCheckInSheet(
     val previous = existing?.morning
     var sleepMinutes by remember(previous) { mutableStateOf(previous?.sleepDurationMinutes) }
     var deepSleepMinutes by remember(previous) { mutableStateOf(previous?.deepSleepMinutes) }
-    var sleepQuality by remember(previous) { mutableStateOf(previous?.sleepQuality) }
-    var energy by remember(previous) { mutableStateOf(previous?.energy) }
-    var fatigue by remember(previous) { mutableStateOf(previous?.fatigue) }
+    var sleepQuality by remember(previous) {
+        mutableStateOf<Int?>(previous?.sleepQuality ?: DEFAULT_WELLNESS_SCORE)
+    }
+    var energy by remember(previous) {
+        mutableStateOf<Int?>(previous?.energy ?: DEFAULT_WELLNESS_SCORE)
+    }
+    var fatigue by remember(previous) {
+        mutableStateOf<Int?>(previous?.fatigue ?: DEFAULT_WELLNESS_SCORE)
+    }
     var painRecorded by remember(previous) { mutableStateOf(previous?.pain != null) }
     var painHasDiscomfort by remember(previous) { mutableStateOf(previous?.pain?.isNotEmpty() == true) }
     val pain = remember(previous) {
