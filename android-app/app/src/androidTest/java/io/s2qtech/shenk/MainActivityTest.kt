@@ -51,6 +51,12 @@ class MainActivityTest {
         composeRule.onNodeWithTag("calendar-agenda").assertIsDisplayed()
         composeRule.onNodeWithTag("calendar-return-today").assertIsDisplayed().performClick()
         composeRule.waitForIdle()
+        composeRule.onNodeWithTag("calendar-screen").assertIsDisplayed()
+
+        composeRule.activityRule.scenario.onActivity { activity ->
+            activity.onBackPressedDispatcher.onBackPressed()
+        }
+        composeRule.waitForIdle()
         composeRule.onNodeWithTag("today-screen").assertIsDisplayed()
 
         composeRule.onNodeWithTag("today-open-more").performClick()

@@ -145,10 +145,12 @@ The Android month surface uses a continuous vertical date stream rather than a s
 - A compact date rail on the left and a full-width day summary on the right preserve month context and readable training information.
 - The date stream is continuous across month boundaries; it must not compress titles and durations into phone-width mini tiles or require top-edge month paging controls.
 - Fast scrolling reports the visible week's distance from the current week in a centered transient HUD.
-- A persistent bottom thumb-zone action returns to the Today canvas; Calendar and Today move through a shared-axis horizontal transition instead of a hard page jump.
+- A persistent bottom thumb-zone action anchors the current date inside the continuous stream. Horizontal swipe or system back returns from Calendar to the Today canvas through the shared-axis transition.
 - Every day summary includes a direct, unframed activity icon alongside its title so training type remains recognizable at a glance.
 - Actual records, formal plans, and local suggestions have distinct visual languages.
-- Actual execution is strongest; formal plans use structured patterned treatment; local suggestions are quieter.
+- Agenda summaries are spacious flat rows with a vertical activity cue rather than small rounded cards. Actual execution uses the strongest activity color, formal plans remain clean and structured, and local suggestions use a quiet gray diagonal pattern.
+- Formal plans describe the planned activity rather than an invented clock time or duration. Duration is shown in the stream only when it comes from an actual record.
+- Local fallback suggestions omit generic explanatory copy; their lower authority is communicated by the gray patterned treatment and the `建议` source label.
 - Today is always easy to return to and can expand through a container transformation rather than a hard page jump.
 - The default month view prioritizes completion rhythm and upcoming formal plans.
 - A day normally displays one effective training item. Multiple source records remain available in date details.

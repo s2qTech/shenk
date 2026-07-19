@@ -84,10 +84,7 @@ fun ShenkApp(
                         },
                 ) {
                     when (page) {
-                        0 -> CalendarScreen(
-                            repository = calendarRepository,
-                            onToday = { scope.launch { pager.animateScrollToPage(1) } },
-                        )
+                        0 -> CalendarScreen(repository = calendarRepository)
                         1 -> TodayRoute(
                             repository = todayRepository,
                             reminderStore = reminderStore,

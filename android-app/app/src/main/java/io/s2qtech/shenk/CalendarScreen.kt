@@ -5,7 +5,6 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -17,6 +16,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -86,7 +86,6 @@ import kotlinx.coroutines.launch
 @Composable
 fun CalendarScreen(
     repository: CalendarRecordRepository,
-    onToday: () -> Unit,
 ) {
     val today = remember { LocalDate.now() }
     val rangeStart = remember(today) { today.minusMonths(6).withDayOfMonth(1) }
@@ -161,7 +160,14 @@ fun CalendarScreen(
                 WeekDistanceHud(weekDistance)
             }
             ExtendedFloatingActionButton(
-                onClick = onToday,
+                onClick = {
+                    scope.launch {
+                        val todayIndex = days.indexOfFirst { it.date == today }
+                        if (todayIndex >= 0) {
+                            listState.animateScrollToItem((todayIndex - 2).coerceAtLeast(0))
+                        }
+                    }
+                },
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
                     .padding(bottom = 14.dp)
@@ -289,19 +295,15 @@ private fun AgendaDayRow(
     val source = day.guidance.source
     val accent = trainingColor(day.guidance.trainingType)
     val container = when (source) {
-        GuidanceSource.ACTUAL -> accent.copy(alpha = 0.17f)
-        GuidanceSource.FORMAL_PLAN -> accent.copy(alpha = 0.075f)
-        GuidanceSource.LOCAL_SUGGESTION -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.38f)
+        GuidanceSource.ACTUAL -> MaterialTheme.colorScheme.surface
+        GuidanceSource.FORMAL_PLAN -> MaterialTheme.colorScheme.surface
+        GuidanceSource.LOCAL_SUGGESTION -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.48f)
     }
-    val stripeColor = when (source) {
-        GuidanceSource.ACTUAL -> Color.Transparent
-        GuidanceSource.FORMAL_PLAN -> accent.copy(alpha = 0.11f)
-        GuidanceSource.LOCAL_SUGGESTION -> MaterialTheme.colorScheme.outline.copy(alpha = 0.055f)
-    }
+    val suggestionStripe = MaterialTheme.colorScheme.outline.copy(alpha = 0.10f)
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 5.dp)
+            .padding(vertical = 2.dp)
             .testTag("calendar-day-${day.date}"),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -310,24 +312,19 @@ private fun AgendaDayRow(
         Surface(
             modifier = Modifier
                 .weight(1f)
+                .heightIn(min = 104.dp)
                 .clickable(onClick = onClick),
             color = container,
-            shape = RoundedCornerShape(10.dp),
-            border = when {
-                isToday -> BorderStroke(1.5.dp, MaterialTheme.colorScheme.primary)
-                source == GuidanceSource.ACTUAL -> BorderStroke(1.dp, accent.copy(alpha = 0.34f))
-                else -> BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f))
-            },
-            tonalElevation = if (isToday) 3.dp else 0.dp,
+            shape = RoundedCornerShape(0.dp),
         ) {
             Box {
-                if (source != GuidanceSource.ACTUAL) {
+                if (source == GuidanceSource.LOCAL_SUGGESTION) {
                     Canvas(Modifier.fillMaxSize()) {
-                        val gap = 16.dp.toPx()
+                        val gap = 14.dp.toPx()
                         var x = -size.height
                         while (x < size.width) {
                             drawLine(
-                                color = stripeColor,
+                                color = suggestionStripe,
                                 start = Offset(x, size.height),
                                 end = Offset(x + size.height, 0f),
                                 strokeWidth = 3.dp.toPx(),
@@ -337,16 +334,21 @@ private fun AgendaDayRow(
                     }
                 }
                 Row(
-                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 13.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 104.dp)
+                        .padding(horizontal = 14.dp, vertical = 16.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Box(
                         Modifier
                             .width(4.dp)
-                            .height(54.dp)
+                            .height(62.dp)
                             .background(
                                 color = if (source == GuidanceSource.LOCAL_SUGGESTION) {
                                     MaterialTheme.colorScheme.outline.copy(alpha = 0.55f)
+                                } else if (source == GuidanceSource.FORMAL_PLAN) {
+                                    accent.copy(alpha = 0.72f)
                                 } else {
                                     accent
                                 },
@@ -357,7 +359,7 @@ private fun AgendaDayRow(
                     Icon(
                         imageVector = trainingIcon(day.guidance.trainingType),
                         contentDescription = day.guidance.title,
-                        modifier = Modifier.size(30.dp),
+                        modifier = Modifier.size(32.dp),
                         tint = if (source == GuidanceSource.LOCAL_SUGGESTION) {
                             MaterialTheme.colorScheme.outline
                         } else {
@@ -394,18 +396,22 @@ private fun AgendaDayRow(
                                 style = MaterialTheme.typography.labelMedium,
                             )
                         }
-                        day.guidance.estimatedMinutes?.let { minutes ->
-                            Text("约 $minutes 分钟", color = MaterialTheme.colorScheme.secondary)
+                        if (source == GuidanceSource.ACTUAL) {
+                            day.guidance.estimatedMinutes?.let { minutes ->
+                                Text("$minutes 分钟", color = MaterialTheme.colorScheme.secondary)
+                            }
                         }
-                        day.guidance.note?.takeIf(String::isNotBlank)?.let { note ->
-                            Text(
-                                note,
-                                color = MaterialTheme.colorScheme.secondary,
-                                style = MaterialTheme.typography.bodySmall,
-                                maxLines = 2,
-                                overflow = TextOverflow.Ellipsis,
-                            )
-                        }
+                        day.guidance.note
+                            ?.takeIf { source != GuidanceSource.LOCAL_SUGGESTION && it.isNotBlank() }
+                            ?.let { note ->
+                                Text(
+                                    note,
+                                    color = MaterialTheme.colorScheme.secondary,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    maxLines = 2,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                            }
                     }
                 }
             }
@@ -419,7 +425,7 @@ private fun DateRail(
     isToday: Boolean,
 ) {
     Surface(
-        modifier = Modifier.width(58.dp),
+        modifier = Modifier.width(62.dp),
         color = if (isToday) MaterialTheme.colorScheme.primary else Color.Transparent,
         contentColor = if (isToday) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
         shape = RoundedCornerShape(12.dp),
