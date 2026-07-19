@@ -457,36 +457,50 @@ private fun MorningSummary(records: TodayRecords?) {
             text = "不确定的项目可以直接跳过。",
             color = MaterialTheme.colorScheme.outline,
         )
-        return
+    } else {
+        val state = records.effectiveStatus
+        val sleep = state.sleepDurationMinutes?.let { "睡眠 ${it / 60}小时${it % 60}分" } ?: "睡眠未记录"
+        val energy = state.energy?.let { "精力 $it/5" } ?: "精力未记录"
+        val fatigue = state.fatigue?.let { "疲劳 $it/5" } ?: "疲劳未记录"
+        Text("$sleep · $energy · $fatigue", style = MaterialTheme.typography.titleMedium)
+        Spacer(Modifier.height(8.dp))
+        val pain = state.pain
+        Text(
+            text = when {
+                pain == null -> "身体感受未记录"
+                pain.isEmpty() -> "没有疼痛异常"
+                else -> pain.joinToString("、") { "${it.region.displayName} ${it.severity}/5" }
+            },
+            color = MaterialTheme.colorScheme.secondary,
+        )
     }
-    val state = records.effectiveStatus
-    val sleep = state.sleepDurationMinutes?.let { "睡眠 ${it / 60}小时${it % 60}分" } ?: "睡眠未记录"
-    val energy = state.energy?.let { "精力 $it/5" } ?: "精力未记录"
-    val fatigue = state.fatigue?.let { "疲劳 $it/5" } ?: "疲劳未记录"
-    Text("$sleep · $energy · $fatigue", style = MaterialTheme.typography.titleMedium)
-    Spacer(Modifier.height(8.dp))
-    val pain = state.pain
-    Text(
-        text = when {
-            pain == null -> "身体感受未记录"
-            pain.isEmpty() -> "没有疼痛异常"
-            else -> pain.joinToString("、") { "${it.region.displayName} ${it.severity}/5" }
-        },
-        color = MaterialTheme.colorScheme.secondary,
-    )
-    records.metric?.let { metric ->
+    records?.metric?.takeIf { it.hasMeasurements }?.let { metric ->
         Spacer(Modifier.height(16.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(22.dp)) {
-            metric.weightKg?.let { MetricText("体重", "%.1f kg".format(it)) }
-            metric.bodyFatPct?.let { MetricText("体脂", "%.1f%%".format(it)) }
-            metric.muscleKg?.let { MetricText("肌肉", "%.1f kg".format(it)) }
+        val values = buildList {
+            metric.weightKg?.let { add("体重" to "%.1f kg".format(it)) }
+            metric.bodyFatPct?.let { add("体脂" to "%.1f%%".format(it)) }
+            metric.muscleKg?.let { add("肌肉" to "%.1f kg".format(it)) }
+            metric.waistCm?.let { add("腰围" to "%.1f cm".format(it)) }
+        }
+        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            values.chunked(2).forEach { row ->
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(16.dp),
+                ) {
+                    row.forEach { (label, value) ->
+                        MetricText(label, value, Modifier.weight(1f))
+                    }
+                    if (row.size == 1) Spacer(Modifier.weight(1f))
+                }
+            }
         }
     }
 }
 
 @Composable
-private fun MetricText(label: String, value: String) {
-    Column {
+private fun MetricText(label: String, value: String, modifier: Modifier = Modifier) {
+    Column(modifier) {
         Text(value, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Medium)
         Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.outline)
     }

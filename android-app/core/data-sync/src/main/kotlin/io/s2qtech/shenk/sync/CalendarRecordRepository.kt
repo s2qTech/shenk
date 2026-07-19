@@ -137,11 +137,17 @@ private fun TrainingLog.toJson(): JsonObject = buildJsonObject {
 
 internal fun decodeBodyMetric(record: SharedRecord): BodyMetric? = runCatching {
     val data = record.data
+    val date = requireNotNull(data.fieldString("date"))
     BodyMetric(
         id = data.fieldString("id") ?: record.id,
-        date = requireNotNull(data.fieldString("date")),
-        observedAt = requireNotNull(data.fieldString("observedAt")),
-        context = data.fieldString("context") ?: "other",
+        date = date,
+        observedAt = data.fieldString("observedAt")
+            ?: data.fieldString("updatedAt")
+            ?: data.fieldString("createdAt")
+            ?: record.updatedAt
+            ?: record.createdAt
+            ?: "${date}T00:00:00Z",
+        context = data.fieldString("context") ?: "morning",
         source = data.fieldString("source") ?: "legacy",
         sourceRecordId = data.fieldString("sourceRecordId"),
         weightKg = data.fieldDouble("weightKg"),
