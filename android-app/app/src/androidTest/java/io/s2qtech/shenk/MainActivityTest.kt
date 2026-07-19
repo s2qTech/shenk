@@ -7,12 +7,12 @@ import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
-import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.ui.test.performScrollToIndex
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipeLeft
-import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.test.swipeRight
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import io.s2qtech.shenk.model.RoutineScene
 import io.s2qtech.shenk.model.SharedEntityOwner
@@ -44,37 +44,32 @@ class MainActivityTest {
     }
 
     @Test
-    fun calendarRecordsAndDataAreReachableWithoutNetwork() {
-        composeRule.onNodeWithTag("today-open-calendar").performSemanticsAction(SemanticsActions.OnClick)
+    fun calendarIsReachableByGestureAndTodayAnchorAppearsOnlyWhenNeeded() {
+        composeRule.onNodeWithTag("primary-pager").performTouchInput { swipeRight() }
         composeRule.waitForIdle()
         composeRule.onNodeWithTag("calendar-screen").assertIsDisplayed()
         composeRule.onNodeWithTag("calendar-agenda").assertIsDisplayed()
+        assertTrue(composeRule.onAllNodesWithTag("calendar-return-today").fetchSemanticsNodes().isEmpty())
+
+        composeRule.onNodeWithTag("calendar-agenda").performScrollToIndex(0)
+        composeRule.waitUntil(timeoutMillis = 5_000) {
+            composeRule.onAllNodesWithTag("calendar-return-today").fetchSemanticsNodes().isNotEmpty()
+        }
         composeRule.onNodeWithTag("calendar-return-today").assertIsDisplayed().performClick()
-        composeRule.waitForIdle()
-        composeRule.onNodeWithTag("calendar-screen").assertIsDisplayed()
+        composeRule.waitUntil(timeoutMillis = 5_000) {
+            composeRule.onAllNodesWithTag("calendar-return-today").fetchSemanticsNodes().isEmpty()
+        }
 
         composeRule.activityRule.scenario.onActivity { activity ->
             activity.onBackPressedDispatcher.onBackPressed()
         }
         composeRule.waitForIdle()
         composeRule.onNodeWithTag("today-screen").assertIsDisplayed()
-
-        composeRule.onNodeWithTag("today-open-more").performClick()
-        composeRule.onNodeWithTag("today-open-records").performSemanticsAction(SemanticsActions.OnClick)
-        composeRule.waitForIdle()
-        composeRule.onNodeWithText("正式训练事实").assertIsDisplayed()
-        composeRule.onNodeWithTag("space-back").performSemanticsAction(SemanticsActions.OnClick)
-        composeRule.waitForIdle()
-
-        composeRule.onNodeWithTag("today-open-more").performClick()
-        composeRule.onNodeWithTag("today-open-data").performSemanticsAction(SemanticsActions.OnClick)
-        composeRule.waitForIdle()
-        composeRule.onNodeWithText("最近 30 天身体变化").assertIsDisplayed()
     }
 
     @Test
     fun systemBackCollapsesCalendarAndTrainingToToday() {
-        composeRule.onNodeWithTag("today-open-calendar").performClick()
+        composeRule.onNodeWithTag("primary-pager").performTouchInput { swipeRight() }
         composeRule.onNodeWithTag("calendar-screen").assertIsDisplayed()
 
         composeRule.activityRule.scenario.onActivity { activity ->
@@ -107,10 +102,9 @@ class MainActivityTest {
     }
 
     @Test
-    fun cloudConnectionIsDiscoverableFromTodayAndMore() {
+    fun cloudConnectionIsDiscoverableFromToday() {
         composeRule.onNodeWithTag("cloud-setup-prompt").assertIsDisplayed()
-        composeRule.onNodeWithTag("today-open-more").performClick()
-        composeRule.onNodeWithTag("open-cloud-settings").assertIsDisplayed().performClick()
+        composeRule.onNodeWithTag("cloud-connect-action").performClick()
         composeRule.onNodeWithTag("migration-code-input").assertIsDisplayed()
         composeRule.onNodeWithTag("connect-cloud-data").assertIsDisplayed()
         composeRule.onNodeWithTag("migration-code-input").performTextInput("invalid migration code!")

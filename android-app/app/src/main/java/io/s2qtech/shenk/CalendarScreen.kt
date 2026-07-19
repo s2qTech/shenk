@@ -113,6 +113,14 @@ fun CalendarScreen(
     val visibleMonth by remember {
         derivedStateOf { YearMonth.from(visibleDate) }
     }
+    val todayVisible by remember {
+        derivedStateOf {
+            listState.layoutInfo.visibleItemsInfo.any { item -> item.key == today }
+        }
+    }
+    val agendaLaidOut by remember {
+        derivedStateOf { listState.layoutInfo.totalItemsCount > 0 }
+    }
     val weekDistance by remember {
         derivedStateOf {
             val thisWeek = today.with(TemporalAdjusters.previousOrSame(java.time.DayOfWeek.MONDAY))
@@ -183,22 +191,26 @@ fun CalendarScreen(
                         ),
                     ),
             )
-            ExtendedFloatingActionButton(
-                onClick = {
-                    scope.launch {
-                        val todayIndex = days.indexOfFirst { it.date == today }
-                        if (todayIndex >= 0) {
-                            listState.animateScrollToItem((todayIndex - 2).coerceAtLeast(0))
+            AnimatedVisibility(
+                visible = agendaLaidOut && !todayVisible,
+                modifier = Modifier.align(Alignment.BottomCenter),
+                enter = fadeIn() + scaleIn(initialScale = 0.9f),
+                exit = fadeOut() + scaleOut(targetScale = 0.94f),
+            ) {
+                ExtendedFloatingActionButton(
+                    onClick = {
+                        scope.launch {
+                            val todayIndex = days.indexOfFirst { it.date == today }
+                            if (todayIndex >= 0) {
+                                listState.animateScrollToItem((todayIndex - 2).coerceAtLeast(0))
+                            }
                         }
-                    }
-                },
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .padding(bottom = 14.dp)
-                    .testTag("calendar-return-today"),
-                icon = { Icon(Icons.Rounded.CalendarToday, contentDescription = null) },
-                text = { Text("今天") },
-            )
+                    },
+                    modifier = Modifier.padding(bottom = 14.dp).testTag("calendar-return-today"),
+                    icon = { Icon(Icons.Rounded.CalendarToday, contentDescription = null) },
+                    text = { Text("今天") },
+                )
+            }
         }
     }
 

@@ -23,7 +23,7 @@ import io.s2qtech.shenk.model.TodayGuidance
 import java.time.LocalDate
 import kotlinx.coroutines.launch
 
-private enum class SecondarySpace { RECORDS, DATA }
+private enum class SecondarySpace { DATA }
 
 data class TrainingLaunchRequest(
     val date: LocalDate,
@@ -56,10 +56,6 @@ fun ShenkApp(
 
     Box(Modifier.fillMaxSize()) {
         when (secondary) {
-            SecondarySpace.RECORDS -> RecordsScreen(
-                repository = calendarRepository,
-                onBack = { secondary = null },
-            )
             SecondarySpace.DATA -> DataScreen(
                 repository = calendarRepository,
                 onBack = { secondary = null },
@@ -77,8 +73,6 @@ fun ShenkApp(
                             repository = todayRepository,
                             reminderStore = reminderStore,
                             cloudConnectionManager = cloudConnectionManager,
-                            onCalendar = { scope.launch { pager.animatePrimaryPage(0) } },
-                            onRecords = { secondary = SecondarySpace.RECORDS },
                             onData = { secondary = SecondarySpace.DATA },
                             onTraining = { guidance ->
                                 trainingLaunch = TrainingLaunchRequest(LocalDate.now(), guidance)
@@ -92,8 +86,6 @@ fun ShenkApp(
                             coordinator = timerCoordinator,
                             launchRequest = trainingLaunch,
                             onLaunchConsumed = { trainingLaunch = null },
-                            onToday = { scope.launch { pager.animatePrimaryPage(1) } },
-                            onCalendar = { scope.launch { pager.animatePrimaryPage(0) } },
                         )
                     }
                 }

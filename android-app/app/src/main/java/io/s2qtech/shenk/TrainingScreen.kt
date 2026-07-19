@@ -96,8 +96,6 @@ fun TrainingRoute(
     coordinator: NativeTimerCoordinator,
     launchRequest: TrainingLaunchRequest?,
     onLaunchConsumed: () -> Unit,
-    onToday: () -> Unit,
-    onCalendar: () -> Unit,
 ) {
     val library by routineRepository.observeLibrary().collectAsState(initial = null)
     val pending by sessionRepository.observePendingCompletion().collectAsState(initial = emptyList())
@@ -192,8 +190,6 @@ fun TrainingRoute(
                 launchContext = null
             },
             onPending = { completion = it.session },
-            onToday = onToday,
-            onCalendar = onCalendar,
         )
         TimerEngineState.PREVIEW -> RoutinePreviewScreen(
             snapshot = snapshot,
@@ -249,8 +245,6 @@ private fun RoutineLibraryScreen(
     notice: String?,
     onSelect: (RoutineTemplate) -> Unit,
     onPending: (PendingTimerCompletion) -> Unit,
-    onToday: () -> Unit,
-    onCalendar: () -> Unit,
 ) {
     var scene by remember(preferredScene) { mutableStateOf(preferredScene ?: RoutineScene.HOME) }
     LaunchedEffect(library.routines) {
@@ -268,34 +262,33 @@ private fun RoutineLibraryScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .navigationBarsPadding()
-                    .padding(horizontal = 16.dp, vertical = 10.dp)
                     .testTag("training-scene-dock"),
-                color = MaterialTheme.colorScheme.surface,
-                shape = RoundedCornerShape(28.dp),
-                tonalElevation = 4.dp,
-                shadowElevation = 8.dp,
+                color = MaterialTheme.colorScheme.background,
             ) {
-                Row(
-                    modifier = Modifier.padding(6.dp),
-                    horizontalArrangement = Arrangement.spacedBy(4.dp),
-                ) {
-                    RoutineScene.entries.forEach { value ->
-                        if (value == scene) {
-                            Button(
-                                onClick = { scene = value },
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .height(52.dp)
-                                    .testTag("scene-${value.name.lowercase()}"),
-                            ) { Text(value.displayName, maxLines = 1) }
-                        } else {
-                            FilledTonalButton(
-                                onClick = { scene = value },
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .height(52.dp)
-                                    .testTag("scene-${value.name.lowercase()}"),
-                            ) { Text(value.displayName, maxLines = 1) }
+                Column {
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                    Row(
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        RoutineScene.entries.forEach { value ->
+                            if (value == scene) {
+                                Button(
+                                    onClick = { scene = value },
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .height(50.dp)
+                                        .testTag("scene-${value.name.lowercase()}"),
+                                ) { Text(value.displayName, maxLines = 1) }
+                            } else {
+                                FilledTonalButton(
+                                    onClick = { scene = value },
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .height(50.dp)
+                                        .testTag("scene-${value.name.lowercase()}"),
+                                ) { Text(value.displayName, maxLines = 1) }
+                            }
                         }
                     }
                 }
@@ -311,19 +304,9 @@ private fun RoutineLibraryScreen(
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
         item {
-            Row(
-                Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Column {
-                    Text("训练", style = MaterialTheme.typography.displaySmall, fontWeight = FontWeight.SemiBold)
-                    Text("选择今天要执行的流程", color = MaterialTheme.colorScheme.secondary)
-                }
-                Row {
-                    TextButton(onClick = onToday) { Text("今天") }
-                    TextButton(onClick = onCalendar) { Text("月历") }
-                }
+            Column {
+                Text("训练", style = MaterialTheme.typography.displaySmall, fontWeight = FontWeight.SemiBold)
+                Text("选择今天要执行的流程", color = MaterialTheme.colorScheme.secondary)
             }
         }
         if (pending.isNotEmpty()) {

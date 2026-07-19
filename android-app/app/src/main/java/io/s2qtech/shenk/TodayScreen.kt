@@ -25,12 +25,12 @@ import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -61,7 +61,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
-private enum class TodaySheet { MORNING, PRE_WORKOUT, REMINDERS, MORE, CONNECTION }
+private enum class TodaySheet { MORNING, PRE_WORKOUT, REMINDERS, CONNECTION }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -69,8 +69,6 @@ fun TodayRoute(
     repository: TodayRecordRepository,
     reminderStore: ReminderSettingsStore,
     cloudConnectionManager: CloudConnectionManager,
-    onCalendar: () -> Unit = {},
-    onRecords: () -> Unit = {},
     onData: () -> Unit = {},
     onTraining: (TodayGuidance?) -> Unit = {},
 ) {
@@ -103,11 +101,8 @@ fun TodayRoute(
             onMorning = { sheet = TodaySheet.MORNING },
             onPreWorkout = { sheet = TodaySheet.PRE_WORKOUT },
             onReminders = { sheet = TodaySheet.REMINDERS },
-            onMore = { sheet = TodaySheet.MORE },
             onConnect = { sheet = TodaySheet.CONNECTION },
             cloudConfigured = connection.configured,
-            onCalendar = onCalendar,
-            onRecords = onRecords,
             onData = onData,
             onTraining = { onTraining(records?.guidance) },
         )
@@ -168,15 +163,6 @@ fun TodayRoute(
                 },
             )
         }
-        TodaySheet.MORE -> ModalBottomSheet(onDismissRequest = { sheet = null }) {
-            MoreSpaceSheet(
-                cloudConfigured = connection.configured,
-                onRecords = { sheet = null; onRecords() },
-                onData = { sheet = null; onData() },
-                onReminders = { sheet = TodaySheet.REMINDERS },
-                onConnection = { sheet = TodaySheet.CONNECTION },
-            )
-        }
         TodaySheet.CONNECTION -> ModalBottomSheet(onDismissRequest = { if (!connectionBusy) sheet = null }) {
             CloudConnectionSheet(
                 state = connection,
@@ -231,11 +217,8 @@ private fun TodayScreen(
     onMorning: () -> Unit,
     onPreWorkout: () -> Unit,
     onReminders: () -> Unit,
-    onMore: () -> Unit,
     onConnect: () -> Unit,
     cloudConfigured: Boolean,
-    onCalendar: () -> Unit,
-    onRecords: () -> Unit,
     onData: () -> Unit,
     onTraining: () -> Unit,
 ) {
@@ -248,30 +231,16 @@ private fun TodayScreen(
             .navigationBarsPadding()
             .padding(horizontal = 22.dp, vertical = 18.dp),
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.Top,
-        ) {
-            Column {
-                Text(
-                    text = "今天",
-                    style = MaterialTheme.typography.displaySmall,
-                    fontWeight = FontWeight.SemiBold,
-                )
-                Text(
-                    text = date.format(DateTimeFormatter.ofPattern("M月d日 EEEE", Locale.CHINA)),
-                    color = MaterialTheme.colorScheme.secondary,
-                )
-            }
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                FilledTonalButton(onClick = onCalendar, modifier = Modifier.testTag("today-open-calendar")) {
-                    Text("月历")
-                }
-                OutlinedButton(onClick = onMore, modifier = Modifier.testTag("today-open-more")) {
-                    Text("更多")
-                }
-            }
+        Column {
+            Text(
+                text = "今天",
+                style = MaterialTheme.typography.displaySmall,
+                fontWeight = FontWeight.SemiBold,
+            )
+            Text(
+                text = date.format(DateTimeFormatter.ofPattern("M月d日 EEEE", Locale.CHINA)),
+                color = MaterialTheme.colorScheme.secondary,
+            )
         }
         Spacer(Modifier.height(26.dp))
 
@@ -293,36 +262,14 @@ private fun TodayScreen(
         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
         Spacer(Modifier.height(22.dp))
 
-        SectionHeader(
-            title = "晨起状态",
-            action = if (records?.morning == null) "记录" else "调整",
-            onAction = onMorning,
-            actionTag = "morning-action",
+        MorningStatusSection(
+            records = records,
+            onMorning = onMorning,
+            onPreWorkout = onPreWorkout,
+            onReminders = onReminders,
+            onData = onData,
         )
-        Spacer(Modifier.height(14.dp))
-        MorningSummary(records)
-        Spacer(Modifier.height(26.dp))
-
-        if (records?.morning != null) {
-            SectionHeader(
-                title = "训练前",
-                action = if (records.preWorkout == null) "有变化" else "已补充",
-                onAction = onPreWorkout,
-            )
-            Spacer(Modifier.height(10.dp))
-            Text(
-                text = records.preWorkout?.let { "已用训练前感受更新今天的状态判断。" }
-                    ?: "晨起后如有疲劳或疼痛变化，再补充一次即可。",
-                color = MaterialTheme.colorScheme.secondary,
-                style = MaterialTheme.typography.bodyMedium,
-            )
-        }
-        Spacer(Modifier.height(40.dp))
-        Text(
-            text = "缺失的数据会保持缺失，不会被当作正常或休息。",
-            color = MaterialTheme.colorScheme.outline,
-            style = MaterialTheme.typography.labelMedium,
-        )
+        Spacer(Modifier.height(24.dp))
     }
 }
 
@@ -395,113 +342,148 @@ private fun CloudSetupPrompt(onClick: () -> Unit) {
                 Text("连接已有数据", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                 Text("粘贴迁移码，取回计划、记录和方案", color = MaterialTheme.colorScheme.secondary)
             }
-            FilledTonalButton(onClick = onClick) { Text("连接") }
+            FilledTonalButton(onClick = onClick, modifier = Modifier.testTag("cloud-connect-action")) { Text("连接") }
         }
     }
 }
 
 @Composable
-private fun MoreSpaceSheet(
-    cloudConfigured: Boolean,
-    onRecords: () -> Unit,
-    onData: () -> Unit,
+private fun MorningStatusSection(
+    records: TodayRecords?,
+    onMorning: () -> Unit,
+    onPreWorkout: () -> Unit,
     onReminders: () -> Unit,
-    onConnection: () -> Unit,
-) {
-    Column(Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 24.dp, vertical = 14.dp)) {
-        Text("更多", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold)
-        Spacer(Modifier.height(16.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            OutlinedButton(onClick = onRecords, modifier = Modifier.weight(1f).testTag("today-open-records")) { Text("记录") }
-            OutlinedButton(onClick = onData, modifier = Modifier.weight(1f).testTag("today-open-data")) { Text("数据") }
-        }
-        Spacer(Modifier.height(10.dp))
-        OutlinedButton(onClick = onReminders, modifier = Modifier.fillMaxWidth()) { Text("提醒设置") }
-        Spacer(Modifier.height(10.dp))
-        Button(onClick = onConnection, modifier = Modifier.fillMaxWidth().testTag("open-cloud-settings")) {
-            Text(if (cloudConfigured) "数据同步" else "连接已有数据")
-        }
-        Spacer(Modifier.height(12.dp))
-    }
-}
-
-@Composable
-private fun SectionHeader(
-    title: String,
-    action: String,
-    onAction: () -> Unit,
-    actionTag: String? = null,
+    onData: () -> Unit,
 ) {
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
-        OutlinedButton(
-            onClick = onAction,
-            modifier = if (actionTag == null) Modifier else Modifier.testTag(actionTag),
-        ) { Text(action) }
+        Column {
+            Text("晨起状态", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold)
+            Text(
+                if (records?.morning == null) "今天还没有记录" else "今天身体的起点",
+                color = MaterialTheme.colorScheme.secondary,
+                style = MaterialTheme.typography.bodyMedium,
+            )
+        }
+        FilledTonalButton(
+            onClick = onMorning,
+            modifier = Modifier.testTag("morning-action"),
+        ) { Text(if (records?.morning == null) "记录" else "调整") }
     }
-}
+    Spacer(Modifier.height(16.dp))
 
-@Composable
-private fun MorningSummary(records: TodayRecords?) {
     if (records?.morning == null) {
-        Text(
-            text = "睡眠、精力和身体感受还未记录",
-            style = MaterialTheme.typography.titleMedium,
-            color = MaterialTheme.colorScheme.secondary,
-        )
-        Text(
-            text = "不确定的项目可以直接跳过。",
-            color = MaterialTheme.colorScheme.outline,
-        )
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            color = MaterialTheme.colorScheme.surfaceVariant,
+            shape = RoundedCornerShape(20.dp),
+        ) {
+            Column(Modifier.padding(18.dp)) {
+                Text("睡眠、精力、疲劳与身体感受", style = MaterialTheme.typography.titleMedium)
+                Spacer(Modifier.height(4.dp))
+                Text("不确定的项目可以跳过，缺失值不会被当作正常。", color = MaterialTheme.colorScheme.secondary)
+            }
+        }
     } else {
         val state = records.effectiveStatus
-        val sleep = state.sleepDurationMinutes?.let { "睡眠 ${it / 60}小时${it % 60}分" } ?: "睡眠未记录"
-        val energy = state.energy?.let { "精力 $it/5" } ?: "精力未记录"
-        val fatigue = state.fatigue?.let { "疲劳 $it/5" } ?: "疲劳未记录"
-        Text("$sleep · $energy · $fatigue", style = MaterialTheme.typography.titleMedium)
-        Spacer(Modifier.height(8.dp))
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            StatusValue(
+                label = "睡眠",
+                value = state.sleepDurationMinutes?.let(::formatSleep) ?: "未记录",
+                modifier = Modifier.weight(1.2f),
+            )
+            StatusValue(
+                label = "精力",
+                value = state.energy?.let { "$it/5" } ?: "未记录",
+                modifier = Modifier.weight(1f),
+                emphasis = statusColor(state.energy, higherIsBetter = true),
+            )
+            StatusValue(
+                label = "疲劳",
+                value = state.fatigue?.let { "$it/5" } ?: "未记录",
+                modifier = Modifier.weight(1f),
+                emphasis = statusColor(state.fatigue, higherIsBetter = false),
+            )
+        }
+        Spacer(Modifier.height(14.dp))
         val pain = state.pain
+        val painText = when {
+            pain == null -> "身体感受未记录"
+            pain.isEmpty() -> "身体没有疼痛异常"
+            else -> pain.joinToString("、") { "${it.region.displayName} ${it.severity}/5" }
+        }
+        Text("身体感受", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.outline)
         Text(
-            text = when {
-                pain == null -> "身体感受未记录"
-                pain.isEmpty() -> "没有疼痛异常"
-                else -> pain.joinToString("、") { "${it.region.displayName} ${it.severity}/5" }
-            },
-            color = MaterialTheme.colorScheme.secondary,
+            painText,
+            style = MaterialTheme.typography.titleMedium,
+            color = if (pain?.isNotEmpty() == true) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
         )
     }
     records?.metric?.takeIf { it.hasMeasurements }?.let { metric ->
-        Spacer(Modifier.height(16.dp))
+        Spacer(Modifier.height(14.dp))
+        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+        Spacer(Modifier.height(12.dp))
         val values = buildList {
             metric.weightKg?.let { add("体重" to "%.1f kg".format(it)) }
             metric.bodyFatPct?.let { add("体脂" to "%.1f%%".format(it)) }
             metric.muscleKg?.let { add("肌肉" to "%.1f kg".format(it)) }
             metric.waistCm?.let { add("腰围" to "%.1f cm".format(it)) }
         }
-        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            values.chunked(2).forEach { row ->
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(16.dp),
-                ) {
-                    row.forEach { (label, value) ->
-                        MetricText(label, value, Modifier.weight(1f))
-                    }
-                    if (row.size == 1) Spacer(Modifier.weight(1f))
-                }
+        Column(Modifier.fillMaxWidth()) {
+            Text("晨间测量", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.outline)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    values.joinToString(" · ") { (label, value) -> "$label $value" },
+                    modifier = Modifier.weight(1f),
+                    style = MaterialTheme.typography.titleMedium,
+                )
+                TextButton(onClick = onData, modifier = Modifier.testTag("today-open-data")) { Text("趋势") }
             }
+        }
+    }
+    if (records?.morning != null) {
+        Spacer(Modifier.height(6.dp))
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+            TextButton(onClick = onPreWorkout) {
+                Text(if (records.preWorkout == null) "训练前有变化" else "调整训练前状态")
+            }
+            TextButton(onClick = onReminders) { Text("提醒") }
         }
     }
 }
 
 @Composable
-private fun MetricText(label: String, value: String, modifier: Modifier = Modifier) {
-    Column(modifier) {
-        Text(value, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Medium)
-        Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.outline)
+private fun StatusValue(
+    label: String,
+    value: String,
+    modifier: Modifier = Modifier,
+    emphasis: androidx.compose.ui.graphics.Color = MaterialTheme.colorScheme.onSurface,
+) {
+    Surface(modifier = modifier, color = MaterialTheme.colorScheme.surfaceVariant, shape = RoundedCornerShape(18.dp)) {
+        Column(Modifier.padding(horizontal = 14.dp, vertical = 13.dp)) {
+            Text(value, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold, color = emphasis, maxLines = 1)
+            Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.outline)
+        }
     }
 }
+
+@Composable
+private fun statusColor(value: Int?, higherIsBetter: Boolean): androidx.compose.ui.graphics.Color {
+    if (value == null) return MaterialTheme.colorScheme.onSurface
+    val favorable = if (higherIsBetter) value >= 4 else value <= 1
+    val unfavorable = if (higherIsBetter) value <= 2 else value >= 4
+    return when {
+        favorable -> MaterialTheme.colorScheme.primary
+        unfavorable -> MaterialTheme.colorScheme.error
+        else -> MaterialTheme.colorScheme.onSurface
+    }
+}
+
+private fun formatSleep(minutes: Int): String = "${minutes / 60}时${minutes % 60}分"

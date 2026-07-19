@@ -64,7 +64,6 @@ test("Package 5 keeps local-first records and adds the native routine and timer 
   const reminders = read("android-app/app/src/main/java/io/s2qtech/shenk/ReminderSettings.kt");
   const calendarRepository = read("android-app/core/data-sync/src/main/kotlin/io/s2qtech/shenk/sync/CalendarRecordRepository.kt");
   const calendarScreen = read("android-app/app/src/main/java/io/s2qtech/shenk/CalendarScreen.kt");
-  const recordsScreen = read("android-app/app/src/main/java/io/s2qtech/shenk/RecordsScreen.kt");
   const dataScreen = read("android-app/app/src/main/java/io/s2qtech/shenk/DataScreen.kt");
   const routineModels = read("android-app/core/model-domain/src/main/kotlin/io/s2qtech/shenk/model/RoutineModels.kt");
   const timerRepositories = read("android-app/core/data-sync/src/main/kotlin/io/s2qtech/shenk/sync/TimerRepositories.kt");
@@ -99,7 +98,7 @@ test("Package 5 keeps local-first records and adds the native routine and timer 
   assert.match(calendarRepository, /persistAndEnqueue\(outgoing, SharedEntityOwner\.RECORD\)/);
   assert.match(calendarRepository, /future|knownKeys|TRAINING_LOG_KEYS/);
   assert.match(calendarScreen, /RecordEditPolicy/);
-  assert.match(recordsScreen, /TrainingLogEditorSheet/);
+  assert.match(calendarScreen, /TrainingLogEditorSheet/);
   assert.match(dataScreen, /TrendCanvas/);
   assert.match(routineModels, /requiredEnum<RoutineScene>\("scene"\)/);
   assert.match(routineModels, /requiredEnum<RoutineRole>\("role"\)/);

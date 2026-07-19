@@ -92,13 +92,14 @@ Calendar  <-  Today  ->  Training
 - High-frequency choices and primary actions belong in the lower thumb-reach zone. The top region is reserved for context, status, and genuinely low-frequency navigation.
 - A gesture-only action is never sufficient: every reveal, collapse, and primary command has a visible or accessibility equivalent.
 
-Secondary spaces are reached from a compact, native menu or a contextual pull-down surface:
+Secondary spaces are reached contextually from the content that owns them:
 
-- Records
 - Data
 - Plan inbox
 - Routine library
 - Settings and backup
+
+Formal training history is not a separate primary or secondary destination. It is read through the calendar and date details so the same facts are not duplicated into a competing Records page. Today and Training do not repeat Calendar/Today shortcuts in the top-right corner; the primary pager, system back behavior, and pager accessibility semantics own movement between the three canvases.
 
 The final navigation control may be refined during visual prototyping, but a conventional five-tab Web layout must not be treated as the default.
 
@@ -108,10 +109,11 @@ Today is one adaptable canvas rather than a dashboard of nested cards.
 
 ### Morning State
 
-- Missing check-in prompt, or a concise morning summary.
+- Missing check-in prompt, or a concise morning summary whose hierarchy is sleep/readiness/fatigue first, body discomfort second, and measurements third.
 - Today’s effective plan.
 - Measurement delta from yesterday or the recent baseline when useful.
 - A small list of genuinely missing information, not a permanent checklist.
+- The record/adjust command is the only prominent action in the morning area. Trend, pre-workout delta, and reminder actions remain visually subordinate.
 
 ### Daytime State
 
@@ -145,7 +147,7 @@ The Android month surface uses a continuous vertical date stream rather than a s
 - A compact date rail on the left and a full-width day summary on the right preserve month context and readable training information.
 - The date stream is continuous across month boundaries; it must not compress titles and durations into phone-width mini tiles or require top-edge month paging controls.
 - Fast scrolling reports the visible week's distance from the current week in a centered transient HUD.
-- A persistent bottom thumb-zone action anchors the current date inside the continuous stream. Horizontal swipe or system back returns from Calendar to the Today canvas through the shared-axis transition.
+- A bottom thumb-zone action anchors the current date inside the continuous stream only after the current date has left the viewport. It stays hidden while the current date is already visible. Horizontal swipe or system back returns from Calendar to the Today canvas through the shared-axis transition.
 - Every day summary includes a direct, unframed activity icon alongside its title so training type remains recognizable at a glance.
 - Actual records, formal plans, and local suggestions have distinct visual languages.
 - Agenda summaries are spacious flat rows with a vertical activity cue rather than small rounded cards. Actual execution uses the strongest activity color, formal plans remain clean and structured, and local suggestions use a quiet gray diagonal pattern.
@@ -207,6 +209,7 @@ The flow starts with a fast `no abnormality` action. Fatigue and pain are distin
 - The user may switch routines before starting.
 - A cached routine is an offline executable copy, not a replacement for the AI-managed source.
 - Scene switching remains anchored in the lower thumb-reach zone while the routine list scrolls independently; it must not require reaching to the top of the screen.
+- The scene switcher is an integrated bottom control band separated by a quiet divider, not a detached floating pill or elevated dock.
 
 ### Preview
 
