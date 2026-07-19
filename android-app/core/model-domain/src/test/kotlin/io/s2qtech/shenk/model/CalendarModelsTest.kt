@@ -50,6 +50,26 @@ class CalendarModelsTest {
         assertNull(trends.bodyFat.change)
     }
 
+    @Test
+    fun dailyMetricsCompareEachFieldWithItsPreviousValidMeasurement() {
+        val first = LocalDate.of(2026, 7, 17)
+        val latest = first.plusDays(2)
+
+        val resolved = DailyMetricResolver.resolve(
+            listOf(
+                metric("first", first, "08:00", weight = 105.0, bodyFat = 30.0, muscle = 68.0, waist = 108.0),
+                metric("weight-only", first.plusDays(1), "08:00", weight = 104.7),
+                metric("latest", latest, "08:00", weight = 104.8, bodyFat = 30.2, muscle = 68.4, waist = 107.0),
+            ),
+        )
+
+        assertEquals(MetricChangeDirection.INCREASED, resolved.getValue(latest).first { it.kind == MetricKind.WEIGHT }.changeDirection)
+        assertEquals(MetricChangeDirection.INCREASED, resolved.getValue(latest).first { it.kind == MetricKind.BODY_FAT }.changeDirection)
+        assertEquals(MetricChangeDirection.INCREASED, resolved.getValue(latest).first { it.kind == MetricKind.MUSCLE }.changeDirection)
+        assertEquals(MetricChangeDirection.DECREASED, resolved.getValue(latest).first { it.kind == MetricKind.WAIST }.changeDirection)
+        assertEquals(1, resolved.getValue(first.plusDays(1)).size)
+    }
+
     private fun metric(
         id: String,
         date: LocalDate,
@@ -57,6 +77,7 @@ class CalendarModelsTest {
         weight: Double? = null,
         bodyFat: Double? = null,
         muscle: Double? = null,
+        waist: Double? = null,
     ) = BodyMetric(
         id = id,
         date = date.toString(),
@@ -64,5 +85,6 @@ class CalendarModelsTest {
         weightKg = weight,
         bodyFatPct = bodyFat,
         muscleKg = muscle,
+        waistCm = waist,
     )
 }

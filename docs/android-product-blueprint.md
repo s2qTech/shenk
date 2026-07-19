@@ -1,7 +1,7 @@
 # Android Product Blueprint
 
-Updated: 2026-07-18
-Status: confirmed product direction; Packages 0-4 accepted, Package 5 in validation
+Updated: 2026-07-19
+Status: confirmed product direction; Packages 0-5 accepted, Package 6 ready to start
 
 ## 1. Product Definition
 
@@ -149,9 +149,13 @@ The Android month surface uses a continuous vertical date stream rather than a s
 - Every day summary includes a direct, unframed activity icon alongside its title so training type remains recognizable at a glance.
 - Actual records, formal plans, and local suggestions have distinct visual languages.
 - Agenda summaries are spacious flat rows with a vertical activity cue rather than small rounded cards. Actual execution uses the strongest activity color, formal plans remain clean and structured, and local suggestions use a quiet gray diagonal pattern.
+- Flat rows are transparent against the calendar canvas; they must not reintroduce a white card rectangle behind each date.
+- When a date has body measurements, the row may show weight, body-fat percentage, muscle mass, and waist as compact inline values. Each field compares with its own previous valid measurement: lower weight/body fat/waist and higher muscle are positive green changes; the opposite direction is red; missing values remain absent.
+- The lower edge of the stream uses a quiet visual fade behind the current-date anchor so partially visible rows do not look mechanically clipped.
 - Formal plans describe the planned activity rather than an invented clock time or duration. Duration is shown in the stream only when it comes from an actual record.
 - Local fallback suggestions omit generic explanatory copy; their lower authority is communicated by the gray patterned treatment and the `建议` source label.
 - Today is always easy to return to and can expand through a container transformation rather than a hard page jump.
+- The primary horizontal transition uses the pager's native translation without simultaneously scaling and fading whole Calendar/Today/Training surfaces. The three bounded primary canvases may remain precomposed to make return-to-Today deterministic; frame stability takes priority over ornamental depth effects.
 - The default month view prioritizes completion rhythm and upcoming formal plans.
 - A day normally displays one effective training item. Multiple source records remain available in date details.
 

@@ -4,6 +4,7 @@ import io.s2qtech.shenk.model.BodyMetric
 import io.s2qtech.shenk.model.BodyTrends
 import io.s2qtech.shenk.model.CalendarDay
 import io.s2qtech.shenk.model.CalendarMonth
+import io.s2qtech.shenk.model.DailyMetricResolver
 import io.s2qtech.shenk.model.MetricTrendResolver
 import io.s2qtech.shenk.model.SharedEntityOwner
 import io.s2qtech.shenk.model.SharedRecord
@@ -37,7 +38,9 @@ class CalendarRecordRepository(
             records.observeActive("training_logs"),
             records.observeActive("daily_plan_items"),
             records.observeActive("plan_adjustments"),
-        ) { logs, plans, adjustments ->
+            records.observeActive("body_metrics"),
+        ) { logs, plans, adjustments, metricRecords ->
+            val metricsByDate = DailyMetricResolver.resolve(metricRecords.mapNotNull(::decodeBodyMetric))
             generateSequence(start) { current ->
                 current.plusDays(1).takeIf { it <= endInclusive }
             }.map { date ->
@@ -47,6 +50,7 @@ class CalendarRecordRepository(
                     guidance = resolved.guidance,
                     actualLogs = resolved.actualLogs,
                     isInMonth = true,
+                    bodyMetrics = metricsByDate[date].orEmpty(),
                 )
             }.toList()
         }
@@ -56,8 +60,9 @@ class CalendarRecordRepository(
         records.observeActive("training_logs"),
         records.observeActive("daily_plan_items"),
         records.observeActive("plan_adjustments"),
-    ) { logs, plans, adjustments ->
-        buildMonth(month, logs, plans, adjustments)
+        records.observeActive("body_metrics"),
+    ) { logs, plans, adjustments, metricRecords ->
+        buildMonth(month, logs, plans, adjustments, metricRecords)
     }
 
     fun observeDay(date: LocalDate): Flow<CalendarDayDetails> = combine(
@@ -116,7 +121,9 @@ private fun buildMonth(
     logs: List<SharedRecord>,
     plans: List<SharedRecord>,
     adjustments: List<SharedRecord>,
+    metricRecords: List<SharedRecord>,
 ): CalendarMonth {
+    val metricsByDate = DailyMetricResolver.resolve(metricRecords.mapNotNull(::decodeBodyMetric))
     val first = month.atDay(1)
     val last = month.atEndOfMonth()
     val start = first.minusDays(((first.dayOfWeek.value - DayOfWeek.MONDAY.value + 7) % 7).toLong())
@@ -129,6 +136,7 @@ private fun buildMonth(
                 guidance = resolved.guidance,
                 actualLogs = resolved.actualLogs,
                 isInMonth = YearMonth.from(date) == month,
+                bodyMetrics = metricsByDate[date].orEmpty(),
             )
         }
         .toList()

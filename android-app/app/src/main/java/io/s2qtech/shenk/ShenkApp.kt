@@ -12,7 +12,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import io.s2qtech.shenk.sync.CalendarRecordRepository
@@ -22,7 +21,6 @@ import io.s2qtech.shenk.sync.RoutineLibraryRepository
 import io.s2qtech.shenk.sync.TodayRecordRepository
 import io.s2qtech.shenk.model.TodayGuidance
 import java.time.LocalDate
-import kotlin.math.absoluteValue
 import kotlinx.coroutines.launch
 
 private enum class SecondarySpace { RECORDS, DATA }
@@ -51,7 +49,9 @@ fun ShenkApp(
         secondary = null
     }
     BackHandler(enabled = secondary == null && pager.currentPage != 1) {
-        scope.launch { pager.animateScrollToPage(1) }
+        scope.launch {
+            pager.animateScrollToPage(page = 1)
+        }
     }
 
     Box(Modifier.fillMaxSize()) {
@@ -70,31 +70,19 @@ fun ShenkApp(
                 pageSpacing = 12.dp,
                 modifier = Modifier.testTag("primary-pager"),
             ) { page ->
-                val pageOffset = (
-                    (pager.currentPage - page) + pager.currentPageOffsetFraction
-                ).absoluteValue.coerceIn(0f, 1f)
-                Box(
-                    Modifier
-                        .fillMaxSize()
-                        .graphicsLayer {
-                            val scale = 1f - (pageOffset * 0.035f)
-                            scaleX = scale
-                            scaleY = scale
-                            alpha = 1f - (pageOffset * 0.16f)
-                        },
-                ) {
+                Box(Modifier.fillMaxSize()) {
                     when (page) {
                         0 -> CalendarScreen(repository = calendarRepository)
                         1 -> TodayRoute(
                             repository = todayRepository,
                             reminderStore = reminderStore,
                             cloudConnectionManager = cloudConnectionManager,
-                            onCalendar = { scope.launch { pager.animateScrollToPage(0) } },
+                            onCalendar = { scope.launch { pager.animatePrimaryPage(0) } },
                             onRecords = { secondary = SecondarySpace.RECORDS },
                             onData = { secondary = SecondarySpace.DATA },
                             onTraining = { guidance ->
                                 trainingLaunch = TrainingLaunchRequest(LocalDate.now(), guidance)
-                                scope.launch { pager.animateScrollToPage(2) }
+                                scope.launch { pager.animatePrimaryPage(2) }
                             },
                         )
                         else -> TrainingRoute(
@@ -104,12 +92,16 @@ fun ShenkApp(
                             coordinator = timerCoordinator,
                             launchRequest = trainingLaunch,
                             onLaunchConsumed = { trainingLaunch = null },
-                            onToday = { scope.launch { pager.animateScrollToPage(1) } },
-                            onCalendar = { scope.launch { pager.animateScrollToPage(0) } },
+                            onToday = { scope.launch { pager.animatePrimaryPage(1) } },
+                            onCalendar = { scope.launch { pager.animatePrimaryPage(0) } },
                         )
                     }
                 }
             }
         }
     }
+}
+
+private suspend fun androidx.compose.foundation.pager.PagerState.animatePrimaryPage(page: Int) {
+    animateScrollToPage(page = page)
 }

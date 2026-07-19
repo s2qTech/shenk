@@ -41,6 +41,7 @@ data class CalendarDay(
     val guidance: TodayGuidance,
     val actualLogs: List<TrainingLog>,
     val isInMonth: Boolean,
+    val bodyMetrics: List<DailyMetric> = emptyList(),
 )
 
 data class CalendarMonth(
@@ -58,6 +59,18 @@ enum class MetricKind(val displayName: String, val unit: String) {
 data class MetricPoint(
     val date: LocalDate,
     val value: Double,
+)
+
+enum class MetricChangeDirection {
+    INCREASED,
+    DECREASED,
+    UNCHANGED,
+}
+
+data class DailyMetric(
+    val kind: MetricKind,
+    val value: Double,
+    val changeDirection: MetricChangeDirection? = null,
 )
 
 data class MetricTrend(
@@ -97,6 +110,42 @@ object MetricTrendResolver {
             muscle = trend(MetricKind.MUSCLE, BodyMetric::muscleKg),
             waist = trend(MetricKind.WAIST, BodyMetric::waistCm),
         )
+    }
+}
+
+object DailyMetricResolver {
+    fun resolve(metrics: List<BodyMetric>): Map<LocalDate, List<DailyMetric>> {
+        val dated = metrics.mapNotNull { metric ->
+            runCatching { LocalDate.parse(metric.date) to metric }.getOrNull()
+        }
+        val result = mutableMapOf<LocalDate, MutableList<DailyMetric>>()
+
+        fun add(kind: MetricKind, value: (BodyMetric) -> Double?) {
+            var previous: Double? = null
+            dated
+                .mapNotNull { (date, metric) -> value(metric)?.let { Triple(date, metric.observedAt, it) } }
+                .groupBy { it.first }
+                .map { (date, values) -> date to values.maxBy { it.second }.third }
+                .sortedBy { it.first }
+                .forEach { (date, current) ->
+                    val direction = previous?.let { prior ->
+                        when {
+                            current > prior -> MetricChangeDirection.INCREASED
+                            current < prior -> MetricChangeDirection.DECREASED
+                            else -> MetricChangeDirection.UNCHANGED
+                        }
+                    }
+                    result.getOrPut(date) { mutableListOf() }
+                        .add(DailyMetric(kind = kind, value = current, changeDirection = direction))
+                    previous = current
+                }
+        }
+
+        add(MetricKind.WEIGHT, BodyMetric::weightKg)
+        add(MetricKind.BODY_FAT, BodyMetric::bodyFatPct)
+        add(MetricKind.MUSCLE, BodyMetric::muscleKg)
+        add(MetricKind.WAIST, BodyMetric::waistCm)
+        return result
     }
 }
 

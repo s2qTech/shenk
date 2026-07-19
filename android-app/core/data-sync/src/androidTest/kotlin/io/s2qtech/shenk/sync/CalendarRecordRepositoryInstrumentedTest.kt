@@ -5,6 +5,8 @@ import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import io.s2qtech.shenk.model.GuidanceSource
+import io.s2qtech.shenk.model.MetricChangeDirection
+import io.s2qtech.shenk.model.MetricKind
 import io.s2qtech.shenk.model.SharedEntityOwner
 import io.s2qtech.shenk.model.SharedRecord
 import io.s2qtech.shenk.model.TrainingLog
@@ -117,6 +119,40 @@ class CalendarRecordRepositoryInstrumentedTest {
             assertFalse(repository.observeTrainingLogs().first().any { it.id == id })
             assertNotNull(local.get("training_logs", id)?.deletedAt)
             assertEquals(1, database.outbox().count())
+        }
+    }
+
+    @Test
+    fun rangeProjectsBodyMetricsWithPerFieldPreviousValueDirection() {
+        runBlocking {
+            val first = LocalDate.of(2100, 2, 5)
+            val second = first.plusDays(1)
+            local.applyRemote(record("body_metrics", "metric-first", buildJsonObject {
+                put("date", JsonPrimitive(first.toString()))
+                put("observedAt", JsonPrimitive("${first}T08:00:00Z"))
+                put("weightKg", JsonPrimitive(105.0))
+                put("bodyFatPct", JsonPrimitive(30.0))
+            }))
+            local.applyRemote(record("body_metrics", "metric-second", buildJsonObject {
+                put("date", JsonPrimitive(second.toString()))
+                put("observedAt", JsonPrimitive("${second}T08:00:00Z"))
+                put("weightKg", JsonPrimitive(104.8))
+                put("bodyFatPct", JsonPrimitive(30.2))
+                put("muscleKg", JsonPrimitive(68.0))
+            }))
+
+            val day = repository.observeRange(first, second).first().last()
+
+            assertEquals(3, day.bodyMetrics.size)
+            assertEquals(
+                MetricChangeDirection.DECREASED,
+                day.bodyMetrics.first { it.kind == MetricKind.WEIGHT }.changeDirection,
+            )
+            assertEquals(
+                MetricChangeDirection.INCREASED,
+                day.bodyMetrics.first { it.kind == MetricKind.BODY_FAT }.changeDirection,
+            )
+            assertEquals(null, day.bodyMetrics.first { it.kind == MetricKind.MUSCLE }.changeDirection)
         }
     }
 

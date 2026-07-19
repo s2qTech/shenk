@@ -11,6 +11,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -52,6 +54,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.platform.testTag
@@ -62,12 +65,18 @@ import androidx.compose.material.icons.automirrored.rounded.DirectionsBike
 import androidx.compose.material.icons.automirrored.rounded.DirectionsRun
 import androidx.compose.material.icons.automirrored.rounded.DirectionsWalk
 import androidx.compose.material.icons.rounded.AccessibilityNew
+import androidx.compose.material.icons.rounded.ArrowDownward
+import androidx.compose.material.icons.rounded.ArrowUpward
 import androidx.compose.material.icons.rounded.Bedtime
 import androidx.compose.material.icons.rounded.CalendarToday
 import androidx.compose.material.icons.rounded.FitnessCenter
+import androidx.compose.material.icons.rounded.Remove
 import androidx.compose.material.icons.rounded.SelfImprovement
 import io.s2qtech.shenk.model.CalendarDay
 import io.s2qtech.shenk.model.GuidanceSource
+import io.s2qtech.shenk.model.DailyMetric
+import io.s2qtech.shenk.model.MetricChangeDirection
+import io.s2qtech.shenk.model.MetricKind
 import io.s2qtech.shenk.model.RecordEditPolicy
 import io.s2qtech.shenk.model.TodayGuidance
 import io.s2qtech.shenk.model.TrainingLog
@@ -159,6 +168,21 @@ fun CalendarScreen(
             ) {
                 WeekDistanceHud(weekDistance)
             }
+            Box(
+                Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .height(116.dp)
+                    .background(
+                        Brush.verticalGradient(
+                            colors = listOf(
+                                Color.Transparent,
+                                MaterialTheme.colorScheme.background.copy(alpha = 0.88f),
+                                MaterialTheme.colorScheme.background,
+                            ),
+                        ),
+                    ),
+            )
             ExtendedFloatingActionButton(
                 onClick = {
                     scope.launch {
@@ -285,6 +309,7 @@ private fun WeekDistanceHud(distance: Int) {
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun AgendaDayRow(
     day: CalendarDay,
@@ -294,11 +319,6 @@ private fun AgendaDayRow(
     val isToday = day.date == today
     val source = day.guidance.source
     val accent = trainingColor(day.guidance.trainingType)
-    val container = when (source) {
-        GuidanceSource.ACTUAL -> MaterialTheme.colorScheme.surface
-        GuidanceSource.FORMAL_PLAN -> MaterialTheme.colorScheme.surface
-        GuidanceSource.LOCAL_SUGGESTION -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.48f)
-    }
     val suggestionStripe = MaterialTheme.colorScheme.outline.copy(alpha = 0.10f)
     Row(
         modifier = Modifier
@@ -309,114 +329,164 @@ private fun AgendaDayRow(
     ) {
         DateRail(day.date, isToday)
         Spacer(Modifier.width(10.dp))
-        Surface(
+        Box(
             modifier = Modifier
                 .weight(1f)
-                .heightIn(min = 104.dp)
+                .heightIn(min = if (day.bodyMetrics.isEmpty()) 104.dp else 126.dp)
                 .clickable(onClick = onClick),
-            color = container,
-            shape = RoundedCornerShape(0.dp),
         ) {
-            Box {
-                if (source == GuidanceSource.LOCAL_SUGGESTION) {
-                    Canvas(Modifier.fillMaxSize()) {
-                        val gap = 14.dp.toPx()
-                        var x = -size.height
-                        while (x < size.width) {
-                            drawLine(
-                                color = suggestionStripe,
-                                start = Offset(x, size.height),
-                                end = Offset(x + size.height, 0f),
-                                strokeWidth = 3.dp.toPx(),
-                            )
-                            x += gap
-                        }
+            if (source == GuidanceSource.LOCAL_SUGGESTION) {
+                Canvas(Modifier.fillMaxSize()) {
+                    val gap = 14.dp.toPx()
+                    var x = -size.height
+                    while (x < size.width) {
+                        drawLine(
+                            color = suggestionStripe,
+                            start = Offset(x, size.height),
+                            end = Offset(x + size.height, 0f),
+                            strokeWidth = 3.dp.toPx(),
+                        )
+                        x += gap
                     }
                 }
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(min = 104.dp)
-                        .padding(horizontal = 14.dp, vertical = 16.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Box(
-                        Modifier
-                            .width(4.dp)
-                            .height(62.dp)
-                            .background(
-                                color = if (source == GuidanceSource.LOCAL_SUGGESTION) {
-                                    MaterialTheme.colorScheme.outline.copy(alpha = 0.55f)
-                                } else if (source == GuidanceSource.FORMAL_PLAN) {
-                                    accent.copy(alpha = 0.72f)
-                                } else {
-                                    accent
-                                },
-                                shape = RoundedCornerShape(2.dp),
-                            ),
-                    )
-                    Spacer(Modifier.width(10.dp))
-                    Icon(
-                        imageVector = trainingIcon(day.guidance.trainingType),
-                        contentDescription = day.guidance.title,
-                        modifier = Modifier.size(32.dp),
-                        tint = if (source == GuidanceSource.LOCAL_SUGGESTION) {
-                            MaterialTheme.colorScheme.outline
-                        } else {
-                            accent
-                        },
-                    )
-                    Spacer(Modifier.width(10.dp))
-                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
+            }
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = if (day.bodyMetrics.isEmpty()) 104.dp else 126.dp)
+                    .padding(horizontal = 14.dp, vertical = 16.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Box(
+                    Modifier
+                        .width(4.dp)
+                        .height(if (day.bodyMetrics.isEmpty()) 62.dp else 82.dp)
+                        .background(
+                            color = if (source == GuidanceSource.LOCAL_SUGGESTION) {
+                                MaterialTheme.colorScheme.outline.copy(alpha = 0.55f)
+                            } else if (source == GuidanceSource.FORMAL_PLAN) {
+                                accent.copy(alpha = 0.72f)
+                            } else {
+                                accent
+                            },
+                            shape = RoundedCornerShape(2.dp),
+                        ),
+                )
+                Spacer(Modifier.width(10.dp))
+                Icon(
+                    imageVector = trainingIcon(day.guidance.trainingType),
+                    contentDescription = day.guidance.title,
+                    modifier = Modifier.size(32.dp),
+                    tint = if (source == GuidanceSource.LOCAL_SUGGESTION) {
+                        MaterialTheme.colorScheme.outline
+                    } else {
+                        accent
+                    },
+                )
+                Spacer(Modifier.width(10.dp))
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            day.guidance.title,
+                            modifier = Modifier.weight(1f),
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = if (source == GuidanceSource.ACTUAL) FontWeight.SemiBold else FontWeight.Medium,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            when (source) {
+                                GuidanceSource.ACTUAL -> "记录"
+                                GuidanceSource.FORMAL_PLAN -> "计划"
+                                GuidanceSource.LOCAL_SUGGESTION -> "建议"
+                            },
+                            color = if (source == GuidanceSource.LOCAL_SUGGESTION) {
+                                MaterialTheme.colorScheme.outline
+                            } else {
+                                accent
+                            },
+                            style = MaterialTheme.typography.labelMedium,
+                        )
+                    }
+                    if (source == GuidanceSource.ACTUAL) {
+                        day.guidance.estimatedMinutes?.let { minutes ->
+                            Text("$minutes 分钟", color = MaterialTheme.colorScheme.secondary)
+                        }
+                    }
+                    day.guidance.note
+                        ?.takeIf { source != GuidanceSource.LOCAL_SUGGESTION && it.isNotBlank() }
+                        ?.let { note ->
                             Text(
-                                day.guidance.title,
-                                modifier = Modifier.weight(1f),
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = if (source == GuidanceSource.ACTUAL) FontWeight.SemiBold else FontWeight.Medium,
-                                maxLines = 1,
+                                note,
+                                color = MaterialTheme.colorScheme.secondary,
+                                style = MaterialTheme.typography.bodySmall,
+                                maxLines = 2,
                                 overflow = TextOverflow.Ellipsis,
                             )
-                            Spacer(Modifier.width(8.dp))
-                            Text(
-                                when (source) {
-                                    GuidanceSource.ACTUAL -> "记录"
-                                    GuidanceSource.FORMAL_PLAN -> "计划"
-                                    GuidanceSource.LOCAL_SUGGESTION -> "建议"
-                                },
-                                color = if (source == GuidanceSource.LOCAL_SUGGESTION) {
-                                    MaterialTheme.colorScheme.outline
-                                } else {
-                                    accent
-                                },
-                                style = MaterialTheme.typography.labelMedium,
-                            )
                         }
-                        if (source == GuidanceSource.ACTUAL) {
-                            day.guidance.estimatedMinutes?.let { minutes ->
-                                Text("$minutes 分钟", color = MaterialTheme.colorScheme.secondary)
-                            }
+                    if (day.bodyMetrics.isNotEmpty()) {
+                        FlowRow(
+                            modifier = Modifier.fillMaxWidth().padding(top = 3.dp),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            verticalArrangement = Arrangement.spacedBy(2.dp),
+                        ) {
+                            day.bodyMetrics.forEach { metric -> DailyMetricValue(metric) }
                         }
-                        day.guidance.note
-                            ?.takeIf { source != GuidanceSource.LOCAL_SUGGESTION && it.isNotBlank() }
-                            ?.let { note ->
-                                Text(
-                                    note,
-                                    color = MaterialTheme.colorScheme.secondary,
-                                    style = MaterialTheme.typography.bodySmall,
-                                    maxLines = 2,
-                                    overflow = TextOverflow.Ellipsis,
-                                )
-                            }
                     }
                 }
             }
         }
     }
+}
+
+@Composable
+private fun DailyMetricValue(metric: DailyMetric) {
+    val isImprovement = when (metric.kind) {
+        MetricKind.WEIGHT, MetricKind.BODY_FAT, MetricKind.WAIST ->
+            metric.changeDirection == MetricChangeDirection.DECREASED
+        MetricKind.MUSCLE -> metric.changeDirection == MetricChangeDirection.INCREASED
+    }
+    val isWorse = metric.changeDirection != null &&
+        metric.changeDirection != MetricChangeDirection.UNCHANGED &&
+        !isImprovement
+    val color = when {
+        isImprovement -> Color(0xFF3C8B60)
+        isWorse -> MaterialTheme.colorScheme.error
+        else -> MaterialTheme.colorScheme.secondary
+    }
+    val icon = when (metric.changeDirection) {
+        MetricChangeDirection.INCREASED -> Icons.Rounded.ArrowUpward
+        MetricChangeDirection.DECREASED -> Icons.Rounded.ArrowDownward
+        MetricChangeDirection.UNCHANGED -> Icons.Rounded.Remove
+        null -> null
+    }
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text(
+            "${metricLabel(metric.kind)} ${"%.1f".format(metric.value)}${metric.kind.unit}",
+            color = color,
+            style = MaterialTheme.typography.labelMedium,
+        )
+        icon?.let {
+            Icon(
+                imageVector = it,
+                contentDescription = null,
+                modifier = Modifier.size(14.dp),
+                tint = color,
+            )
+        }
+    }
+}
+
+private fun metricLabel(kind: MetricKind): String = when (kind) {
+    MetricKind.WEIGHT -> "体重"
+    MetricKind.BODY_FAT -> "体脂"
+    MetricKind.MUSCLE -> "肌肉"
+    MetricKind.WAIST -> "腰围"
 }
 
 @Composable
