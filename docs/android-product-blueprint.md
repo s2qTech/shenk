@@ -88,6 +88,9 @@ Calendar  <-  Today  ->  Training
 - A rightward reveal opens the native training/timer space.
 - Returning to Today while a timer is active shows only a compact “training in progress” state. It does not duplicate timer controls.
 - System back, visible navigation controls, and accessibility actions must provide alternatives to gestures.
+- Calendar and Training are expanded states of the primary space, not independent exit destinations. System back from either one returns to Today first; only a back action from Today may leave the app.
+- High-frequency choices and primary actions belong in the lower thumb-reach zone. The top region is reserved for context, status, and genuinely low-frequency navigation.
+- A gesture-only action is never sufficient: every reveal, collapse, and primary command has a visible or accessibility equivalent.
 
 Secondary spaces are reached from a compact, native menu or a contextual pull-down surface:
 
@@ -193,6 +196,7 @@ The flow starts with a fast `no abnormality` action. Fatigue and pain are distin
 - Walking plans open the walking scene; the user manually chooses warmup or stretch.
 - The user may switch routines before starting.
 - A cached routine is an offline executable copy, not a replacement for the AI-managed source.
+- Scene switching remains anchored in the lower thumb-reach zone while the routine list scrolls independently; it must not require reaching to the top of the screen.
 
 ### Preview
 

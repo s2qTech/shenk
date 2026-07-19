@@ -1,6 +1,7 @@
 package io.s2qtech.shenk
 
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithText
@@ -13,6 +14,7 @@ import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipeLeft
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import io.s2qtech.shenk.model.RoutineScene
 import io.s2qtech.shenk.model.SharedEntityOwner
 import io.s2qtech.shenk.model.SharedRecord
 import io.s2qtech.shenk.timer.TimerEngineState
@@ -23,6 +25,7 @@ import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import org.junit.Rule
 import org.junit.Test
+import org.junit.Assert.assertTrue
 import org.junit.runner.RunWith
 
 @RunWith(AndroidJUnit4::class)
@@ -56,6 +59,40 @@ class MainActivityTest {
         composeRule.onNodeWithTag("calendar-open-data").performSemanticsAction(SemanticsActions.OnClick)
         composeRule.waitForIdle()
         composeRule.onNodeWithText("最近 30 天身体变化").assertIsDisplayed()
+    }
+
+    @Test
+    fun systemBackCollapsesCalendarAndTrainingToToday() {
+        composeRule.onNodeWithTag("today-open-calendar").performClick()
+        composeRule.onNodeWithTag("calendar-screen").assertIsDisplayed()
+
+        composeRule.activityRule.scenario.onActivity { activity ->
+            activity.onBackPressedDispatcher.onBackPressed()
+        }
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag("today-screen").assertIsDisplayed()
+
+        composeRule.onNodeWithTag("today-open-training").performClick()
+        composeRule.onNodeWithTag("training-screen").assertIsDisplayed()
+
+        composeRule.activityRule.scenario.onActivity { activity ->
+            activity.onBackPressedDispatcher.onBackPressed()
+        }
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag("today-screen").assertIsDisplayed()
+    }
+
+    @Test
+    fun trainingSceneSwitcherStaysInLowerThumbZone() {
+        composeRule.onNodeWithTag("today-open-training").performClick()
+        composeRule.onNodeWithTag("training-screen").assertIsDisplayed()
+        val screenBounds = composeRule.onNodeWithTag("training-screen").getUnclippedBoundsInRoot()
+        val dockBounds = composeRule.onNodeWithTag("training-scene-dock").getUnclippedBoundsInRoot()
+
+        assertTrue((dockBounds.top + dockBounds.bottom) > (screenBounds.top + screenBounds.bottom))
+        RoutineScene.entries.forEach { scene ->
+            composeRule.onNodeWithTag("scene-${scene.name.lowercase()}").assertIsDisplayed()
+        }
     }
 
     @Test

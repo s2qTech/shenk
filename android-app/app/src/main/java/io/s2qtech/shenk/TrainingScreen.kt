@@ -258,15 +258,58 @@ private fun RoutineLibraryScreen(
             scene = RoutineScene.entries.firstOrNull { library.byScene[it].orEmpty().isNotEmpty() } ?: scene
         }
     }
-    LazyColumn(
+    Scaffold(
         modifier = Modifier
             .fillMaxSize()
-            .testTag("training-screen")
-            .statusBarsPadding()
-            .navigationBarsPadding(),
-        contentPadding = PaddingValues(horizontal = 20.dp, vertical = 16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
+            .testTag("training-screen"),
+        containerColor = MaterialTheme.colorScheme.background,
+        bottomBar = {
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .navigationBarsPadding()
+                    .padding(horizontal = 16.dp, vertical = 10.dp)
+                    .testTag("training-scene-dock"),
+                color = MaterialTheme.colorScheme.surface,
+                shape = RoundedCornerShape(28.dp),
+                tonalElevation = 4.dp,
+                shadowElevation = 8.dp,
+            ) {
+                Row(
+                    modifier = Modifier.padding(6.dp),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    RoutineScene.entries.forEach { value ->
+                        if (value == scene) {
+                            Button(
+                                onClick = { scene = value },
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .height(52.dp)
+                                    .testTag("scene-${value.name.lowercase()}"),
+                            ) { Text(value.displayName, maxLines = 1) }
+                        } else {
+                            FilledTonalButton(
+                                onClick = { scene = value },
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .height(52.dp)
+                                    .testTag("scene-${value.name.lowercase()}"),
+                            ) { Text(value.displayName, maxLines = 1) }
+                        }
+                    }
+                }
+            }
+        },
+    ) { scaffoldPadding ->
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(scaffoldPadding)
+                .statusBarsPadding(),
+            contentPadding = PaddingValues(horizontal = 20.dp, vertical = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
         item {
             Row(
                 Modifier.fillMaxWidth(),
@@ -312,17 +355,6 @@ private fun RoutineLibraryScreen(
                 ) { Text(message, modifier = Modifier.padding(16.dp)) }
             }
         }
-        item {
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                RoutineScene.entries.forEach { value ->
-                    if (value == scene) {
-                        Button(onClick = { scene = value }, modifier = Modifier.weight(1f)) { Text(value.displayName) }
-                    } else {
-                        FilledTonalButton(onClick = { scene = value }, modifier = Modifier.weight(1f)) { Text(value.displayName) }
-                    }
-                }
-            }
-        }
         val routines = library.byScene[scene].orEmpty()
         if (routines.isEmpty()) {
             item {
@@ -365,6 +397,7 @@ private fun RoutineLibraryScreen(
         }
         if (library.rejectedCount > 0) {
             item { Text("有 ${library.rejectedCount} 个方案缺少权威字段或格式无效，未加入计时器。", color = MaterialTheme.colorScheme.error) }
+        }
         }
     }
 }

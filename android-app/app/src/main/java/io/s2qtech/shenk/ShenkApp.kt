@@ -1,5 +1,6 @@
 package io.s2qtech.shenk
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.pager.HorizontalPager
@@ -42,6 +43,13 @@ fun ShenkApp(
     val scope = rememberCoroutineScope()
     var secondary by remember { mutableStateOf<SecondarySpace?>(null) }
     var trainingLaunch by remember { mutableStateOf<TrainingLaunchRequest?>(null) }
+
+    BackHandler(enabled = secondary != null) {
+        secondary = null
+    }
+    BackHandler(enabled = secondary == null && pager.currentPage != 1) {
+        scope.launch { pager.animateScrollToPage(1) }
+    }
 
     Box(Modifier.fillMaxSize()) {
         when (secondary) {
