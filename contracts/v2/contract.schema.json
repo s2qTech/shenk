@@ -25,7 +25,9 @@
         "daily_reviews",
         "plan_import_batches",
         "goal_sets",
-        "coach_strategies"
+        "coach_strategies",
+        "planning_runs",
+        "coach_plan_patches"
       ]
     },
     "id": { "type": "string", "minLength": 1, "maxLength": 160 },
@@ -325,6 +327,43 @@
       },
       "additionalProperties": true
     },
+    "planningRun": {
+      "type": "object",
+      "required": ["id", "snapshotDigest", "status", "requestedAt", "period", "source"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "snapshotDigest": { "type": "string", "minLength": 1, "maxLength": 160 },
+        "status": { "enum": ["submitted", "failed", "invalidated"] },
+        "requestedAt": { "$ref": "#/$defs/isoTimestamp" },
+        "submittedAt": { "$ref": "#/$defs/isoTimestamp" },
+        "period": {
+          "type": "object",
+          "required": ["historyFrom", "historyTo", "planThrough"],
+          "properties": {
+            "historyFrom": { "$ref": "#/$defs/isoDate" },
+            "historyTo": { "$ref": "#/$defs/isoDate" },
+            "planThrough": { "$ref": "#/$defs/isoDate" }
+          },
+          "additionalProperties": false
+        },
+        "source": { "const": "chatgpt_mcp" },
+        "patchId": { "$ref": "#/$defs/id" }
+      },
+      "additionalProperties": true
+    },
+    "coachPlanPatchRecord": {
+      "type": "object",
+      "required": ["id", "runId", "status", "receivedAt", "snapshotDigest", "patch"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "runId": { "$ref": "#/$defs/id" },
+        "status": { "enum": ["pending", "confirmed", "applied", "rejected", "invalidated"] },
+        "receivedAt": { "$ref": "#/$defs/isoTimestamp" },
+        "snapshotDigest": { "type": "string", "minLength": 1, "maxLength": 160 },
+        "patch": { "$ref": "#/$defs/coachPlanPatch" }
+      },
+      "additionalProperties": true
+    },
     "weatherLog": {
       "type": "object",
       "required": ["id", "date"],
@@ -389,7 +428,9 @@
         { "if": { "properties": { "entity": { "const": "daily_reviews" } }, "required": ["entity"] }, "then": { "properties": { "data": { "$ref": "#/$defs/dailyReview" } } } },
         { "if": { "properties": { "entity": { "const": "plan_import_batches" } }, "required": ["entity"] }, "then": { "properties": { "data": { "$ref": "#/$defs/planImportBatch" } } } },
         { "if": { "properties": { "entity": { "const": "goal_sets" } }, "required": ["entity"] }, "then": { "properties": { "data": { "$ref": "#/$defs/goalSet" } } } },
-        { "if": { "properties": { "entity": { "const": "coach_strategies" } }, "required": ["entity"] }, "then": { "properties": { "data": { "$ref": "#/$defs/coachStrategy" } } } }
+        { "if": { "properties": { "entity": { "const": "coach_strategies" } }, "required": ["entity"] }, "then": { "properties": { "data": { "$ref": "#/$defs/coachStrategy" } } } },
+        { "if": { "properties": { "entity": { "const": "planning_runs" } }, "required": ["entity"] }, "then": { "properties": { "data": { "$ref": "#/$defs/planningRun" } } } },
+        { "if": { "properties": { "entity": { "const": "coach_plan_patches" } }, "required": ["entity"] }, "then": { "properties": { "data": { "$ref": "#/$defs/coachPlanPatchRecord" } } } }
       ],
       "additionalProperties": true
     },

@@ -5,6 +5,26 @@ const MAX_UPSERT_RECORDS = 100;
 const MAX_RECORD_DATA_BYTES = 256 * 1024;
 const DEFAULT_QUERY_LIMIT = 200;
 const MAX_QUERY_LIMIT = 500;
+const MCP_PROTOCOL_VERSION = "2025-06-18";
+const MCP_ACCESS_TOKEN_SECONDS = 60 * 60;
+const MCP_REFRESH_TOKEN_SECONDS = 30 * 24 * 60 * 60;
+const MCP_PAIRING_CODE_SECONDS = 10 * 60;
+const MCP_AUTH_CODE_SECONDS = 5 * 60;
+const MCP_SCOPES = ["planning:read", "planning:draft"];
+const MCP_SNAPSHOT_ENTITIES = [
+  "plan_templates",
+  "routine_templates",
+  "daily_plan_items",
+  "plan_adjustments",
+  "timer_sessions",
+  "training_logs",
+  "body_metrics",
+  "feedback_summaries",
+  "status_checkins",
+  "daily_reviews",
+  "goal_sets",
+  "coach_strategies"
+];
 
 const V1_ENTITIES = [
   "plan_templates",
@@ -26,7 +46,9 @@ const V2_ENTITIES = [
   "daily_reviews",
   "plan_import_batches",
   "goal_sets",
-  "coach_strategies"
+  "coach_strategies",
+  "planning_runs",
+  "coach_plan_patches"
 ];
 
 const ENTITIES = V2_ENTITIES;
@@ -48,15 +70,34 @@ const ROLE_WRITE_ENTITIES = {
     "daily_reviews",
     "plan_import_batches",
     "goal_sets",
-    "coach_strategies"
+    "coach_strategies",
+    "planning_runs",
+    "coach_plan_patches"
   ]),
-  timer: new Set(["timer_sessions"])
+  timer: new Set(["timer_sessions"]),
+  mcp: new Set(["planning_runs", "coach_plan_patches"])
 };
 
 const ROLE_READ_ENTITIES = {
   admin: new Set(ENTITIES),
   shenk: new Set(ENTITIES),
-  timer: new Set(["routine_templates", "daily_plan_items", "timer_sessions"])
+  timer: new Set(["routine_templates", "daily_plan_items", "timer_sessions"]),
+  mcp: new Set([
+    "plan_templates",
+    "routine_templates",
+    "daily_plan_items",
+    "plan_adjustments",
+    "timer_sessions",
+    "training_logs",
+    "body_metrics",
+    "feedback_summaries",
+    "status_checkins",
+    "daily_reviews",
+    "goal_sets",
+    "coach_strategies",
+    "planning_runs",
+    "coach_plan_patches"
+  ])
 };
 
 export default {
@@ -64,9 +105,38 @@ export default {
     if (request.method === "OPTIONS") return new Response(null, { headers: corsHeaders(request, env) });
 
     const url = new URL(request.url);
-    if (!url.pathname.startsWith("/api")) return json({ ok: false, error: "not_found" }, 404, request, env);
 
     try {
+      if (url.pathname === "/.well-known/oauth-protected-resource" || url.pathname === "/.well-known/oauth-protected-resource/mcp") {
+        return json(protectedResourceMetadata(url), 200, request, env);
+      }
+
+      if (url.pathname === "/.well-known/oauth-authorization-server" && request.method === "GET") {
+        return json(authorizationServerMetadata(url), 200, request, env);
+      }
+
+      if (url.pathname === "/oauth/register" && request.method === "POST") {
+        return json(await registerOAuthClient(request, env), 201, request, env);
+      }
+
+      if (url.pathname === "/oauth/authorize" && request.method === "GET") {
+        return await renderOAuthAuthorization(request, env);
+      }
+
+      if (url.pathname === "/oauth/authorize" && request.method === "POST") {
+        return await approveOAuthAuthorization(request, env);
+      }
+
+      if (url.pathname === "/oauth/token" && request.method === "POST") {
+        return json(await exchangeOAuthToken(request, env), 200, request, env);
+      }
+
+      if (url.pathname === "/mcp" && request.method === "POST") {
+        return await handleMcpRequest(request, env);
+      }
+
+      if (!url.pathname.startsWith("/api")) return json({ ok: false, error: "not_found" }, 404, request, env);
+
       if (url.pathname === "/api/health" && request.method === "GET") {
         return json({
           ok: true,
@@ -87,6 +157,15 @@ export default {
       }
 
       const client = requireAuth(request, env);
+
+      if (url.pathname === "/api/mcp/pairing-code" && request.method === "POST") {
+        if (!["admin", "shenk"].includes(client.role)) {
+          const error = new Error("forbidden_mcp_pairing_role");
+          error.status = 403;
+          throw error;
+        }
+        return json(await createMcpPairingCode(env), 201, request, env);
+      }
 
       if (syncProfileMatch && request.method === "PUT") {
         const body = await readJson(request);
@@ -210,6 +289,610 @@ export default {
     }
   }
 };
+
+function protectedResourceMetadata(url) {
+  return {
+    resource: `${url.origin}/mcp`,
+    authorization_servers: [url.origin],
+    scopes_supported: MCP_SCOPES,
+    bearer_methods_supported: ["header"]
+  };
+}
+
+function authorizationServerMetadata(url) {
+  return {
+    issuer: url.origin,
+    authorization_endpoint: `${url.origin}/oauth/authorize`,
+    token_endpoint: `${url.origin}/oauth/token`,
+    registration_endpoint: `${url.origin}/oauth/register`,
+    response_types_supported: ["code"],
+    grant_types_supported: ["authorization_code", "refresh_token"],
+    token_endpoint_auth_methods_supported: ["none"],
+    code_challenge_methods_supported: ["S256"],
+    scopes_supported: MCP_SCOPES
+  };
+}
+
+async function registerOAuthClient(request, env) {
+  const body = await readJson(request);
+  const redirectUris = Array.isArray(body.redirect_uris) ? body.redirect_uris.map(String) : [];
+  if (!redirectUris.length || redirectUris.length > 10 || redirectUris.some(uri => !isAllowedOAuthRedirectUri(uri))) {
+    const error = new Error("invalid_redirect_uris");
+    error.status = 400;
+    throw error;
+  }
+  if (body.token_endpoint_auth_method && body.token_endpoint_auth_method !== "none") {
+    const error = new Error("unsupported_token_endpoint_auth_method");
+    error.status = 400;
+    throw error;
+  }
+  const clientId = `mcp_client_${randomOpaqueToken(18)}`;
+  const now = new Date().toISOString();
+  await env.DB.prepare(
+    "INSERT INTO mcp_oauth_clients(client_id, redirect_uris_json, client_name, created_at) VALUES (?, ?, ?, ?)"
+  ).bind(clientId, JSON.stringify(redirectUris), String(body.client_name || "ChatGPT").slice(0, 120), now).run();
+  return {
+    client_id: clientId,
+    client_id_issued_at: Math.floor(Date.parse(now) / 1000),
+    redirect_uris: redirectUris,
+    client_name: String(body.client_name || "ChatGPT").slice(0, 120),
+    token_endpoint_auth_method: "none",
+    grant_types: ["authorization_code", "refresh_token"],
+    response_types: ["code"]
+  };
+}
+
+function isAllowedOAuthRedirectUri(value) {
+  try {
+    const url = new URL(String(value));
+    if (url.protocol === "https:") return true;
+    return url.protocol === "http:" && ["127.0.0.1", "localhost", "[::1]"].includes(url.hostname);
+  } catch (error) {
+    return false;
+  }
+}
+
+async function renderOAuthAuthorization(request, env) {
+  const url = new URL(request.url);
+  const auth = await validateOAuthAuthorizationRequest(url.searchParams, env, url.origin);
+  const hidden = Object.entries(auth.formValues)
+    .map(([name, value]) => `<input type="hidden" name="${escapeHtml(name)}" value="${escapeHtml(value)}">`)
+    .join("");
+  const body = `<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>连接身刻</title><style>
+body{margin:0;background:#f5f7f3;color:#17231e;font-family:system-ui,-apple-system,"Segoe UI",sans-serif;display:grid;min-height:100vh;place-items:center}
+main{width:min(420px,calc(100vw - 40px));background:#fff;border:1px solid #dce5df;border-radius:16px;padding:28px;box-shadow:0 18px 50px rgba(25,56,43,.12)}
+h1{font-size:26px;margin:0 0 10px}p{color:#5f7068;line-height:1.6;margin:0 0 22px}label{display:block;font-weight:650;margin-bottom:8px}
+input[type=text]{box-sizing:border-box;width:100%;height:52px;border:1px solid #bac9c0;border-radius:10px;padding:0 14px;font-size:20px;letter-spacing:2px;text-transform:uppercase}
+button{width:100%;height:52px;margin-top:16px;border:0;border-radius:10px;background:#426f59;color:#fff;font-size:17px;font-weight:650}
+small{display:block;color:#7b8a82;margin-top:16px;line-height:1.5}</style></head>
+<body><main><h1>连接 ChatGPT 与身刻</h1><p>输入身刻生成的一次性配对码。授权后 ChatGPT 只能读取规划快照并提交待确认草案。</p>
+<form method="post" action="/oauth/authorize">${hidden}<label for="pairing_code">一次性配对码</label><input id="pairing_code" name="pairing_code" type="text" inputmode="text" autocomplete="one-time-code" required autofocus><button type="submit">确认连接</button></form>
+<small>配对码十分钟内有效且只能使用一次。正式计划仍需在身刻中确认。</small></main></body></html>`;
+  return new Response(body, {
+    status: 200,
+    headers: {
+      "Content-Type": "text/html; charset=utf-8",
+      "Cache-Control": "no-store",
+      "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'",
+      "Referrer-Policy": "no-referrer"
+    }
+  });
+}
+
+async function validateOAuthAuthorizationRequest(params, env, origin) {
+  const responseType = String(params.get("response_type") || "");
+  const clientId = String(params.get("client_id") || "");
+  const redirectUri = String(params.get("redirect_uri") || "");
+  const state = String(params.get("state") || "");
+  const codeChallenge = String(params.get("code_challenge") || "");
+  const codeChallengeMethod = String(params.get("code_challenge_method") || "");
+  const resource = String(params.get("resource") || `${origin}/mcp`);
+  const scope = normalizeOAuthScope(params.get("scope"));
+  if (responseType !== "code" || !clientId || !redirectUri || !state || !/^[A-Za-z0-9_-]{43,128}$/.test(codeChallenge) || codeChallengeMethod !== "S256") {
+    const error = new Error("invalid_authorization_request");
+    error.status = 400;
+    throw error;
+  }
+  if (resource !== `${origin}/mcp`) {
+    const error = new Error("invalid_resource");
+    error.status = 400;
+    throw error;
+  }
+  const client = await env.DB.prepare(
+    "SELECT client_id, redirect_uris_json FROM mcp_oauth_clients WHERE client_id = ?"
+  ).bind(clientId).first();
+  const redirectUris = safeJson(client?.redirect_uris_json || "[]", []);
+  if (!client || !redirectUris.includes(redirectUri)) {
+    const error = new Error("invalid_oauth_client");
+    error.status = 400;
+    throw error;
+  }
+  return {
+    clientId,
+    redirectUri,
+    state,
+    codeChallenge,
+    scope,
+    resource,
+    formValues: {
+      response_type: responseType,
+      client_id: clientId,
+      redirect_uri: redirectUri,
+      state,
+      code_challenge: codeChallenge,
+      code_challenge_method: codeChallengeMethod,
+      scope,
+      resource
+    }
+  };
+}
+
+function normalizeOAuthScope(value) {
+  const requested = String(value || MCP_SCOPES.join(" ")).split(/\s+/).filter(Boolean);
+  if (!requested.length || requested.some(scope => !MCP_SCOPES.includes(scope))) {
+    const error = new Error("invalid_scope");
+    error.status = 400;
+    throw error;
+  }
+  return [...new Set(requested)].join(" ");
+}
+
+async function approveOAuthAuthorization(request, env) {
+  const form = await request.formData();
+  const params = new URLSearchParams();
+  for (const name of ["response_type", "client_id", "redirect_uri", "state", "code_challenge", "code_challenge_method", "scope", "resource"]) {
+    params.set(name, String(form.get(name) || ""));
+  }
+  const url = new URL(request.url);
+  const auth = await validateOAuthAuthorizationRequest(params, env, url.origin);
+  const pairingCode = normalizePairingCode(form.get("pairing_code"));
+  const codeHash = await sha256Hex(pairingCode);
+  const row = await env.DB.prepare(
+    "SELECT code_hash, expires_at, used_at FROM mcp_pairing_codes WHERE code_hash = ?"
+  ).bind(codeHash).first();
+  const now = new Date();
+  if (!row || row.used_at || Date.parse(row.expires_at) <= now.getTime()) {
+    const error = new Error("invalid_or_expired_pairing_code");
+    error.status = 401;
+    throw error;
+  }
+  const authorizationCode = randomOpaqueToken(32);
+  const authorizationCodeHash = await sha256Hex(authorizationCode);
+  const createdAt = now.toISOString();
+  const expiresAt = new Date(now.getTime() + MCP_AUTH_CODE_SECONDS * 1000).toISOString();
+  await env.DB.prepare("UPDATE mcp_pairing_codes SET used_at = ? WHERE code_hash = ? AND used_at IS NULL")
+    .bind(createdAt, codeHash).run();
+  await env.DB.prepare(
+    `INSERT INTO mcp_oauth_authorization_codes(code_hash, client_id, redirect_uri, code_challenge, scope, resource, expires_at, used_at, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, NULL, ?)`
+  ).bind(authorizationCodeHash, auth.clientId, auth.redirectUri, auth.codeChallenge, auth.scope, auth.resource, expiresAt, createdAt).run();
+  const redirect = new URL(auth.redirectUri);
+  redirect.searchParams.set("code", authorizationCode);
+  redirect.searchParams.set("state", auth.state);
+  return Response.redirect(redirect.toString(), 302);
+}
+
+function normalizePairingCode(value) {
+  return String(value || "").toUpperCase().replace(/[^A-Z2-9]/g, "");
+}
+
+async function createMcpPairingCode(env) {
+  const raw = randomBase32(20);
+  const normalized = normalizePairingCode(raw);
+  const codeHash = await sha256Hex(normalized);
+  const now = new Date();
+  const expiresAt = new Date(now.getTime() + MCP_PAIRING_CODE_SECONDS * 1000).toISOString();
+  await env.DB.prepare(
+    "INSERT INTO mcp_pairing_codes(code_hash, expires_at, used_at, created_at) VALUES (?, ?, NULL, ?)"
+  ).bind(codeHash, expiresAt, now.toISOString()).run();
+  return { ok: true, pairingCode: raw, expiresAt };
+}
+
+async function exchangeOAuthToken(request, env) {
+  const form = await request.formData();
+  const grantType = String(form.get("grant_type") || "");
+  if (grantType === "authorization_code") return exchangeAuthorizationCode(form, env);
+  if (grantType === "refresh_token") return exchangeRefreshToken(form, env);
+  const error = new Error("unsupported_grant_type");
+  error.status = 400;
+  throw error;
+}
+
+async function exchangeAuthorizationCode(form, env) {
+  const code = String(form.get("code") || "");
+  const clientId = String(form.get("client_id") || "");
+  const redirectUri = String(form.get("redirect_uri") || "");
+  const verifier = String(form.get("code_verifier") || "");
+  const resource = String(form.get("resource") || "");
+  if (!code || !clientId || !redirectUri || !/^[\x21-\x7E]{43,128}$/.test(verifier)) throw oauthInvalidGrant();
+  const row = await env.DB.prepare(
+    "SELECT code_hash, client_id, redirect_uri, code_challenge, scope, resource, expires_at, used_at FROM mcp_oauth_authorization_codes WHERE code_hash = ?"
+  ).bind(await sha256Hex(code)).first();
+  const now = new Date();
+  const challenge = bytesToBase64Url(new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(verifier))));
+  if (!row || row.used_at || Date.parse(row.expires_at) <= now.getTime() || row.client_id !== clientId || row.redirect_uri !== redirectUri || row.code_challenge !== challenge || (resource && row.resource !== resource)) {
+    throw oauthInvalidGrant();
+  }
+  await env.DB.prepare("UPDATE mcp_oauth_authorization_codes SET used_at = ? WHERE code_hash = ? AND used_at IS NULL")
+    .bind(now.toISOString(), row.code_hash).run();
+  return issueOAuthTokens(env, { clientId, scope: row.scope, resource: row.resource });
+}
+
+async function exchangeRefreshToken(form, env) {
+  const refreshToken = String(form.get("refresh_token") || "");
+  const clientId = String(form.get("client_id") || "");
+  const resource = String(form.get("resource") || "");
+  if (!refreshToken || !clientId) throw oauthInvalidGrant();
+  const refreshHash = await sha256Hex(refreshToken);
+  const row = await env.DB.prepare(
+    "SELECT refresh_token_hash, client_id, scope, resource, refresh_expires_at, revoked_at FROM mcp_oauth_tokens WHERE refresh_token_hash = ?"
+  ).bind(refreshHash).first();
+  if (!row || row.revoked_at || Date.parse(row.refresh_expires_at) <= Date.now() || row.client_id !== clientId || (resource && row.resource !== resource)) throw oauthInvalidGrant();
+  await env.DB.prepare("UPDATE mcp_oauth_tokens SET revoked_at = ?, updated_at = ? WHERE refresh_token_hash = ? AND revoked_at IS NULL")
+    .bind(new Date().toISOString(), new Date().toISOString(), refreshHash).run();
+  return issueOAuthTokens(env, { clientId, scope: row.scope, resource: row.resource });
+}
+
+function oauthInvalidGrant() {
+  const error = new Error("invalid_grant");
+  error.status = 400;
+  return error;
+}
+
+async function issueOAuthTokens(env, details) {
+  const accessToken = randomOpaqueToken(32);
+  const refreshToken = randomOpaqueToken(40);
+  const now = new Date();
+  const accessExpiresAt = new Date(now.getTime() + MCP_ACCESS_TOKEN_SECONDS * 1000).toISOString();
+  const refreshExpiresAt = new Date(now.getTime() + MCP_REFRESH_TOKEN_SECONDS * 1000).toISOString();
+  await env.DB.prepare(
+    `INSERT INTO mcp_oauth_tokens(access_token_hash, refresh_token_hash, client_id, scope, resource, access_expires_at, refresh_expires_at, revoked_at, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, NULL, ?, ?)`
+  ).bind(
+    await sha256Hex(accessToken),
+    await sha256Hex(refreshToken),
+    details.clientId,
+    details.scope,
+    details.resource,
+    accessExpiresAt,
+    refreshExpiresAt,
+    now.toISOString(),
+    now.toISOString()
+  ).run();
+  return {
+    access_token: accessToken,
+    token_type: "Bearer",
+    expires_in: MCP_ACCESS_TOKEN_SECONDS,
+    refresh_token: refreshToken,
+    scope: details.scope
+  };
+}
+
+async function handleMcpRequest(request, env) {
+  const url = new URL(request.url);
+  let client;
+  try {
+    client = await requireMcpAuth(request, env, `${url.origin}/mcp`);
+  } catch (error) {
+    return new Response(JSON.stringify({ jsonrpc: "2.0", error: { code: -32001, message: "Unauthorized" }, id: null }), {
+      status: 401,
+      headers: {
+        "Content-Type": "application/json; charset=utf-8",
+        "Cache-Control": "no-store",
+        "WWW-Authenticate": `Bearer resource_metadata="${url.origin}/.well-known/oauth-protected-resource/mcp", scope="${MCP_SCOPES.join(" ")}"`
+      }
+    });
+  }
+  let rpc;
+  try {
+    rpc = await request.json();
+  } catch (error) {
+    return mcpJsonRpcError(null, -32700, "Parse error");
+  }
+  if (!isObject(rpc) || rpc.jsonrpc !== "2.0" || Array.isArray(rpc)) return mcpJsonRpcError(rpc?.id ?? null, -32600, "Invalid Request");
+  if (rpc.method === "notifications/initialized") return new Response(null, { status: 202 });
+  if (rpc.method === "initialize") {
+    return mcpJsonRpcResult(rpc.id, {
+      protocolVersion: MCP_PROTOCOL_VERSION,
+      capabilities: { tools: { listChanged: false } },
+      serverInfo: { name: "shenk-planning", version: "1.0.0" }
+    });
+  }
+  if (rpc.method === "ping") return mcpJsonRpcResult(rpc.id, {});
+  if (rpc.method === "tools/list") return mcpJsonRpcResult(rpc.id, { tools: mcpToolDefinitions() });
+  if (rpc.method === "tools/call") {
+    const name = String(rpc.params?.name || "");
+    const args = isObject(rpc.params?.arguments) ? rpc.params.arguments : {};
+    try {
+      const result = name === "get_planning_snapshot"
+        ? await buildPlanningSnapshot(env, args, client)
+        : name === "submit_coach_plan_patch"
+          ? await submitCoachPlanPatch(env, args, client)
+          : null;
+      if (!result) return mcpJsonRpcError(rpc.id, -32602, "Unknown tool");
+      return mcpJsonRpcResult(rpc.id, {
+        content: [{ type: "text", text: JSON.stringify(result) }],
+        structuredContent: result,
+        isError: false
+      });
+    } catch (error) {
+      return mcpJsonRpcResult(rpc.id, {
+        content: [{ type: "text", text: error.message || "Tool failed" }],
+        isError: true
+      });
+    }
+  }
+  return mcpJsonRpcError(rpc.id, -32601, "Method not found");
+}
+
+async function requireMcpAuth(request, env, resource) {
+  const auth = request.headers.get("Authorization") || "";
+  const token = auth.startsWith("Bearer ") ? auth.slice(7) : "";
+  if (!token) throw oauthInvalidGrant();
+  const row = await env.DB.prepare(
+    "SELECT client_id, scope, resource, access_expires_at, revoked_at FROM mcp_oauth_tokens WHERE access_token_hash = ?"
+  ).bind(await sha256Hex(token)).first();
+  if (!row || row.revoked_at || Date.parse(row.access_expires_at) <= Date.now() || row.resource !== resource) throw oauthInvalidGrant();
+  return { role: "mcp", clientId: row.client_id, scopes: String(row.scope).split(/\s+/), deviceId: "chatgpt_mcp" };
+}
+
+function mcpToolDefinitions() {
+  return [
+    {
+      name: "get_planning_snapshot",
+      title: "Get Shenk planning snapshot",
+      description: "Read a bounded, sanitized snapshot of recent training, body status, current plans, goals, and routines for review and planning.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          historyDays: { type: "integer", minimum: 7, maximum: 30, default: 14 },
+          trendDays: { type: "integer", minimum: 14, maximum: 90, default: 30 },
+          futureDays: { type: "integer", minimum: 7, maximum: 28, default: 14 }
+        },
+        additionalProperties: false
+      },
+      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false }
+    },
+    {
+      name: "submit_coach_plan_patch",
+      title: "Submit Shenk plan draft",
+      description: "Store a Contract v2 coach_plan_patch as a pending draft. Shenk validates, previews, and asks the user to confirm before any formal plan changes.",
+      inputSchema: {
+        type: "object",
+        required: ["snapshotDigest", "period", "patch"],
+        properties: {
+          snapshotDigest: { type: "string", minLength: 1, maxLength: 160 },
+          period: {
+            type: "object",
+            required: ["historyFrom", "historyTo", "planThrough"],
+            properties: {
+              historyFrom: { type: "string", format: "date" },
+              historyTo: { type: "string", format: "date" },
+              planThrough: { type: "string", format: "date" }
+            },
+            additionalProperties: false
+          },
+          patch: { type: "object" }
+        },
+        additionalProperties: false
+      },
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false }
+    }
+  ];
+}
+
+async function buildPlanningSnapshot(env, args, client) {
+  if (!client.scopes.includes("planning:read")) throw new Error("missing_scope:planning:read");
+  const historyDays = boundedInteger(args.historyDays, 14, 7, 30, "historyDays");
+  const trendDays = boundedInteger(args.trendDays, 30, 14, 90, "trendDays");
+  const futureDays = boundedInteger(args.futureDays, 14, 7, 28, "futureDays");
+  const today = dateInTimeZone(new Date(), "Asia/Shanghai");
+  const period = {
+    historyFrom: addIsoDays(today, -(historyDays - 1)),
+    historyTo: today,
+    planThrough: addIsoDays(today, futureDays)
+  };
+  const trendFrom = addIsoDays(today, -(trendDays - 1));
+  const placeholders = MCP_SNAPSHOT_ENTITIES.map(() => "?").join(",");
+  const result = await env.DB.prepare(
+    `SELECT entity, id, revision, device_id, created_at, updated_at, deleted_at, data_json
+     FROM cloud_records
+     WHERE entity IN (${placeholders}) AND deleted_at IS NULL
+     ORDER BY updated_at DESC
+     LIMIT 2000`
+  ).bind(...MCP_SNAPSHOT_ENTITIES).all();
+  const grouped = Object.fromEntries(MCP_SNAPSHOT_ENTITIES.map(entity => [entity, []]));
+  for (const row of result.results || []) {
+    const data = sanitizeMcpValue(safeJson(row.data_json, {}));
+    if (!planningRecordInWindow(row.entity, data, { ...period, trendFrom })) continue;
+    grouped[row.entity].push({
+      id: row.id,
+      revision: row.revision,
+      updatedAt: row.updated_at,
+      data
+    });
+  }
+  const snapshotCore = { contractVersion: "2.0", timezone: "Asia/Shanghai", period, records: grouped };
+  const snapshotDigest = `sha256:${await sha256Hex(canonicalStringify(snapshotCore))}`;
+  return { ...snapshotCore, generatedAt: new Date().toISOString(), snapshotDigest };
+}
+
+function planningRecordInWindow(entity, data, period) {
+  if (["plan_templates", "routine_templates", "goal_sets", "coach_strategies"].includes(entity)) return true;
+  const date = String(data.date || data.effectiveFrom || data.observedAt || data.startedAt || data.generatedAt || "").slice(0, 10);
+  if (!isIsoDate(date)) return false;
+  if (["daily_plan_items", "plan_adjustments"].includes(entity)) return date >= period.historyFrom && date <= period.planThrough;
+  return date >= period.trendFrom && date <= period.historyTo;
+}
+
+function sanitizeMcpValue(value, key = "") {
+  if (/token|api[_-]?key|password|secret|credential|migration[_-]?code/i.test(key)) return undefined;
+  if (["rawJson", "rawSource"].includes(key)) return undefined;
+  if (Array.isArray(value)) return value.map(item => sanitizeMcpValue(item)).filter(item => item !== undefined);
+  if (!isObject(value)) return value;
+  const copy = {};
+  for (const [childKey, childValue] of Object.entries(value)) {
+    const sanitized = sanitizeMcpValue(childValue, childKey);
+    if (sanitized !== undefined) copy[childKey] = sanitized;
+  }
+  return copy;
+}
+
+async function submitCoachPlanPatch(env, args, client) {
+  if (!client.scopes.includes("planning:draft")) throw new Error("missing_scope:planning:draft");
+  const snapshotDigest = String(args.snapshotDigest || "");
+  const period = args.period;
+  if (!/^sha256:[a-f0-9]{64}$/.test(snapshotDigest)) throw new Error("invalid_snapshot_digest");
+  if (!isValidPlanningPeriod(period)) throw new Error("invalid_planning_period");
+  const patch = args.patch;
+  const validationError = validateCoachPlanPatchDraft(patch, period);
+  if (validationError) throw new Error(validationError);
+  const patchHash = await sha256Hex(canonicalStringify({ snapshotDigest, period, patch }));
+  const patchId = `coach_patch_${patchHash.slice(0, 32)}`;
+  const runId = `planning_run_${patchHash.slice(0, 32)}`;
+  const existing = await env.DB.prepare(
+    "SELECT entity, id, revision, device_id, created_at, updated_at, deleted_at, data_json FROM cloud_records WHERE entity = ? AND id = ?"
+  ).bind("coach_plan_patches", patchId).first();
+  if (existing && !existing.deleted_at) {
+    return { ok: true, duplicate: true, status: "pending", patchId, runId, receivedAt: safeJson(existing.data_json, {}).receivedAt || existing.created_at };
+  }
+  const now = new Date().toISOString();
+  const patchRecord = { id: patchId, runId, status: "pending", receivedAt: now, snapshotDigest, patch };
+  const runRecord = { id: runId, snapshotDigest, status: "submitted", requestedAt: now, submittedAt: now, period, source: "chatgpt_mcp", patchId };
+  const result = await upsertRecords(env, {
+    contractVersion: "2.0",
+    deviceId: "chatgpt_mcp",
+    records: [
+      { entity: "coach_plan_patches", id: patchId, baseRevision: 0, data: patchRecord },
+      { entity: "planning_runs", id: runId, baseRevision: 0, data: runRecord }
+    ]
+  }, { role: "mcp", deviceId: "chatgpt_mcp" });
+  if (result.conflicts.length) throw new Error(`draft_store_conflict:${result.conflicts[0].reason}`);
+  return { ok: true, duplicate: false, status: "pending", patchId, runId, receivedAt: now };
+}
+
+function validateCoachPlanPatchDraft(patch, period) {
+  if (!isObject(patch) || patch.schema !== "coach_plan_patch" || patch.contractVersion !== "2.0") return "invalid_coach_plan_patch";
+  if (!isIsoDate(patch.effectiveFrom) || (patch.effectiveTo && !isIsoDate(patch.effectiveTo))) return "invalid_patch_effective_date";
+  if (patch.replaceMode === true) return "replace_mode_not_allowed";
+  if (containsDeleteIntent(patch)) return "delete_not_allowed";
+  const entities = [
+    ["planTemplates", "plan_templates"],
+    ["routineTemplates", "routine_templates"],
+    ["dailyPlanItems", "daily_plan_items"],
+    ["planAdjustments", "plan_adjustments"]
+  ];
+  let count = 0;
+  for (const [field, entity] of entities) {
+    if (patch[field] === undefined) continue;
+    if (!Array.isArray(patch[field]) || patch[field].length > 100) return `invalid_patch_array:${field}`;
+    for (const item of patch[field]) {
+      count += 1;
+      if (!isObject(item) || !item.id) return `${field}:invalid_record`;
+      const error = validateRecordForUpsert("2.0", entity, item?.id, item, null);
+      if (error) return `${field}:${error}`;
+      if (item.date && (item.date < patch.effectiveFrom || item.date > period.planThrough)) return `${field}:date_outside_period`;
+    }
+  }
+  if (!count) return "empty_patch";
+  return null;
+}
+
+function containsDeleteIntent(value) {
+  if (Array.isArray(value)) return value.some(containsDeleteIntent);
+  if (!isObject(value)) return false;
+  if (String(value.operation || "").toLowerCase() === "delete") return true;
+  if (value.deletedAt !== undefined && value.deletedAt !== null && value.deletedAt !== "") return true;
+  return Object.values(value).some(containsDeleteIntent);
+}
+
+function isValidPlanningPeriod(period) {
+  return isObject(period)
+    && isIsoDate(period.historyFrom)
+    && isIsoDate(period.historyTo)
+    && isIsoDate(period.planThrough)
+    && period.historyFrom <= period.historyTo
+    && period.historyTo <= period.planThrough;
+}
+
+function boundedInteger(value, fallback, minimum, maximum, name) {
+  const number = value === undefined ? fallback : Number(value);
+  if (!Number.isInteger(number) || number < minimum || number > maximum) throw new Error(`invalid_${name}`);
+  return number;
+}
+
+function dateInTimeZone(date, timeZone) {
+  const parts = new Intl.DateTimeFormat("en-CA", { timeZone, year: "numeric", month: "2-digit", day: "2-digit" })
+    .formatToParts(date)
+    .reduce((result, part) => ({ ...result, [part.type]: part.value }), {});
+  return `${parts.year}-${parts.month}-${parts.day}`;
+}
+
+function addIsoDays(value, days) {
+  const date = new Date(`${value}T00:00:00.000Z`);
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0, 10);
+}
+
+function canonicalStringify(value) {
+  if (Array.isArray(value)) return `[${value.map(canonicalStringify).join(",")}]`;
+  if (isObject(value)) return `{${Object.keys(value).sort().map(key => `${JSON.stringify(key)}:${canonicalStringify(value[key])}`).join(",")}}`;
+  return JSON.stringify(value);
+}
+
+async function sha256Hex(value) {
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(String(value)));
+  return Array.from(new Uint8Array(digest)).map(byte => byte.toString(16).padStart(2, "0")).join("");
+}
+
+function randomOpaqueToken(byteLength) {
+  const bytes = new Uint8Array(byteLength);
+  crypto.getRandomValues(bytes);
+  return bytesToBase64Url(bytes);
+}
+
+function randomBase32(length) {
+  const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  const bytes = new Uint8Array(length);
+  crypto.getRandomValues(bytes);
+  const raw = Array.from(bytes, byte => alphabet[byte % alphabet.length]).join("");
+  return raw.match(/.{1,5}/g).join("-");
+}
+
+function bytesToBase64Url(bytes) {
+  const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
+  let result = "";
+  for (let index = 0; index < bytes.length; index += 3) {
+    const a = bytes[index];
+    const b = index + 1 < bytes.length ? bytes[index + 1] : 0;
+    const c = index + 2 < bytes.length ? bytes[index + 2] : 0;
+    result += alphabet[a >> 2];
+    result += alphabet[((a & 3) << 4) | (b >> 4)];
+    if (index + 1 < bytes.length) result += alphabet[((b & 15) << 2) | (c >> 6)];
+    if (index + 2 < bytes.length) result += alphabet[c & 63];
+  }
+  return result;
+}
+
+function escapeHtml(value) {
+  return String(value).replace(/[&<>"']/g, character => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#39;" })[character]);
+}
+
+function mcpJsonRpcResult(id, result) {
+  return new Response(JSON.stringify({ jsonrpc: "2.0", id, result }), {
+    status: 200,
+    headers: { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" }
+  });
+}
+
+function mcpJsonRpcError(id, code, message) {
+  return new Response(JSON.stringify({ jsonrpc: "2.0", id, error: { code, message } }), {
+    status: 200,
+    headers: { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" }
+  });
+}
 
 async function queryRecords(env, body, client) {
   const contractVersion = resolveContractVersion(body.contractVersion);
@@ -431,7 +1114,10 @@ function entitiesForContract(contractVersion) {
 
 function validateV2Record(entity, data) {
   const requiredByEntity = {
+    plan_templates: ["id", "title"],
     routine_templates: ["id", "title", "trainingType", "scene", "role", "lifecycle", "timerVisible", "calendarVisible", "countsTowardTraining", "steps"],
+    daily_plan_items: ["id", "date", "trainingType", "title", "status"],
+    plan_adjustments: ["id", "date", "reason", "toSnapshot"],
     timer_sessions: ["id", "date", "routineId", "routineVersion", "routineDigest", "startedAt", "completion", "calendarVisible", "countsTowardTraining", "activeSeconds", "elapsedSeconds", "pausedSeconds", "devicePlatform", "idempotencyKey"],
     training_logs: ["id", "date", "type", "status", "source", "calendarVisible", "countsTowardTraining"],
     body_metrics: ["id", "date", "observedAt", "context", "source"],
@@ -439,7 +1125,9 @@ function validateV2Record(entity, data) {
     daily_reviews: ["id", "date", "version", "status", "conclusion", "inputDigest", "provider", "model", "generatedAt"],
     plan_import_batches: ["id", "patchId", "patchSchema", "receivedAt", "status", "affectedEntityIds", "counts"],
     goal_sets: ["id", "version", "lifecycle", "effectiveFrom", "goals"],
-    coach_strategies: ["id", "version", "lifecycle", "effectiveFrom", "boundaries"]
+    coach_strategies: ["id", "version", "lifecycle", "effectiveFrom", "boundaries"],
+    planning_runs: ["id", "snapshotDigest", "status", "requestedAt", "period", "source"],
+    coach_plan_patches: ["id", "runId", "status", "receivedAt", "snapshotDigest", "patch"]
   };
   const missing = (requiredByEntity[entity] || []).find(key => data[key] === undefined || data[key] === null || data[key] === "");
   if (missing) return `missing_v2_field:${missing}`;
@@ -457,6 +1145,19 @@ function validateV2Record(entity, data) {
       return !["simple", "prepare_only", "alternating", "bilateral_hold", "bilateral_reps"].includes(step.execution.mode || "simple");
     });
     if (invalidStep) return "invalid_routine_step";
+  }
+  if (entity === "plan_templates") {
+    if (data.status !== undefined && !["draft", "active", "archived"].includes(data.status)) return "invalid_plan_template_status";
+    if (data.lifecycle !== undefined && !isPublishedLifecycle(data.lifecycle)) return "invalid_template_lifecycle";
+  }
+  if (entity === "daily_plan_items") {
+    const types = ["strength", "easy_walk", "quality_walk", "indoor_cardio", "warmup", "cooldown", "recovery", "travel_strength", "seat_recovery", "stretch", "rest"];
+    const statuses = ["planned", "completed", "short_version", "stretch_only", "skipped", "rested", "modified_by_user"];
+    if (!types.includes(data.trainingType)) return "invalid_training_type";
+    if (!statuses.includes(data.status)) return "invalid_completion_status";
+  }
+  if (entity === "plan_adjustments") {
+    if (!isObject(data.toSnapshot) || typeof data.reason !== "string") return "invalid_plan_adjustment";
   }
   if (entity === "status_checkins") {
     if (!["morning", "pre_workout"].includes(data.kind)) return "invalid_checkin_kind";
@@ -497,6 +1198,14 @@ function validateV2Record(entity, data) {
   }
   if (entity === "coach_strategies") {
     if (!isPublishedLifecycle(data.lifecycle) || !isObject(data.boundaries) || !isIsoDate(data.effectiveFrom)) return "invalid_coach_strategy";
+  }
+  if (entity === "planning_runs") {
+    if (data.source !== "chatgpt_mcp" || !["submitted", "failed", "invalidated"].includes(data.status)) return "invalid_planning_run";
+    if (!isIsoTimestamp(data.requestedAt) || !isValidPlanningPeriod(data.period)) return "invalid_planning_run";
+  }
+  if (entity === "coach_plan_patches") {
+    if (!["pending", "confirmed", "applied", "rejected", "invalidated"].includes(data.status)) return "invalid_coach_plan_patch_status";
+    if (!isIsoTimestamp(data.receivedAt) || !isObject(data.patch)) return "invalid_coach_plan_patch_record";
   }
   return null;
 }

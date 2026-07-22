@@ -61,6 +61,10 @@
     "ai_review_module": [
       "daily_reviews"
     ],
+    "planning_exchange_module": [
+      "planning_runs",
+      "coach_plan_patches"
+    ],
     "asset_module": [
       "media_assets"
     ]
@@ -93,6 +97,10 @@
     {
       "id": "G-AI-001",
       "rule": "Daily compatible AI cannot mutate formal plans, adjustments, goals, strategies, or routines."
+    },
+    {
+      "id": "G-AI-002",
+      "rule": "Advanced AI integrations may only submit pending coach_plan_patches; formal plan entities change only after Shenk validates and the user confirms the patch."
     },
     {
       "id": "G-SEC-001",

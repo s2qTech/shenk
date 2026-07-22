@@ -21,7 +21,7 @@ test("Contract v2 is additive over Contract v1", () => {
   const v1Entities = new Set(v1Schema.$defs.entity.enum);
   const v2Entities = new Set(schema.$defs.entity.enum);
   for (const entity of v1Entities) assert.ok(v2Entities.has(entity), `v2 removed ${entity}`);
-  for (const entity of ["status_checkins", "daily_reviews", "plan_import_batches", "goal_sets", "coach_strategies"]) {
+  for (const entity of ["status_checkins", "daily_reviews", "plan_import_batches", "goal_sets", "coach_strategies", "planning_runs", "coach_plan_patches"]) {
     assert.ok(v2Entities.has(entity), `v2 missing ${entity}`);
   }
   assert.equal(schema.$defs.recordEnvelope.allOf.length, v2Entities.size);
@@ -39,7 +39,7 @@ test("Contract v2 encodes authority and explicit routine classification", () => 
 
 test("sanitized v2 records cover every new entity and preserve compatible fields", () => {
   const byEntity = new Map(fixtures.records.map(record => [record.entity, record]));
-  for (const entity of ["routine_templates", "timer_sessions", "body_metrics", "status_checkins", "daily_reviews", "plan_import_batches", "goal_sets", "coach_strategies"]) {
+  for (const entity of ["routine_templates", "timer_sessions", "body_metrics", "status_checkins", "daily_reviews", "plan_import_batches", "goal_sets", "coach_strategies", "planning_runs", "coach_plan_patches"]) {
     const record = byEntity.get(entity);
     assert.ok(record, `missing fixture for ${entity}`);
     assert.equal(record.contractVersion, "2.0");
@@ -86,6 +86,18 @@ test("OpenAPI v2 publishes version negotiation and disjoint entity ownership", (
   assert.deepEqual(owners.timer, ["timer_sessions"]);
   assert.ok(owners.record.includes("status_checkins"));
   assert.ok(owners.ai_review.includes("daily_reviews"));
+  assert.deepEqual(owners.planning_exchange, ["planning_runs", "coach_plan_patches"]);
+});
+
+test("planning exchange fixtures stay pending and cannot imply formal application", () => {
+  const byEntity = new Map(fixtures.records.map(record => [record.entity, record]));
+  const run = byEntity.get("planning_runs").data;
+  const draft = byEntity.get("coach_plan_patches").data;
+  assert.equal(run.source, "chatgpt_mcp");
+  assert.equal(draft.status, "pending");
+  assert.equal(draft.patch.replaceMode, false);
+  assert.equal(draft.runId, run.id);
+  assert.equal(draft.snapshotDigest, run.snapshotDigest);
 });
 
 test("Contract fixtures contain no credential-shaped fields", () => {
