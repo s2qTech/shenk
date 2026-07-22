@@ -210,6 +210,82 @@ test("invalid pairing code stays on a readable retry page", async () => {
   assert.doesNotMatch(body, /invalid_or_expired_pairing_code/);
 });
 
+test("authorization page loads a same-origin submit guard", async () => {
+  const context = loadWorkerContext();
+  const DB = {
+    prepare(sql) {
+      assert.match(sql, /mcp_oauth_clients/);
+      return { bind() { return { first: async () => ({ client_id: "fixture_client", redirect_uris_json: '["https://chatgpt.com/aip/callback"]' }) }; } };
+    }
+  };
+  const url = new URL("https://worker.example/oauth/authorize");
+  for (const [name, value] of new URLSearchParams({
+    response_type: "code",
+    client_id: "fixture_client",
+    redirect_uri: "https://chatgpt.com/aip/callback",
+    state: "fixture_state",
+    code_challenge: "A".repeat(43),
+    code_challenge_method: "S256",
+    scope: "planning:read planning:draft",
+    resource: "https://worker.example/mcp"
+  })) url.searchParams.set(name, value);
+  const pageResponse = await context.__worker.fetch(new Request(url), { DB });
+  const page = await pageResponse.text();
+  assert.equal(pageResponse.status, 200);
+  assert.match(page, /id="oauth-authorization-form"/);
+  assert.match(page, /src="\/oauth\/authorize-ui\.js"/);
+  assert.match(pageResponse.headers.get("Content-Security-Policy"), /script-src 'self'/);
+  assert.match(pageResponse.headers.get("Content-Security-Policy"), /form-action 'self' https:\/\/chatgpt\.com/);
+
+  const scriptResponse = await context.__worker.fetch(new Request("https://worker.example/oauth/authorize-ui.js"), {});
+  const script = await scriptResponse.text();
+  assert.equal(scriptResponse.status, 200);
+  assert.match(scriptResponse.headers.get("Content-Type"), /application\/javascript/);
+  assert.match(script, /event\.preventDefault\(\)/);
+  assert.match(script, /submit\.disabled = true/);
+});
+
+test("a valid pairing approval uses a See Other redirect to the registered callback", async () => {
+  const context = loadWorkerContext();
+  const pairingHash = await context.sha256Hex("ABCDEFGHJKLMNPQRSTUV");
+  const DB = {
+    prepare(sql) {
+      if (sql.includes("mcp_oauth_clients")) {
+        return { bind() { return { first: async () => ({ client_id: "fixture_client", redirect_uris_json: '["https://chatgpt.com/aip/callback"]' }) }; } };
+      }
+      if (sql.includes("SELECT code_hash") && sql.includes("mcp_pairing_codes")) {
+        return { bind(hash) { assert.equal(hash, pairingHash); return { first: async () => ({ code_hash: pairingHash, expires_at: "2099-01-01T00:00:00.000Z", used_at: null }) }; } };
+      }
+      if (sql.includes("UPDATE mcp_pairing_codes")) {
+        return { bind() { return { run: async () => ({ meta: { changes: 1 } }) }; } };
+      }
+      if (sql.includes("INSERT INTO mcp_oauth_authorization_codes")) {
+        return { bind() { return { run: async () => ({ meta: { changes: 1 } }) }; } };
+      }
+      throw new Error(`unexpected SQL: ${sql}`);
+    }
+  };
+  const response = await context.__worker.fetch(oauthAuthorizationRequest(), { DB });
+  assert.equal(response.status, 303);
+  const redirect = new URL(response.headers.get("Location"));
+  assert.equal(redirect.origin + redirect.pathname, "https://chatgpt.com/aip/callback");
+  assert.equal(redirect.searchParams.get("state"), "fixture_state");
+  assert.ok(redirect.searchParams.get("code"));
+});
+
+test("OAuth token errors use the standard error response shape", async () => {
+  const { __worker: worker } = loadWorkerContext();
+  const response = await worker.fetch(new Request("https://worker.example/oauth/token", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({ grant_type: "authorization_code" })
+  }), { DB: { prepare() { throw new Error("must not query invalid token requests"); } } });
+  assert.equal(response.status, 400);
+  assert.deepEqual(await response.json(), { error: "invalid_request" });
+  assert.equal(response.headers.get("Cache-Control"), "no-store");
+  assert.equal(response.headers.get("Pragma"), "no-cache");
+});
+
 test("a pairing code rejected by the conditional consume cannot issue an authorization code", async () => {
   const { __worker: worker } = loadWorkerContext();
   let authorizationCodeInserted = false;

@@ -123,12 +123,21 @@ export default {
         return await renderOAuthAuthorization(request, env);
       }
 
+      if (url.pathname === "/oauth/authorize-ui.js" && request.method === "GET") {
+        return oauthAuthorizationUiScript();
+      }
+
       if (url.pathname === "/oauth/authorize" && request.method === "POST") {
         return await approveOAuthAuthorization(request, env);
       }
 
       if (url.pathname === "/oauth/token" && request.method === "POST") {
-        return json(await exchangeOAuthToken(request, env), 200, request, env);
+        try {
+          return oauthTokenResponse(await exchangeOAuthToken(request, env), 200, request, env);
+        } catch (error) {
+          if (!error.oauthError) throw error;
+          return oauthTokenResponse({ error: error.message }, error.status || 400, request, env);
+        }
       }
 
       if (url.pathname === "/mcp" && request.method === "POST") {
@@ -359,6 +368,7 @@ async function renderOAuthAuthorization(request, env) {
 }
 
 function renderOAuthAuthorizationPage(auth, errorMessage = "") {
+  const callbackOrigin = new URL(auth.redirectUri).origin;
   const hidden = Object.entries(auth.formValues)
     .map(([name, value]) => `<input type="hidden" name="${escapeHtml(name)}" value="${escapeHtml(value)}">`)
     .join("");
@@ -372,18 +382,45 @@ body{margin:0;background:#f5f7f3;color:#17231e;font-family:system-ui,-apple-syst
 main{width:min(420px,calc(100vw - 40px));background:#fff;border:1px solid #dce5df;border-radius:16px;padding:28px;box-shadow:0 18px 50px rgba(25,56,43,.12)}
 h1{font-size:26px;margin:0 0 10px}p{color:#5f7068;line-height:1.6;margin:0 0 22px}label{display:block;font-weight:650;margin-bottom:8px}
 input[type=text]{box-sizing:border-box;width:100%;height:52px;border:1px solid #bac9c0;border-radius:10px;padding:0 14px;font-size:20px;letter-spacing:2px;text-transform:uppercase}
-button{width:100%;height:52px;margin-top:16px;border:0;border-radius:10px;background:#426f59;color:#fff;font-size:17px;font-weight:650}
+button{width:100%;height:52px;margin-top:16px;border:0;border-radius:10px;background:#426f59;color:#fff;font-size:17px;font-weight:650}button:disabled{cursor:wait;opacity:.72}
 small{display:block;color:#7b8a82;margin-top:16px;line-height:1.5}.error{margin:0 0 18px;padding:12px 14px;border:1px solid #e6b8b2;border-radius:10px;background:#fff3f1;color:#9d3329;line-height:1.5}</style></head>
 <body><main><h1>连接 ChatGPT 与身刻</h1><p>输入身刻生成的一次性配对码。授权后 ChatGPT 只能读取规划快照并提交待确认草案。</p>
-${errorNotice}<form method="post" action="/oauth/authorize">${hidden}<label for="pairing_code">一次性配对码</label><input id="pairing_code" name="pairing_code" type="text" inputmode="text" autocomplete="one-time-code" required autofocus><button type="submit">确认连接</button></form>
-<small>配对码十分钟内有效且只能使用一次。正式计划仍需在身刻中确认。</small></main></body></html>`;
+${errorNotice}<form id="oauth-authorization-form" method="post" action="/oauth/authorize">${hidden}<label for="pairing_code">一次性配对码</label><input id="pairing_code" name="pairing_code" type="text" inputmode="text" autocomplete="one-time-code" required autofocus><button id="oauth-submit" type="submit">确认连接</button></form>
+<small>配对码十分钟内有效且只能使用一次。正式计划仍需在身刻中确认。</small></main><script src="/oauth/authorize-ui.js" defer></script></body></html>`;
   return new Response(body, {
     status: errorMessage ? 401 : 200,
     headers: {
       "Content-Type": "text/html; charset=utf-8",
       "Cache-Control": "no-store",
-      "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'",
+      "Content-Security-Policy": `default-src 'none'; style-src 'unsafe-inline'; script-src 'self'; form-action 'self' ${callbackOrigin}; base-uri 'none'; frame-ancestors 'none'`,
       "Referrer-Policy": "no-referrer"
+    }
+  });
+}
+
+function oauthAuthorizationUiScript() {
+  const source = `(() => {
+  const form = document.getElementById("oauth-authorization-form");
+  const submit = document.getElementById("oauth-submit");
+  if (!form || !submit) return;
+  let submitted = false;
+  form.addEventListener("submit", event => {
+    if (submitted) {
+      event.preventDefault();
+      return;
+    }
+    submitted = true;
+    submit.disabled = true;
+    submit.setAttribute("aria-busy", "true");
+    submit.textContent = "正在连接…";
+  });
+})();`;
+  return new Response(source, {
+    status: 200,
+    headers: {
+      "Content-Type": "application/javascript; charset=utf-8",
+      "Cache-Control": "no-store",
+      "X-Content-Type-Options": "nosniff"
     }
   });
 }
@@ -480,7 +517,7 @@ async function approveOAuthAuthorization(request, env) {
   const redirect = new URL(auth.redirectUri);
   redirect.searchParams.set("code", authorizationCode);
   redirect.searchParams.set("state", auth.state);
-  return Response.redirect(redirect.toString(), 302);
+  return Response.redirect(redirect.toString(), 303);
 }
 
 function normalizePairingCode(value) {
@@ -504,9 +541,7 @@ async function exchangeOAuthToken(request, env) {
   const grantType = String(form.get("grant_type") || "");
   if (grantType === "authorization_code") return exchangeAuthorizationCode(form, env);
   if (grantType === "refresh_token") return exchangeRefreshToken(form, env);
-  const error = new Error("unsupported_grant_type");
-  error.status = 400;
-  throw error;
+  throw oauthTokenFailure("unsupported_grant_type", "unsupported_grant_type", { hasGrantType: Boolean(grantType) });
 }
 
 async function exchangeAuthorizationCode(form, env) {
@@ -515,15 +550,27 @@ async function exchangeAuthorizationCode(form, env) {
   const redirectUri = String(form.get("redirect_uri") || "");
   const verifier = String(form.get("code_verifier") || "");
   const resource = String(form.get("resource") || "");
-  if (!code || !clientId || !redirectUri || !/^[\x21-\x7E]{43,128}$/.test(verifier)) throw oauthInvalidGrant();
+  if (!code || !clientId || !redirectUri || !/^[A-Za-z0-9._~-]{43,128}$/.test(verifier)) {
+    throw oauthTokenFailure("invalid_request", "missing_or_invalid_authorization_code_fields", {
+      hasCode: Boolean(code),
+      hasClientId: Boolean(clientId),
+      hasRedirectUri: Boolean(redirectUri),
+      verifierLength: verifier.length,
+      hasResource: Boolean(resource)
+    });
+  }
   const row = await env.DB.prepare(
     "SELECT code_hash, client_id, redirect_uri, code_challenge, scope, resource, expires_at, used_at FROM mcp_oauth_authorization_codes WHERE code_hash = ?"
   ).bind(await sha256Hex(code)).first();
   const now = new Date();
   const challenge = bytesToBase64Url(new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(verifier))));
-  if (!row || row.used_at || Date.parse(row.expires_at) <= now.getTime() || row.client_id !== clientId || row.redirect_uri !== redirectUri || row.code_challenge !== challenge || (resource && row.resource !== resource)) {
-    throw oauthInvalidGrant();
-  }
+  if (!row) throw oauthTokenFailure("invalid_grant", "authorization_code_not_found");
+  if (row.used_at) throw oauthTokenFailure("invalid_grant", "authorization_code_already_used");
+  if (Date.parse(row.expires_at) <= now.getTime()) throw oauthTokenFailure("invalid_grant", "authorization_code_expired");
+  if (row.client_id !== clientId) throw oauthTokenFailure("invalid_grant", "client_id_mismatch");
+  if (row.redirect_uri !== redirectUri) throw oauthTokenFailure("invalid_grant", "redirect_uri_mismatch");
+  if (row.code_challenge !== challenge) throw oauthTokenFailure("invalid_grant", "pkce_verifier_mismatch", { verifierLength: verifier.length });
+  if (resource && row.resource !== resource) throw oauthTokenFailure("invalid_target", "resource_mismatch", { hasResource: true });
   await env.DB.prepare("UPDATE mcp_oauth_authorization_codes SET used_at = ? WHERE code_hash = ? AND used_at IS NULL")
     .bind(now.toISOString(), row.code_hash).run();
   return issueOAuthTokens(env, { clientId, scope: row.scope, resource: row.resource });
@@ -533,12 +580,20 @@ async function exchangeRefreshToken(form, env) {
   const refreshToken = String(form.get("refresh_token") || "");
   const clientId = String(form.get("client_id") || "");
   const resource = String(form.get("resource") || "");
-  if (!refreshToken || !clientId) throw oauthInvalidGrant();
+  if (!refreshToken || !clientId) throw oauthTokenFailure("invalid_request", "missing_refresh_token_fields", {
+    hasRefreshToken: Boolean(refreshToken),
+    hasClientId: Boolean(clientId),
+    hasResource: Boolean(resource)
+  });
   const refreshHash = await sha256Hex(refreshToken);
   const row = await env.DB.prepare(
     "SELECT refresh_token_hash, client_id, scope, resource, refresh_expires_at, revoked_at FROM mcp_oauth_tokens WHERE refresh_token_hash = ?"
   ).bind(refreshHash).first();
-  if (!row || row.revoked_at || Date.parse(row.refresh_expires_at) <= Date.now() || row.client_id !== clientId || (resource && row.resource !== resource)) throw oauthInvalidGrant();
+  if (!row) throw oauthTokenFailure("invalid_grant", "refresh_token_not_found");
+  if (row.revoked_at) throw oauthTokenFailure("invalid_grant", "refresh_token_revoked");
+  if (Date.parse(row.refresh_expires_at) <= Date.now()) throw oauthTokenFailure("invalid_grant", "refresh_token_expired");
+  if (row.client_id !== clientId) throw oauthTokenFailure("invalid_grant", "refresh_client_id_mismatch");
+  if (resource && row.resource !== resource) throw oauthTokenFailure("invalid_target", "refresh_resource_mismatch", { hasResource: true });
   await env.DB.prepare("UPDATE mcp_oauth_tokens SET revoked_at = ?, updated_at = ? WHERE refresh_token_hash = ? AND revoked_at IS NULL")
     .bind(new Date().toISOString(), new Date().toISOString(), refreshHash).run();
   return issueOAuthTokens(env, { clientId, scope: row.scope, resource: row.resource });
@@ -547,6 +602,14 @@ async function exchangeRefreshToken(form, env) {
 function oauthInvalidGrant() {
   const error = new Error("invalid_grant");
   error.status = 400;
+  return error;
+}
+
+function oauthTokenFailure(code, reason, details = {}) {
+  globalThis.console?.warn?.("oauth_token_exchange_failed", JSON.stringify({ reason, ...details }));
+  const error = new Error(code);
+  error.status = 400;
+  error.oauthError = true;
   return error;
 }
 
@@ -1521,6 +1584,18 @@ function json(payload, status, request, env) {
       ...corsHeaders(request, env),
       "Content-Type": "application/json; charset=utf-8",
       "Cache-Control": "no-store"
+    }
+  });
+}
+
+function oauthTokenResponse(payload, status, request, env) {
+  return new Response(JSON.stringify(payload), {
+    status,
+    headers: {
+      ...corsHeaders(request, env),
+      "Content-Type": "application/json; charset=utf-8",
+      "Cache-Control": "no-store",
+      "Pragma": "no-cache"
     }
   });
 }
