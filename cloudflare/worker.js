@@ -355,9 +355,16 @@ function isAllowedOAuthRedirectUri(value) {
 async function renderOAuthAuthorization(request, env) {
   const url = new URL(request.url);
   const auth = await validateOAuthAuthorizationRequest(url.searchParams, env, url.origin);
+  return renderOAuthAuthorizationPage(auth);
+}
+
+function renderOAuthAuthorizationPage(auth, errorMessage = "") {
   const hidden = Object.entries(auth.formValues)
     .map(([name, value]) => `<input type="hidden" name="${escapeHtml(name)}" value="${escapeHtml(value)}">`)
     .join("");
+  const errorNotice = errorMessage
+    ? `<div class="error" role="alert">${escapeHtml(errorMessage)}</div>`
+    : "";
   const body = `<!doctype html>
 <html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>连接身刻</title><style>
@@ -366,12 +373,12 @@ main{width:min(420px,calc(100vw - 40px));background:#fff;border:1px solid #dce5d
 h1{font-size:26px;margin:0 0 10px}p{color:#5f7068;line-height:1.6;margin:0 0 22px}label{display:block;font-weight:650;margin-bottom:8px}
 input[type=text]{box-sizing:border-box;width:100%;height:52px;border:1px solid #bac9c0;border-radius:10px;padding:0 14px;font-size:20px;letter-spacing:2px;text-transform:uppercase}
 button{width:100%;height:52px;margin-top:16px;border:0;border-radius:10px;background:#426f59;color:#fff;font-size:17px;font-weight:650}
-small{display:block;color:#7b8a82;margin-top:16px;line-height:1.5}</style></head>
+small{display:block;color:#7b8a82;margin-top:16px;line-height:1.5}.error{margin:0 0 18px;padding:12px 14px;border:1px solid #e6b8b2;border-radius:10px;background:#fff3f1;color:#9d3329;line-height:1.5}</style></head>
 <body><main><h1>连接 ChatGPT 与身刻</h1><p>输入身刻生成的一次性配对码。授权后 ChatGPT 只能读取规划快照并提交待确认草案。</p>
-<form method="post" action="/oauth/authorize">${hidden}<label for="pairing_code">一次性配对码</label><input id="pairing_code" name="pairing_code" type="text" inputmode="text" autocomplete="one-time-code" required autofocus><button type="submit">确认连接</button></form>
+${errorNotice}<form method="post" action="/oauth/authorize">${hidden}<label for="pairing_code">一次性配对码</label><input id="pairing_code" name="pairing_code" type="text" inputmode="text" autocomplete="one-time-code" required autofocus><button type="submit">确认连接</button></form>
 <small>配对码十分钟内有效且只能使用一次。正式计划仍需在身刻中确认。</small></main></body></html>`;
   return new Response(body, {
-    status: 200,
+    status: errorMessage ? 401 : 200,
     headers: {
       "Content-Type": "text/html; charset=utf-8",
       "Cache-Control": "no-store",
@@ -454,16 +461,18 @@ async function approveOAuthAuthorization(request, env) {
   ).bind(codeHash).first();
   const now = new Date();
   if (!row || row.used_at || Date.parse(row.expires_at) <= now.getTime()) {
-    const error = new Error("invalid_or_expired_pairing_code");
-    error.status = 401;
-    throw error;
+    return renderOAuthAuthorizationPage(auth, "配对码无效、已使用或已经过期。请回到身刻重新生成，再在十分钟内粘贴到这里。");
   }
   const authorizationCode = randomOpaqueToken(32);
   const authorizationCodeHash = await sha256Hex(authorizationCode);
   const createdAt = now.toISOString();
   const expiresAt = new Date(now.getTime() + MCP_AUTH_CODE_SECONDS * 1000).toISOString();
-  await env.DB.prepare("UPDATE mcp_pairing_codes SET used_at = ? WHERE code_hash = ? AND used_at IS NULL")
-    .bind(createdAt, codeHash).run();
+  const consumed = await env.DB.prepare(
+    "UPDATE mcp_pairing_codes SET used_at = ? WHERE code_hash = ? AND used_at IS NULL AND expires_at > ?"
+  ).bind(createdAt, codeHash, createdAt).run();
+  if (!consumed?.meta?.changes) {
+    return renderOAuthAuthorizationPage(auth, "配对码已被使用或已经过期。请回到身刻重新生成，再在十分钟内粘贴到这里。");
+  }
   await env.DB.prepare(
     `INSERT INTO mcp_oauth_authorization_codes(code_hash, client_id, redirect_uri, code_challenge, scope, resource, expires_at, used_at, created_at)
      VALUES (?, ?, ?, ?, ?, ?, ?, NULL, ?)`

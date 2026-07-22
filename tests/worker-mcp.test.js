@@ -168,3 +168,70 @@ test("pairing endpoint returns a raw code once while writing only its hash", asy
   assert.notEqual(writes[0].args[0], body.pairingCode.replaceAll("-", ""));
   assert.match(writes[0].args[0], /^[a-f0-9]{64}$/);
 });
+
+function oauthAuthorizationRequest() {
+  const form = new URLSearchParams({
+    response_type: "code",
+    client_id: "fixture_client",
+    redirect_uri: "https://chatgpt.com/aip/callback",
+    state: "fixture_state",
+    code_challenge: "A".repeat(43),
+    code_challenge_method: "S256",
+    scope: "planning:read planning:draft",
+    resource: "https://worker.example/mcp",
+    pairing_code: "ABCDE-FGHJK-LMNPQ-RSTUV"
+  });
+  return new Request("https://worker.example/oauth/authorize", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: form
+  });
+}
+
+test("invalid pairing code stays on a readable retry page", async () => {
+  const { __worker: worker } = loadWorkerContext();
+  const DB = {
+    prepare(sql) {
+      if (sql.includes("mcp_oauth_clients")) {
+        return { bind() { return { first: async () => ({ client_id: "fixture_client", redirect_uris_json: '["https://chatgpt.com/aip/callback"]' }) }; } };
+      }
+      if (sql.includes("SELECT code_hash") && sql.includes("mcp_pairing_codes")) {
+        return { bind() { return { first: async () => null }; } };
+      }
+      throw new Error(`unexpected SQL: ${sql}`);
+    }
+  };
+  const response = await worker.fetch(oauthAuthorizationRequest(), { DB });
+  const body = await response.text();
+  assert.equal(response.status, 401);
+  assert.match(response.headers.get("Content-Type"), /text\/html/);
+  assert.match(body, /配对码无效、已使用或已经过期/);
+  assert.match(body, /name="state" value="fixture_state"/);
+  assert.doesNotMatch(body, /invalid_or_expired_pairing_code/);
+});
+
+test("a pairing code rejected by the conditional consume cannot issue an authorization code", async () => {
+  const { __worker: worker } = loadWorkerContext();
+  let authorizationCodeInserted = false;
+  const DB = {
+    prepare(sql) {
+      if (sql.includes("mcp_oauth_clients")) {
+        return { bind() { return { first: async () => ({ client_id: "fixture_client", redirect_uris_json: '["https://chatgpt.com/aip/callback"]' }) }; } };
+      }
+      if (sql.includes("SELECT code_hash") && sql.includes("mcp_pairing_codes")) {
+        return { bind() { return { first: async () => ({ code_hash: "fixture", expires_at: "2099-01-01T00:00:00.000Z", used_at: null }) }; } };
+      }
+      if (sql.includes("UPDATE mcp_pairing_codes")) {
+        return { bind() { return { run: async () => ({ meta: { changes: 0 } }) }; } };
+      }
+      if (sql.includes("mcp_oauth_authorization_codes")) {
+        authorizationCodeInserted = true;
+      }
+      throw new Error(`unexpected SQL: ${sql}`);
+    }
+  };
+  const response = await worker.fetch(oauthAuthorizationRequest(), { DB });
+  assert.equal(response.status, 401);
+  assert.equal(authorizationCodeInserted, false);
+  assert.match(await response.text(), /配对码已被使用或已经过期/);
+});
