@@ -11,6 +11,7 @@
     "timer": ["timer_sessions"],
     "record": ["timer_session_links", "training_logs", "body_metrics", "status_checkins", "weather_logs", "feedback_summaries"],
     "ai_review": ["daily_reviews"],
+    "planning_exchange": ["planning_runs", "coach_plan_patches"],
     "asset": ["media_assets"]
   },
   "servers": [{ "url": "https://shenke-cloud-db.sq-muyi.workers.dev/api" }],
@@ -107,7 +108,8 @@
           "plan_templates", "routine_templates", "daily_plan_items", "plan_adjustments",
           "timer_sessions", "timer_session_links", "training_logs", "body_metrics",
           "weather_logs", "media_assets", "feedback_summaries", "status_checkins",
-          "daily_reviews", "plan_import_batches", "goal_sets", "coach_strategies"
+          "daily_reviews", "plan_import_batches", "goal_sets", "coach_strategies",
+          "planning_runs", "coach_plan_patches"
         ]
       },
       "Error": { "type": "object", "required": ["ok", "error"], "properties": { "ok": { "const": false }, "error": { "type": "string" } } }

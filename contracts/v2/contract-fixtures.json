@@ -201,6 +201,61 @@
         "effectiveFrom": "2099-01-01",
         "boundaries": { "dailyAiMayModifyFormalPlan": false }
       }
+    },
+    {
+      "contractVersion": "2.0",
+      "entity": "planning_runs",
+      "id": "planning_run_fixture_v2_001",
+      "revision": 1,
+      "deviceId": "fixture_chatgpt_mcp",
+      "createdAt": "2099-01-01T16:00:00.000Z",
+      "updatedAt": "2099-01-01T16:00:00.000Z",
+      "deletedAt": null,
+      "data": {
+        "id": "planning_run_fixture_v2_001",
+        "snapshotDigest": "sha256:fixture-planning-snapshot",
+        "status": "submitted",
+        "requestedAt": "2099-01-01T16:00:00.000Z",
+        "submittedAt": "2099-01-01T16:00:00.000Z",
+        "period": {
+          "historyFrom": "2098-12-19",
+          "historyTo": "2099-01-01",
+          "planThrough": "2099-01-15"
+        },
+        "source": "chatgpt_mcp",
+        "patchId": "coach_patch_fixture_v2_001"
+      }
+    },
+    {
+      "contractVersion": "2.0",
+      "entity": "coach_plan_patches",
+      "id": "coach_patch_fixture_v2_001",
+      "revision": 1,
+      "deviceId": "fixture_chatgpt_mcp",
+      "createdAt": "2099-01-01T16:00:00.000Z",
+      "updatedAt": "2099-01-01T16:00:00.000Z",
+      "deletedAt": null,
+      "data": {
+        "id": "coach_patch_fixture_v2_001",
+        "runId": "planning_run_fixture_v2_001",
+        "status": "pending",
+        "receivedAt": "2099-01-01T16:00:00.000Z",
+        "snapshotDigest": "sha256:fixture-planning-snapshot",
+        "patch": {
+          "schema": "coach_plan_patch",
+          "contractVersion": "2.0",
+          "effectiveFrom": "2099-01-02",
+          "replaceMode": false,
+          "planAdjustments": [
+            {
+              "id": "adjustment_fixture_v2_2099-01-02",
+              "date": "2099-01-02",
+              "trainingType": "recovery",
+              "title": "Synthetic recovery adjustment"
+            }
+          ]
+        }
+      }
     }
   ],
   "coachPlanPatch": {

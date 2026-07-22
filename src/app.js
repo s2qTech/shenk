@@ -330,6 +330,7 @@
     feedbackExport: null,
     planPatchText: "",
     planPatchPreview: null,
+    mcpPairing: null,
     editorDrafts: null,
     editorSections: null,
     workouts: [],
@@ -3281,6 +3282,30 @@
           <p class="sync-status ${error ? "sync-error" : ""}">${escapeHtml(`${error || status}${retryText}`)}</p>
         </section>
 
+        <section class="settings-block mcp-connect-block">
+          <div class="settings-block-head">
+            <strong>ChatGPT 规划连接</strong>
+            <span>让 ChatGPT 安全读取规划摘要并提交待确认草案。</span>
+          </div>
+          <label class="mcp-server-url">
+            <span>MCP 服务器地址</span>
+            <div class="mcp-copy-row">
+              <input type="text" readonly value="${escapeHtml(getMcpServerUrl())}">
+              <button type="button" data-action="copy-mcp-url">复制地址</button>
+            </div>
+          </label>
+          <div class="mcp-pairing-actions">
+            <button type="button" class="primary" data-action="create-mcp-pairing" ${state.syncStatus.busy ? "disabled" : ""}>生成一次性配对码</button>
+            ${state.mcpPairing ? `
+              <div class="mcp-pairing-result" role="status">
+                <strong>${escapeHtml(state.mcpPairing.code)}</strong>
+                <span>${escapeHtml(formatPairingExpiry(state.mcpPairing.expiresAt))}</span>
+                <button type="button" data-action="copy-mcp-pairing">复制配对码</button>
+              </div>
+            ` : `<p>在 ChatGPT 新建自定义插件时填写上方地址；授权页面会要求输入此配对码。</p>`}
+          </div>
+        </section>
+
         <details class="settings-block sync-transfer sync-profile-block">
           <summary>
             <strong>多端配置</strong>
@@ -3374,6 +3399,18 @@
 
     app.querySelectorAll("[data-action='load-sync-profile']").forEach((button) => {
       button.addEventListener("click", loadEncryptedSyncProfile);
+    });
+
+    app.querySelectorAll("[data-action='create-mcp-pairing']").forEach((button) => {
+      button.addEventListener("click", requestMcpPairingCode);
+    });
+
+    app.querySelectorAll("[data-action='copy-mcp-url']").forEach((button) => {
+      button.addEventListener("click", () => copyTextWithFallback(getMcpServerUrl(), "MCP 地址已复制"));
+    });
+
+    app.querySelectorAll("[data-action='copy-mcp-pairing']").forEach((button) => {
+      button.addEventListener("click", () => copyTextWithFallback(state.mcpPairing?.code || "", "配对码已复制"));
     });
 
     app.querySelectorAll("[data-timer-filter]").forEach((input) => {
@@ -5184,6 +5221,50 @@
     state.syncStatus.lastResult = isError ? "" : message;
     state.syncStatus.lastError = isError ? message : "";
     state.message = message;
+  }
+
+  function getMcpServerUrl() {
+    const apiBase = normalizeSyncApiBase(state.syncConfig?.apiBase || DEFAULT_CLOUD_API_BASE);
+    return `${apiBase.replace(/\/api\/?$/i, "")}/mcp`;
+  }
+
+  function formatPairingExpiry(value) {
+    const expiresAt = new Date(value);
+    if (Number.isNaN(expiresAt.getTime())) return "10 分钟内有效，仅可使用一次";
+    return `${formatLocalDateTime(expiresAt.toISOString())} 前有效，仅可使用一次`;
+  }
+
+  async function requestMcpPairingCode() {
+    if (state.syncStatus.busy) return;
+    state.syncStatus.busy = true;
+    state.syncStatus.lastError = "";
+    state.mcpPairing = null;
+    render();
+    try {
+      const result = await syncRequest("/mcp/pairing-code", { method: "POST", body: {} });
+      state.mcpPairing = {
+        code: String(result.pairingCode || ""),
+        expiresAt: String(result.expiresAt || "")
+      };
+      setSyncPanelMessage("一次性配对码已生成");
+    } catch (error) {
+      setSyncPanelMessage(error.message || "配对码生成失败", true);
+    } finally {
+      state.syncStatus.busy = false;
+      render();
+    }
+  }
+
+  async function copyTextWithFallback(value, successMessage) {
+    if (!value) return;
+    try {
+      await navigator.clipboard.writeText(value);
+      state.message = successMessage;
+    } catch (error) {
+      window.prompt("复制以下内容：", value);
+      state.message = "浏览器未允许自动复制，已弹出文本";
+    }
+    render();
   }
 
   function getAllSharedRecords() {
