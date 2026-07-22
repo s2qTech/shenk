@@ -715,7 +715,7 @@ function mcpToolDefinitions() {
     {
       name: "get_planning_snapshot",
       title: "Get Shenk planning snapshot",
-      description: "Read a bounded, sanitized snapshot of recent training, body status, current plans, goals, and routines for review and planning.",
+      description: "Read a bounded, sanitized snapshot of recent training, body status, current plans, goals, and routines for review and planning. Use planning.effectiveDailyPlans as the authoritative formal plan for each date; raw daily plan items and adjustments are audit inputs, not competing plans.",
       inputSchema: {
         type: "object",
         properties: {
@@ -786,9 +786,75 @@ async function buildPlanningSnapshot(env, args, client) {
       data
     });
   }
-  const snapshotCore = { contractVersion: "2.0", timezone: "Asia/Shanghai", period, records: grouped };
+  const planning = {
+    semantics: {
+      authoritativeField: "planning.effectiveDailyPlans",
+      resolution: "latest valid adjustment for a date replaces its daily plan snapshot; otherwise the latest daily plan snapshot applies",
+      auditOnlyFields: ["records.daily_plan_items", "records.plan_adjustments"],
+      conflictRule: "a daily plan snapshot and its resolved adjustment are not a conflict and must not be presented as parallel instructions"
+    },
+    effectiveDailyPlans: resolveEffectiveDailyPlans(grouped.daily_plan_items, grouped.plan_adjustments)
+  };
+  const snapshotCore = { contractVersion: "2.0", timezone: "Asia/Shanghai", period, planning, records: grouped };
   const snapshotDigest = `sha256:${await sha256Hex(canonicalStringify(snapshotCore))}`;
   return { ...snapshotCore, generatedAt: new Date().toISOString(), snapshotDigest };
+}
+
+function resolveEffectiveDailyPlans(planRecords = [], adjustmentRecords = []) {
+  const plansByDate = newestPlanningRecordByDate(planRecords, record => record.updatedAt);
+  const adjustmentsByDate = newestPlanningRecordByDate(
+    adjustmentRecords,
+    record => record.data?.adjustedAt || record.updatedAt
+  );
+  const dates = [...new Set([...plansByDate.keys(), ...adjustmentsByDate.keys()])].sort();
+  return dates.map(date => {
+    const plan = plansByDate.get(date) || null;
+    const adjustment = adjustmentsByDate.get(date) || null;
+    if (!adjustment) {
+      return {
+        date,
+        source: "daily_plan_item",
+        dailyPlanItemId: plan?.id || null,
+        adjustmentId: null,
+        data: withPlanningDate(plan?.data || {}, date)
+      };
+    }
+    const adjustmentSnapshot = isObject(adjustment.data?.toSnapshot)
+      ? adjustment.data.toSnapshot
+      : adjustment.data;
+    return {
+      date,
+      source: "adjustment",
+      dailyPlanItemId: adjustment.data?.targetDailyPlanItemId || plan?.id || null,
+      adjustmentId: adjustment.id,
+      adjustedAt: adjustment.data?.adjustedAt || adjustment.updatedAt || null,
+      adjustedBy: adjustment.data?.adjustedBy || null,
+      reason: adjustment.data?.reason || null,
+      data: withPlanningDate(adjustmentSnapshot || {}, date)
+    };
+  });
+}
+
+function newestPlanningRecordByDate(records, timestampFor) {
+  const latest = new Map();
+  for (const record of records || []) {
+    const date = String(record?.data?.date || "").slice(0, 10);
+    if (!isIsoDate(date)) continue;
+    const previous = latest.get(date);
+    if (!previous || comparePlanningRecords(record, previous, timestampFor) > 0) latest.set(date, record);
+  }
+  return latest;
+}
+
+function comparePlanningRecords(left, right, timestampFor) {
+  const leftTime = String(timestampFor(left) || "");
+  const rightTime = String(timestampFor(right) || "");
+  if (leftTime !== rightTime) return leftTime.localeCompare(rightTime);
+  return String(left.id || "").localeCompare(String(right.id || ""));
+}
+
+function withPlanningDate(data, date) {
+  return { ...data, date: String(data?.date || date).slice(0, 10) };
 }
 
 function planningRecordInWindow(entity, data, period) {

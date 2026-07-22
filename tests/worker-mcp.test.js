@@ -149,6 +149,111 @@ test("planning snapshot removes credential-shaped and raw fields", async () => {
   assert.match(snapshot.snapshotDigest, /^sha256:[a-f0-9]{64}$/);
 });
 
+test("planning snapshot resolves one authoritative formal plan per date", async () => {
+  const context = loadWorkerContext();
+  const date = context.dateInTimeZone(new Date(), "Asia/Shanghai");
+  const rows = [
+    {
+      entity: "daily_plan_items",
+      id: "daily_fixture",
+      revision: 1,
+      updated_at: `${date}T01:00:00.000Z`,
+      deleted_at: null,
+      data_json: JSON.stringify({
+        id: "daily_fixture",
+        date,
+        title: "Quality walk",
+        trainingType: "quality_walk",
+        estimatedMinutes: 50,
+        status: "planned"
+      })
+    },
+    {
+      entity: "plan_adjustments",
+      id: "adjustment_older",
+      revision: 1,
+      updated_at: `${date}T02:00:00.000Z`,
+      deleted_at: null,
+      data_json: JSON.stringify({
+        id: "adjustment_older",
+        date,
+        adjustedAt: `${date}T09:00:00+08:00`,
+        reason: "Earlier adjustment",
+        toSnapshot: { title: "Recovery", trainingType: "recovery", estimatedMinutes: 15 }
+      })
+    },
+    {
+      entity: "plan_adjustments",
+      id: "adjustment_latest",
+      revision: 1,
+      updated_at: `${date}T03:00:00.000Z`,
+      deleted_at: null,
+      data_json: JSON.stringify({
+        id: "adjustment_latest",
+        date,
+        targetDailyPlanItemId: "daily_fixture",
+        adjustedAt: `${date}T10:00:00+08:00`,
+        adjustedBy: "coach",
+        reason: "Latest adjustment",
+        toSnapshot: { title: "Easy walk", trainingType: "easy_walk", estimatedMinutes: 35 }
+      })
+    }
+  ];
+  const DB = {
+    prepare() {
+      return { bind() { return { all: async () => ({ results: rows }) }; } };
+    }
+  };
+
+  const snapshot = await context.buildPlanningSnapshot({ DB }, {}, { scopes: ["planning:read"] });
+  assert.equal(snapshot.planning.semantics.authoritativeField, "planning.effectiveDailyPlans");
+  assert.equal(snapshot.planning.effectiveDailyPlans.length, 1);
+  assert.deepEqual(JSON.parse(JSON.stringify(snapshot.planning.effectiveDailyPlans[0])), {
+    date,
+    source: "adjustment",
+    dailyPlanItemId: "daily_fixture",
+    adjustmentId: "adjustment_latest",
+    adjustedAt: `${date}T10:00:00+08:00`,
+    adjustedBy: "coach",
+    reason: "Latest adjustment",
+    data: { title: "Easy walk", trainingType: "easy_walk", estimatedMinutes: 35, date }
+  });
+});
+
+test("planning snapshot uses the latest daily snapshot when no adjustment exists", async () => {
+  const context = loadWorkerContext();
+  const date = context.dateInTimeZone(new Date(), "Asia/Shanghai");
+  const rows = [
+    {
+      entity: "daily_plan_items",
+      id: "daily_old",
+      revision: 1,
+      updated_at: `${date}T01:00:00.000Z`,
+      deleted_at: null,
+      data_json: JSON.stringify({ id: "daily_old", date, title: "Old", trainingType: "recovery", status: "planned" })
+    },
+    {
+      entity: "daily_plan_items",
+      id: "daily_latest",
+      revision: 1,
+      updated_at: `${date}T02:00:00.000Z`,
+      deleted_at: null,
+      data_json: JSON.stringify({ id: "daily_latest", date, title: "Strength", trainingType: "strength", status: "planned" })
+    }
+  ];
+  const DB = {
+    prepare() {
+      return { bind() { return { all: async () => ({ results: rows }) }; } };
+    }
+  };
+
+  const snapshot = await context.buildPlanningSnapshot({ DB }, {}, { scopes: ["planning:read"] });
+  const effective = snapshot.planning.effectiveDailyPlans[0];
+  assert.equal(effective.source, "daily_plan_item");
+  assert.equal(effective.dailyPlanItemId, "daily_latest");
+  assert.equal(effective.data.title, "Strength");
+});
+
 test("pairing endpoint returns a raw code once while writing only its hash", async () => {
   const context = loadWorkerContext();
   const writes = [];

@@ -32,6 +32,15 @@ Inputs:
 
 The result contains sanitized planning records, the requested period, and `snapshotDigest`. Credential-shaped fields, raw source blobs, and deleted records are excluded.
 
+Formal plan interpretation is explicit:
+
+- `planning.effectiveDailyPlans` is the only authoritative formal-plan view for each date.
+- The latest valid `plan_adjustment` for a date replaces that date's daily plan snapshot.
+- If no adjustment exists, the latest `daily_plan_item` snapshot applies.
+- `records.daily_plan_items` and `records.plan_adjustments` remain available only as audit inputs.
+- A daily plan snapshot and its resolved adjustment are not a conflict and must never be presented as parallel instructions.
+- Actual execution remains separate: `training_logs` are facts and do not rewrite the formal plan history.
+
 ### `submit_coach_plan_patch`
 
 Inputs:
