@@ -174,6 +174,7 @@ function upsert(api, entity, data) {
   reset(api);
   const patch = {
     schema: "coach_plan_patch",
+    contractVersion: "2.0",
     effectiveFrom: "2099-06-01",
     routineTemplates: [{
       id: "routine_quality_walk_test",
@@ -193,6 +194,7 @@ function upsert(api, entity, data) {
       trainingType: "quality_walk",
       title: "Quality Walk Plan",
       estimatedMinutes: 45,
+      status: "planned",
       routineId: "routine_quality_walk_test",
       timerOptions: { restSeconds: 20 }
     }]

@@ -13,7 +13,7 @@
 | 建议 | local fallback suggestion | 没有正式计划时由本地规则产生的兜底方向，权威性低于正式计划 |
 | 实际记录 | `training_logs` | 用户确认后的正式训练、恢复、休息或跳过事实 |
 | 计时事实 | `timer_sessions` | 计时模块生成的执行事实，不能替代用户确认后的实际记录 |
-| 待补记录 | pending completion | 已有计时事实，但尚未补充心率、体感或确认正式记录 |
+| 待补记录 | pending completion | 已有计时事实，且方案快照显式允许计入训练，但尚未补充心率、体感或确认正式记录；可忽略，忽略不修改计时事实 |
 | 方案 / 流程 | `routine_templates` | 可由计时器执行的版本化动作流程 |
 | 场景 | routine `scene` | 方案在 UI 中的明确分组：home、walk、recovery、travel；只读显式字段 |
 | 角色 | routine `role` | 方案在执行/记录中的用途：main、warmup、stretch、cooldown、recovery、auxiliary |

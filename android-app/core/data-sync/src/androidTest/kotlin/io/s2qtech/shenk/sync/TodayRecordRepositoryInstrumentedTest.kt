@@ -106,4 +106,65 @@ class TodayRecordRepositoryInstrumentedTest {
             assertNull(status.pain)
         }
     }
+
+    @Test
+    fun correctionUsesLatestSameDayRecordsAndKeepsTheirIds() {
+        runBlocking {
+            val date = LocalDate.of(2100, 1, 4)
+            repository.saveMorning(
+                checkin = StatusCheckin(
+                    id = "legacy-morning-id",
+                    date = date.toString(),
+                    kind = CheckinKind.MORNING,
+                    observedAt = "2100-01-04T00:00:00Z",
+                    energy = 2,
+                ),
+                metric = BodyMetric(
+                    id = "legacy-metric-id",
+                    date = date.toString(),
+                    observedAt = "2100-01-04T00:00:00Z",
+                    weightKg = 101.0,
+                ),
+            )
+            repository.saveMorning(
+                checkin = StatusCheckin(
+                    id = "current-morning-id",
+                    date = date.toString(),
+                    kind = CheckinKind.MORNING,
+                    observedAt = "2100-01-04T01:00:00Z",
+                    energy = 4,
+                ),
+                metric = BodyMetric(
+                    id = "current-metric-id",
+                    date = date.toString(),
+                    observedAt = "2100-01-04T01:00:00Z",
+                    weightKg = 100.0,
+                ),
+            )
+
+            val beforeCorrection = repository.observe(date).first()
+            assertEquals("current-morning-id", beforeCorrection.morning?.id)
+            assertEquals("current-metric-id", beforeCorrection.metric?.id)
+            assertEquals(4, beforeCorrection.effectiveStatus.energy)
+            assertEquals(100.0, beforeCorrection.metric?.weightKg ?: 0.0, 0.0)
+
+            repository.saveMorning(
+                checkin = beforeCorrection.morning!!.copy(
+                    observedAt = "2100-01-04T02:00:00Z",
+                    energy = 5,
+                ),
+                metric = beforeCorrection.metric!!.copy(
+                    observedAt = "2100-01-04T02:00:00Z",
+                    weightKg = 99.8,
+                ),
+            )
+
+            val afterCorrection = repository.observe(date).first()
+            assertEquals("current-morning-id", afterCorrection.morning?.id)
+            assertEquals("current-metric-id", afterCorrection.metric?.id)
+            assertEquals(5, afterCorrection.effectiveStatus.energy)
+            assertEquals(99.8, afterCorrection.metric?.weightKg ?: 0.0, 0.0)
+            assertEquals(4, database.records().count())
+        }
+    }
 }

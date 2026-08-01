@@ -7,6 +7,7 @@ import io.s2qtech.shenk.model.SharedRecord
 import io.s2qtech.shenk.model.TimerSessionFact
 import io.s2qtech.shenk.model.TimerStepResult
 import io.s2qtech.shenk.model.decodeRoutineTemplate
+import java.time.Instant
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
@@ -68,7 +69,8 @@ class NativeTimerSessionRepository(
     fun observePendingCompletion(): Flow<List<PendingTimerCompletion>> = combine(
         records.observeActive("timer_sessions"),
         records.observeActive("training_logs"),
-    ) { sessions, logs ->
+        records.observeActive("timer_session_links"),
+    ) { sessions, logs, links ->
         val linkedSessionIds = buildSet {
             logs.forEach { record ->
                 record.data.string("timerSessionId")?.let(::add)
@@ -77,8 +79,18 @@ class NativeTimerSessionRepository(
                     ?.let(::addAll)
             }
         }
+        val ignoredSessionIds = links
+            .asSequence()
+            .filter { it.data.string("action") == "ignored" }
+            .mapNotNull { it.data.string("timerSessionId") }
+            .toSet()
         sessions.mapNotNull(::decodeTimerSession)
-            .filter { it.id !in linkedSessionIds && it.completion in setOf("completed", "stopped") }
+            .filter {
+                it.countsTowardTraining &&
+                    it.id !in linkedSessionIds &&
+                    it.id !in ignoredSessionIds &&
+                    it.completion in setOf("completed", "stopped")
+            }
             .sortedByDescending(TimerSessionFact::startedAt)
             .map { session ->
                 PendingTimerCompletion(
@@ -86,6 +98,29 @@ class NativeTimerSessionRepository(
                     routineTitle = session.routineSnapshot.string("title") ?: "训练流程",
                 )
             }
+    }
+
+    suspend fun ignoreCompletion(session: TimerSessionFact): SyncFoundationState {
+        val now = Instant.now().toString()
+        val id = "timer_session_ignore:${session.id}"
+        return records.persistAndEnqueue(
+            SharedRecord.create(
+                entity = "timer_session_links",
+                id = id,
+                data = buildJsonObject {
+                    put("id", JsonPrimitive(id))
+                    put("timerSessionId", JsonPrimitive(session.id))
+                    put("date", JsonPrimitive(session.date))
+                    put("action", JsonPrimitive("ignored"))
+                    put("role", JsonPrimitive("note"))
+                    put("note", JsonPrimitive("用户不将本次计时转为正式训练记录"))
+                    put("createdAt", JsonPrimitive(now))
+                    put("updatedAt", JsonPrimitive(now))
+                },
+                contractVersion = "2.0",
+            ),
+            SharedEntityOwner.RECORD,
+        )
     }
 }
 
@@ -143,8 +178,8 @@ internal fun decodeTimerSession(record: SharedRecord): TimerSessionFact? = runCa
         activeSeconds = data.int("activeSeconds") ?: data.int("actualSeconds") ?: 0,
         elapsedSeconds = data.int("elapsedSeconds") ?: data.int("actualSeconds") ?: 0,
         pausedSeconds = data.int("pausedSeconds") ?: 0,
-        calendarVisible = data.boolean("calendarVisible") ?: true,
-        countsTowardTraining = data.boolean("countsTowardTraining") ?: true,
+        calendarVisible = data.boolean("calendarVisible") ?: false,
+        countsTowardTraining = data.boolean("countsTowardTraining") ?: false,
         interruptionReason = data.string("interruptionReason"),
         stepResults = (data["stepResults"] as? JsonArray).orEmpty().mapNotNull { value ->
             runCatching {

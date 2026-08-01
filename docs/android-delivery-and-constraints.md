@@ -1,7 +1,7 @@
 # Android Delivery Plan and Constraints
 
-Updated: 2026-07-19
-Status: confirmed planning baseline; Packages 0-5 accepted, Package 6 ready to start, progress `6 / 9`
+Updated: 2026-07-20
+Status: confirmed planning baseline; Packages 0-5 accepted, Package 6 implemented and awaiting Xiaomi 14 acceptance, progress `6 / 9`
 
 ## 1. Delivery Model
 
@@ -61,6 +61,7 @@ Exit: a full routine completes on Xiaomi 14 through rotation, interruption, back
 ### Package 6: Plan Inbox and Weekly Feedback
 
 - Android share target and paste fallback.
+- Cloud-synchronized pending draft inbox for MCP-submitted `coach_plan_patches`.
 - Whole-patch validation, preview, apply, and undo-latest.
 - Saturday feedback package and ChatGPT share flow.
 

@@ -37,6 +37,17 @@ test("Contract v2 encodes authority and explicit routine classification", () => 
   assert.equal(schema.$defs.statusCheckin.properties.kind.enum.includes("pre_workout"), true);
 });
 
+test("coach plan imports use one strict v2 merge contract across clients", () => {
+  const patch = schema.$defs.coachPlanPatch;
+  assert.ok(patch.required.includes("contractVersion"));
+  assert.equal(patch.properties.contractVersion.const, "2.0");
+  assert.equal(patch.properties.replaceMode.const, false);
+  for (const field of ["planTemplates", "routineTemplates", "dailyPlanItems", "planAdjustments"]) {
+    const alternatives = patch.properties[field].items.anyOf;
+    assert.ok(alternatives.some(item => item.$ref === "#/$defs/explicitDelete"), `${field} must support explicit deletes`);
+  }
+});
+
 test("sanitized v2 records cover every new entity and preserve compatible fields", () => {
   const byEntity = new Map(fixtures.records.map(record => [record.entity, record]));
   for (const entity of ["routine_templates", "timer_sessions", "body_metrics", "status_checkins", "daily_reviews", "plan_import_batches", "goal_sets", "coach_strategies", "planning_runs", "coach_plan_patches"]) {

@@ -2,8 +2,7 @@
 
 Status: accepted on Xiaomi 14 on 2026-07-19; Android delivery progress `6 / 9`.
 
-Updated: 2026-07-18
-Status: implemented; CI and Xiaomi 14 acceptance pending
+Updated: 2026-07-27
 
 Package 5 acceptance also includes a corrective gate for previously delivered native surfaces: a clean install must expose the existing-data connection flow, and Today/Calendar must render as intentional native product surfaces rather than unstyled functional skeletons. This correction does not start Package 6 or change package progress.
 
@@ -67,6 +66,17 @@ Required Xiaomi 14 acceptance:
 14. Run a long-cue action and a rest step in portrait and landscape. Confirm cues and warnings remain scrollable, the next action is always visible, and previous/next labels cannot wrap because the controls are icons.
 
 Acceptance result: passed. The primary device completed the routine, rotation, persistence, offline/sync, completion, portrait/landscape UI, Chinese TTS, upcoming-action, and music-ducking gates without a crash or duplicate record.
+
+## 2026-07-27 Corrective Gate
+
+- Pending formal-record candidates fail closed. A terminal session is shown under "待补训练记录" only when its immutable snapshot explicitly contains `countsTowardTraining: true`; legacy sessions missing this field are treated as auxiliary facts.
+- Dismissing a pending item writes an additive `timer_session_links` acknowledgement with `action: "ignored"`. It never edits or deletes the source `timer_sessions` fact and does not create a formal training log.
+- A confirmed formal log inherits `calendarVisible` and `countsTowardTraining` from the timer-session snapshot. Auxiliary warm-up, stretch, cue-only, child, and test flows therefore remain outside the calendar and training statistics when their authoritative routine flags are false.
+- Today shows "进入训练" only when the effective formal plan has an explicit `routineId`. Rest, easy-walk, quality-walk, and fallback guidance without a runnable routine remain instructions rather than timer entry points.
+- The exact cached routine supplies its own explicit `scene`; Android does not infer a scene from title, training type, routine ID, or exercise content.
+- Dark surfaces use explicit Material foreground/container roles. Trend values also use semantic favorable/unfavorable colors instead of relying on light-theme defaults.
+
+Corrective verification completed with JVM tests, Kotlin compilation, lint, debug APK assembly, and installation on the connected Xiaomi 14 without clearing user data. HyperOS blocked installation of the separate instrumentation-test APK until its USB-install confirmation is granted; this does not affect the installed application or the in-memory automated test build.
 
 ## Risks and Rollback
 

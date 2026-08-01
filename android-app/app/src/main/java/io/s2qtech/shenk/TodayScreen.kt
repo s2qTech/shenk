@@ -5,6 +5,9 @@ import android.content.pm.PackageManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.ShowChart
+import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -13,7 +16,6 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.rememberScrollState
@@ -23,6 +25,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Scaffold
@@ -70,6 +73,7 @@ fun TodayRoute(
     reminderStore: ReminderSettingsStore,
     cloudConnectionManager: CloudConnectionManager,
     onData: () -> Unit = {},
+    onPlanning: () -> Unit = {},
     onTraining: (TodayGuidance?) -> Unit = {},
 ) {
     val date = remember { LocalDate.now() }
@@ -93,6 +97,12 @@ fun TodayRoute(
     Scaffold(
         snackbarHost = { SnackbarHost(snackbar) },
         containerColor = MaterialTheme.colorScheme.background,
+        bottomBar = {
+            TodayDestinationBar(
+                onData = onData,
+                onPlanning = onPlanning,
+            )
+        },
     ) { innerPadding ->
         TodayScreen(
             records = records,
@@ -103,7 +113,6 @@ fun TodayRoute(
             onReminders = { sheet = TodaySheet.REMINDERS },
             onConnect = { sheet = TodaySheet.CONNECTION },
             cloudConfigured = connection.configured,
-            onData = onData,
             onTraining = { onTraining(records?.guidance) },
         )
     }
@@ -152,7 +161,7 @@ fun TodayRoute(
                         reminderStore.save(value)
                         reminders = value
                         sheet = null
-                        if ((value.morningEnabled || value.middayEnabled) &&
+                        if ((value.morningEnabled || value.middayEnabled || value.weeklyEnabled) &&
                             context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) !=
                             PackageManager.PERMISSION_GRANTED
                         ) {
@@ -219,7 +228,6 @@ private fun TodayScreen(
     onReminders: () -> Unit,
     onConnect: () -> Unit,
     cloudConfigured: Boolean,
-    onData: () -> Unit,
     onTraining: () -> Unit,
 ) {
     Column(
@@ -228,7 +236,6 @@ private fun TodayScreen(
             .testTag("today-screen")
             .verticalScroll(rememberScrollState())
             .statusBarsPadding()
-            .navigationBarsPadding()
             .padding(horizontal = 22.dp, vertical = 18.dp),
     ) {
         Column {
@@ -267,10 +274,33 @@ private fun TodayScreen(
             onMorning = onMorning,
             onPreWorkout = onPreWorkout,
             onReminders = onReminders,
-            onData = onData,
         )
         Spacer(Modifier.height(24.dp))
     }
+}
+
+@Composable
+private fun TodayDestinationBar(
+    onData: () -> Unit,
+    onPlanning: () -> Unit,
+) {
+    ThumbActionDock(
+        actions = listOf(
+            ThumbAction(
+                label = "数据",
+                onClick = onData,
+                testTag = "today-open-data",
+                icon = Icons.AutoMirrored.Rounded.ShowChart,
+            ),
+            ThumbAction(
+                label = "计划",
+                onClick = onPlanning,
+                testTag = "today-open-planning",
+                icon = Icons.Rounded.AutoAwesome,
+            ),
+        ),
+        modifier = Modifier.testTag("today-destination-bar"),
+    )
 }
 
 @Composable
@@ -301,7 +331,7 @@ private fun GuidanceBlock(guidance: io.s2qtech.shenk.model.TodayGuidance, onTrai
                 Spacer(Modifier.height(14.dp))
                 Text(it, style = MaterialTheme.typography.bodyLarge)
             }
-            if (guidance.source != GuidanceSource.ACTUAL) {
+            if (guidance.source != GuidanceSource.ACTUAL && !guidance.routineId.isNullOrBlank()) {
                 Spacer(Modifier.height(20.dp))
                 Button(
                     onClick = onTraining,
@@ -353,7 +383,6 @@ private fun MorningStatusSection(
     onMorning: () -> Unit,
     onPreWorkout: () -> Unit,
     onReminders: () -> Unit,
-    onData: () -> Unit,
 ) {
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -371,7 +400,7 @@ private fun MorningStatusSection(
         FilledTonalButton(
             onClick = onMorning,
             modifier = Modifier.testTag("morning-action"),
-        ) { Text(if (records?.morning == null) "记录" else "调整") }
+        ) { Text(if (records?.morning == null) "记录" else "修改") }
     }
     Spacer(Modifier.height(16.dp))
 
@@ -434,18 +463,10 @@ private fun MorningStatusSection(
         }
         Column(Modifier.fillMaxWidth()) {
             Text("晨间测量", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.outline)
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(
-                    values.joinToString(" · ") { (label, value) -> "$label $value" },
-                    modifier = Modifier.weight(1f),
-                    style = MaterialTheme.typography.titleMedium,
-                )
-                TextButton(onClick = onData, modifier = Modifier.testTag("today-open-data")) { Text("趋势") }
-            }
+            Text(
+                values.joinToString(" · ") { (label, value) -> "$label $value" },
+                style = MaterialTheme.typography.titleMedium,
+            )
         }
     }
     if (records?.morning != null) {

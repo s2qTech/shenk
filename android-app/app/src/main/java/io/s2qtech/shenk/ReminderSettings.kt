@@ -21,7 +21,9 @@ import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import androidx.work.CoroutineWorker
 import io.s2qtech.shenk.sync.TodayRecordRepository
+import io.s2qtech.shenk.sync.SyncScheduler
 import java.time.Duration
+import java.time.DayOfWeek
 import java.time.LocalDate
 import java.time.ZonedDateTime
 import java.util.concurrent.TimeUnit
@@ -38,6 +40,10 @@ data class ReminderSettings(
     val middayEnabled: Boolean = true,
     val middayHour: Int = 12,
     val middayMinute: Int = 30,
+    val weeklyEnabled: Boolean = true,
+    val weeklyDay: Int = DayOfWeek.SATURDAY.value,
+    val weeklyHour: Int = 22,
+    val weeklyMinute: Int = 30,
 )
 
 class ReminderSettingsStore(private val context: Context) {
@@ -49,6 +55,10 @@ class ReminderSettingsStore(private val context: Context) {
             middayEnabled = values[MIDDAY_ENABLED] ?: true,
             middayHour = values[MIDDAY_HOUR] ?: 12,
             middayMinute = values[MIDDAY_MINUTE] ?: 30,
+            weeklyEnabled = values[WEEKLY_ENABLED] ?: true,
+            weeklyDay = values[WEEKLY_DAY] ?: DayOfWeek.SATURDAY.value,
+            weeklyHour = values[WEEKLY_HOUR] ?: 22,
+            weeklyMinute = values[WEEKLY_MINUTE] ?: 30,
         )
     }
 
@@ -60,6 +70,10 @@ class ReminderSettingsStore(private val context: Context) {
             values[MIDDAY_ENABLED] = value.middayEnabled
             values[MIDDAY_HOUR] = value.middayHour
             values[MIDDAY_MINUTE] = value.middayMinute
+            values[WEEKLY_ENABLED] = value.weeklyEnabled
+            values[WEEKLY_DAY] = value.weeklyDay
+            values[WEEKLY_HOUR] = value.weeklyHour
+            values[WEEKLY_MINUTE] = value.weeklyMinute
         }
         ReminderScheduler(context).schedule(value)
     }
@@ -71,6 +85,10 @@ class ReminderSettingsStore(private val context: Context) {
         val MIDDAY_ENABLED = booleanPreferencesKey("midday_enabled")
         val MIDDAY_HOUR = intPreferencesKey("midday_hour")
         val MIDDAY_MINUTE = intPreferencesKey("midday_minute")
+        val WEEKLY_ENABLED = booleanPreferencesKey("weekly_enabled")
+        val WEEKLY_DAY = intPreferencesKey("weekly_day")
+        val WEEKLY_HOUR = intPreferencesKey("weekly_hour")
+        val WEEKLY_MINUTE = intPreferencesKey("weekly_minute")
     }
 }
 
@@ -90,6 +108,28 @@ class ReminderScheduler(private val context: Context) {
             minute = settings.middayMinute,
             kind = "midday",
         )
+        scheduleWeekly(settings)
+    }
+
+    private fun scheduleWeekly(settings: ReminderSettings) {
+        val workManager = WorkManager.getInstance(context)
+        if (!settings.weeklyEnabled) {
+            workManager.cancelUniqueWork(WEEKLY_WORK)
+            return
+        }
+        val now = ZonedDateTime.now()
+        var next = now
+            .with(DayOfWeek.of(settings.weeklyDay.coerceIn(1, 7)))
+            .withHour(settings.weeklyHour)
+            .withMinute(settings.weeklyMinute)
+            .withSecond(0)
+            .withNano(0)
+        if (!next.isAfter(now)) next = next.plusWeeks(1)
+        val request = PeriodicWorkRequestBuilder<WeeklyReviewWorker>(7, TimeUnit.DAYS)
+            .setInitialDelay(Duration.between(now, next))
+            .setConstraints(Constraints.NONE)
+            .build()
+        workManager.enqueueUniquePeriodicWork(WEEKLY_WORK, ExistingPeriodicWorkPolicy.UPDATE, request)
     }
 
     private fun scheduleOne(name: String, enabled: Boolean, hour: Int, minute: Int, kind: String) {
@@ -112,6 +152,55 @@ class ReminderScheduler(private val context: Context) {
     private companion object {
         const val MORNING_WORK = "shenk-morning-checkin"
         const val MIDDAY_WORK = "shenk-midday-checkin"
+        const val WEEKLY_WORK = "shenk-weekly-review"
+    }
+}
+
+class WeeklyReviewWorker(
+    appContext: Context,
+    params: WorkerParameters,
+) : CoroutineWorker(appContext, params) {
+    override suspend fun doWork(): Result {
+        val app = applicationContext as ShenkApplication
+        val settings = ReminderSettingsStore(applicationContext).settings.first()
+        if (!settings.weeklyEnabled) return Result.success()
+        return runCatching {
+            app.planCollaborationRepository.generateWeeklyFeedback()
+            SyncScheduler(applicationContext).enqueue()
+            showNotification()
+            Result.success()
+        }.getOrElse { Result.retry() }
+    }
+
+    private fun showNotification() {
+        val manager = applicationContext.getSystemService(NotificationManager::class.java)
+        manager.createNotificationChannel(
+            NotificationChannel(CHANNEL_ID, "每周复盘", NotificationManager.IMPORTANCE_DEFAULT),
+        )
+        if (applicationContext.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) !=
+            PackageManager.PERMISSION_GRANTED
+        ) return
+        val intent = Intent(applicationContext, MainActivity::class.java)
+            .putExtra(MainActivity.EXTRA_OPEN_SPACE, "feedback")
+        val notification = NotificationCompat.Builder(applicationContext, CHANNEL_ID)
+            .setSmallIcon(android.R.drawable.ic_popup_reminder)
+            .setContentTitle("本周复盘资料已就绪")
+            .setContentText("打开身刻，分享到 ChatGPT 完成本周复盘")
+            .setContentIntent(
+                PendingIntent.getActivity(
+                    applicationContext,
+                    401,
+                    intent,
+                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+                ),
+            )
+            .setAutoCancel(true)
+            .build()
+        NotificationManagerCompat.from(applicationContext).notify(401, notification)
+    }
+
+    private companion object {
+        const val CHANNEL_ID = "weekly_review"
     }
 }
 

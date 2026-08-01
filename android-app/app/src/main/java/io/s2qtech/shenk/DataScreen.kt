@@ -46,6 +46,7 @@ fun DataScreen(
     Column(
         Modifier
             .fillMaxSize()
+            .testTag("data-screen")
             .statusBarsPadding()
             .navigationBarsPadding(),
     ) {
@@ -85,7 +86,8 @@ private fun TrendPanel(trend: MetricTrend, color: Color) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(20.dp),
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+        contentColor = MaterialTheme.colorScheme.onSurface,
     ) {
         Column(Modifier.padding(18.dp)) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
@@ -102,7 +104,7 @@ private fun TrendPanel(trend: MetricTrend, color: Color) {
                     trend.change?.let { change ->
                         Text(
                             "%+.1f %s".format(change, trend.kind.unit),
-                            color = if (change <= 0) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.secondary,
+                            color = trend.changeColor(change),
                         )
                     }
                 }
@@ -121,7 +123,7 @@ private fun TrendPanel(trend: MetricTrend, color: Color) {
 
 @Composable
 private fun TrendCanvas(trend: MetricTrend, color: Color) {
-    val surfaceColor = MaterialTheme.colorScheme.surface
+    val surfaceColor = MaterialTheme.colorScheme.surfaceContainerHigh
     Canvas(Modifier.fillMaxWidth().height(120.dp)) {
         val values = trend.points.map { it.value }
         val rawMin = values.min()
@@ -151,7 +153,8 @@ private fun WaistSummary(trend: MetricTrend) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(20.dp),
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+        contentColor = MaterialTheme.colorScheme.onSurface,
     ) {
         Row(
             Modifier.padding(18.dp),
@@ -173,4 +176,12 @@ private fun WaistSummary(trend: MetricTrend) {
         }
     }
     Spacer(Modifier.height(14.dp))
+}
+
+@Composable
+private fun MetricTrend.changeColor(change: Double): Color {
+    if (abs(change) < 0.05) return MaterialTheme.colorScheme.secondary
+    val lowerIsBetter = kind in setOf(MetricKind.WEIGHT, MetricKind.BODY_FAT, MetricKind.WAIST)
+    val favorable = if (lowerIsBetter) change < 0 else change > 0
+    return if (favorable) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
 }

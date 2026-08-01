@@ -135,6 +135,20 @@
       },
       "additionalProperties": true
     },
+    "explicitDelete": {
+      "type": "object",
+      "required": ["id"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "operation": { "const": "delete" },
+        "deletedAt": { "$ref": "#/$defs/isoTimestamp" }
+      },
+      "anyOf": [
+        { "required": ["operation"] },
+        { "required": ["deletedAt"] }
+      ],
+      "additionalProperties": true
+    },
     "timerSession": {
       "type": "object",
       "required": ["id", "date", "routineId", "routineVersion", "routineDigest", "startedAt", "completion", "calendarVisible", "countsTowardTraining", "activeSeconds", "elapsedSeconds", "pausedSeconds", "devicePlatform", "idempotencyKey"],
@@ -442,11 +456,11 @@
         "contractVersion": { "const": "2.0" },
         "effectiveFrom": { "$ref": "#/$defs/isoDate" },
         "effectiveTo": { "$ref": "#/$defs/isoDate" },
-        "replaceMode": { "type": "boolean", "default": false },
-        "planTemplates": { "type": "array", "items": { "$ref": "#/$defs/planTemplate" } },
-        "routineTemplates": { "type": "array", "items": { "$ref": "#/$defs/routineTemplate" } },
-        "dailyPlanItems": { "type": "array", "items": { "$ref": "#/$defs/dailyPlanItem" } },
-        "planAdjustments": { "type": "array", "items": { "$ref": "#/$defs/planAdjustment" } }
+        "replaceMode": { "const": false, "default": false },
+        "planTemplates": { "type": "array", "items": { "anyOf": [{ "$ref": "#/$defs/planTemplate" }, { "$ref": "#/$defs/explicitDelete" }] } },
+        "routineTemplates": { "type": "array", "items": { "anyOf": [{ "$ref": "#/$defs/routineTemplate" }, { "$ref": "#/$defs/explicitDelete" }] } },
+        "dailyPlanItems": { "type": "array", "items": { "anyOf": [{ "$ref": "#/$defs/dailyPlanItem" }, { "$ref": "#/$defs/explicitDelete" }] } },
+        "planAdjustments": { "type": "array", "items": { "anyOf": [{ "$ref": "#/$defs/planAdjustment" }, { "$ref": "#/$defs/explicitDelete" }] } }
       },
       "additionalProperties": true
     }

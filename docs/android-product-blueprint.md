@@ -1,7 +1,7 @@
 # Android Product Blueprint
 
-Updated: 2026-07-19
-Status: confirmed product direction; Packages 0-5 accepted, Package 6 ready to start
+Updated: 2026-07-22
+Status: confirmed product direction; Packages 0-5 accepted, Package 6 implemented and awaiting Xiaomi 14 acceptance
 
 ## 1. Product Definition
 
@@ -99,6 +99,8 @@ Secondary spaces are reached contextually from the content that owns them:
 - Routine library
 - Settings and backup
 
+Today exposes Data and Plan inbox through one fixed, native thumb-action dock. The same rounded, inset dock language is used for Training scene choices and Calendar's conditional current-date anchor: no primary canvas adds a full-width separator above its lower controls. The Today dock can accept later AI or recognition capabilities without changing the primary three-canvas model. These destinations must not be duplicated as inline title/subtitle/chevron rows or measurement-level text links inside Today content.
+
 Formal training history is not a separate primary or secondary destination. It is read through the calendar and date details so the same facts are not duplicated into a competing Records page. Today and Training do not repeat Calendar/Today shortcuts in the top-right corner; the primary pager, system back behavior, and pager accessibility semantics own movement between the three canvases.
 
 The final navigation control may be refined during visual prototyping, but a conventional five-tab Web layout must not be treated as the default.
@@ -114,6 +116,7 @@ Today is one adaptable canvas rather than a dashboard of nested cards.
 - Measurement delta from yesterday or the recent baseline when useful.
 - A small list of genuinely missing information, not a permanent checklist.
 - The record/adjust command is the only prominent action in the morning area. Trend, pre-workout delta, and reminder actions remain visually subordinate.
+- Body trends use the single fixed Data destination; the morning measurement summary does not add a second inline trend link.
 
 ### Daytime State
 
@@ -157,7 +160,7 @@ The Android month surface uses a continuous vertical date stream rather than a s
 - Formal plans describe the planned activity rather than an invented clock time or duration. Duration is shown in the stream only when it comes from an actual record.
 - Local fallback suggestions omit generic explanatory copy; their lower authority is communicated by the gray patterned treatment and the `建议` source label.
 - Today is always easy to return to and can expand through a container transformation rather than a hard page jump.
-- The primary horizontal transition uses the pager's native translation without simultaneously scaling and fading whole Calendar/Today/Training surfaces. The three bounded primary canvases may remain precomposed to make return-to-Today deterministic; frame stability takes priority over ornamental depth effects.
+- The primary horizontal transition uses the pager's native translation without simultaneously scaling and fading whole Calendar/Today/Training surfaces. Pages share one continuous background with zero visual gutter, so swiping never exposes a bright seam in dark mode. The three bounded primary canvases may remain precomposed to make return-to-Today deterministic; frame stability takes priority over ornamental depth effects.
 - The default month view prioritizes completion rhythm and upcoming formal plans.
 - A day normally displays one effective training item. Multiple source records remain available in date details.
 

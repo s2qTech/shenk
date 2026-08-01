@@ -88,6 +88,21 @@ class LocalFirstRepository(
         return SyncFoundationState.QUEUED
     }
 
+    suspend fun persistOwnedBatchAndEnqueue(
+        records: List<Pair<SharedRecord, SharedEntityOwner>>,
+    ): SyncFoundationState {
+        require(records.isNotEmpty()) { "records must not be empty" }
+        records.forEach { (record, writer) ->
+            require(EntityOwnership.canWrite(writer, record.entity)) {
+                "$writer cannot write ${record.entity}"
+            }
+        }
+        database.withTransaction {
+            records.forEach { (record, _) -> queueInTransaction(record) }
+        }
+        return SyncFoundationState.QUEUED
+    }
+
     suspend fun applyRemote(remote: SharedRecord) {
         database.withTransaction {
             val existing = database.records().get(remote.entity, remote.id)

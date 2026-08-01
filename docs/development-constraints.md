@@ -38,7 +38,7 @@
 - `plan_templates`、`routine_templates`、`daily_plan_items`、`plan_adjustments`、`training_logs`、`body_metrics`、`status_checkins`、`daily_reviews`、`media_assets`、`feedback_summaries` 由对应的身刻领域模块写。
 - `timer_sessions` 只由计时模块写；计时模块可位于独立 Web timer 或 Android 身刻应用内。
 - 双方可读共享实体，但只可写自己拥有的实体。
-- `timer_session_links` 只保留旧数据兼容；新流程不再创建纯关联处理记录。
+- `timer_session_links` 的 `linked` / `converted` 仅保留旧数据兼容；新正式记录流程不得用纯关联记录代替 `training_logs`。Android 可写 `action: "ignored"` 作为待补记录的忽略回执，但不得修改对应 `timer_sessions`。
 - 新增实体前必须同时定义 owner、schema、同步策略、迁移和测试。
 
 ## 3. 计划与 routine
@@ -62,6 +62,7 @@
 - 正式记录必须由用户确认保存；计时器事实只可预填草稿。
 - `calendarVisible: false` 的 routine/session 不得进入日历。
 - `countsTowardTraining: false` 的 session 不得成为正式训练候选。
+- 旧 session 缺失 `calendarVisible` 或 `countsTowardTraining` 时必须按 `false` 处理，不得为兼容而推断成正式训练。
 - 儿童、测试、提示和辅助流程默认同时设置上述两个字段为 false。
 
 ## 5. 计时事实
@@ -122,6 +123,7 @@
 - 禁止把桌面 7 列月历等比例压缩到手机。
 - 禁止依赖右侧抽屉和鼠标 hover 才能完成核心任务。
 - 移动端主空间采用 Calendar <- Today -> Training 的连续模型，同时为手势提供可见替代入口。
+- 三个主空间使用连续无缝背景；禁止通过 page spacing 或全宽分隔线制造页面边界。底部高频操作统一使用拇指操作坞语言，页面不得各自发明一套导航条。
 - Room 是本地业务 source of truth；所有保存先本地后 outbox。
 - 计时器必须原生实现，不通过 iframe、外部浏览器或 WebView 作为正式运行时。
 - 常亮、TTS、音频 duck、来电暂停、前台服务、旋转和进程恢复必须通过可测试 adapter 隔离。

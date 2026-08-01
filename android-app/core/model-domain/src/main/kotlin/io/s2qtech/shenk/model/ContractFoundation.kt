@@ -9,6 +9,7 @@ object ContractVersion {
 
 enum class SharedEntityOwner {
     PLANNING,
+    PLANNING_EXCHANGE,
     RECORD,
     TIMER,
     AI_REVIEW,
@@ -26,6 +27,10 @@ object EntityOwnership {
         "goal_sets",
         "coach_strategies",
     )
+    private val planningExchangeOwned = setOf(
+        "planning_runs",
+        "coach_plan_patches",
+    )
     private val recordOwned = setOf(
         "timer_session_links",
         "training_logs",
@@ -37,10 +42,12 @@ object EntityOwnership {
     private val aiOwned = setOf("daily_reviews")
     private val assetOwned = setOf("media_assets")
 
-    val knownEntities: Set<String> = planningOwned + recordOwned + timerOwned + aiOwned + assetOwned
+    val knownEntities: Set<String> =
+        planningOwned + planningExchangeOwned + recordOwned + timerOwned + aiOwned + assetOwned
 
     fun ownerOf(entity: String): SharedEntityOwner = when (entity) {
         in planningOwned -> SharedEntityOwner.PLANNING
+        in planningExchangeOwned -> SharedEntityOwner.PLANNING_EXCHANGE
         in recordOwned -> SharedEntityOwner.RECORD
         in timerOwned -> SharedEntityOwner.TIMER
         in aiOwned -> SharedEntityOwner.AI_REVIEW

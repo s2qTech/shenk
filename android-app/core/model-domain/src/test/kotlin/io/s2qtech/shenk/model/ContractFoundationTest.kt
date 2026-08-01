@@ -60,11 +60,14 @@ class ContractFoundationTest {
     @Test
     fun entityOwnersStaySeparatedAtRepositoryBoundary() {
         assertTrue(EntityOwnership.canWrite(SharedEntityOwner.PLANNING, "daily_plan_items"))
+        assertTrue(EntityOwnership.canWrite(SharedEntityOwner.PLANNING_EXCHANGE, "coach_plan_patches"))
+        assertTrue(EntityOwnership.canWrite(SharedEntityOwner.PLANNING_EXCHANGE, "planning_runs"))
         assertTrue(EntityOwnership.canWrite(SharedEntityOwner.RECORD, "training_logs"))
         assertTrue(EntityOwnership.canWrite(SharedEntityOwner.TIMER, "timer_sessions"))
         assertTrue(EntityOwnership.canWrite(SharedEntityOwner.AI_REVIEW, "daily_reviews"))
         assertTrue(EntityOwnership.canWrite(SharedEntityOwner.ASSET, "media_assets"))
         assertFalse(EntityOwnership.canWrite(SharedEntityOwner.PLANNING, "training_logs"))
+        assertFalse(EntityOwnership.canWrite(SharedEntityOwner.PLANNING, "coach_plan_patches"))
         assertFalse(EntityOwnership.canWrite(SharedEntityOwner.RECORD, "daily_reviews"))
     }
 }

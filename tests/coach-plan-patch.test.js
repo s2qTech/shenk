@@ -150,18 +150,25 @@ function routinePatch(overrides = {}) {
   });
   api.applyCoachPlanPatch({
     schema: "coach_plan_patch",
+    contractVersion: "2.0",
     effectiveFrom: "2099-08-03",
     planAdjustments: [{
+      id: "adjust_new_import",
       date: "2099-08-03",
-      title: "Updated strength",
-      trainingType: "strength",
-      reason: "New import"
+      reason: "New import",
+      toSnapshot: {
+        date: "2099-08-03",
+        title: "Updated strength",
+        trainingType: "strength",
+        status: "planned"
+      }
     }]
   });
   const effective = api.getEffectivePlanForDate("2099-08-03");
   assert.equal(effective.source, "adjustment");
   assert.equal(effective.data.title, "Updated strength");
   assert.equal(effective.data.trainingType, "strength");
+  assert.equal(record(api, "plan_adjustments", "adjust_new_import").contractVersion, "2.0");
 }
 
 {
@@ -185,6 +192,7 @@ function routinePatch(overrides = {}) {
 
   const patch = {
     schema: "coach_plan_patch",
+    contractVersion: "2.0",
     effectiveFrom: "2099-01-01",
     planTemplates: [],
     dailyPlanItems: [],
@@ -202,6 +210,19 @@ function routinePatch(overrides = {}) {
   assert.equal(api.state.records.daily_plan_items.filter((item) => !item.deletedAt).length, 1);
   assert.equal(api.state.records.plan_adjustments.filter((item) => !item.deletedAt).length, 1);
   assert.equal(record(api, "routine_templates", "routine_strength_a").data.title, "New Strength");
+  assert.equal(record(api, "routine_templates", "routine_strength_a").contractVersion, "2.0");
+}
+
+{
+  const api = loadAppTestApi();
+  reset(api);
+  const preview = api.previewPlanPatch({
+    schema: "coach_plan_patch",
+    effectiveFrom: "2099-01-01",
+    routineTemplates: [routinePatch({ id: "routine_missing_contract" })]
+  });
+  assert.equal(preview.valid, false);
+  assert.match(preview.warnings.join("\n"), /contractVersion/);
 }
 
 {
@@ -229,16 +250,16 @@ function routinePatch(overrides = {}) {
 
   const patch = {
     schema: "coach_plan_patch",
+    contractVersion: "2.0",
     effectiveFrom: "2099-02-01",
     replaceMode: true,
     routineTemplates: [routinePatch({ id: "routine_recovery_a", title: "Recovery Routine", trainingType: "recovery" })],
     dailyPlanItems: []
   };
   const preview = api.previewPlanPatch(patch);
-  assert.equal(preview.valid, true);
+  assert.equal(preview.valid, false);
   assert.equal(preview.deleteCount, 0, "replaceMode must not create implicit deletes");
-  assert.match(preview.warnings.join("\n"), /不会改变日历格/);
-  api.applyCoachPlanPatch(patch);
+  assert.match(preview.warnings.join("\n"), /replaceMode/);
   assert.equal(record(api, "daily_plan_items", "daily_replace_guard").deletedAt, null);
 }
 
@@ -254,6 +275,7 @@ function routinePatch(overrides = {}) {
 
   const patch = {
     schema: "coach_plan_patch",
+    contractVersion: "2.0",
     effectiveFrom: "2099-03-01",
     dailyPlanItems: [{ id: "daily_delete_me", operation: "delete" }]
   };
@@ -263,6 +285,7 @@ function routinePatch(overrides = {}) {
   const result = api.applyCoachPlanPatch(patch);
   assert.equal(result.deleted, 1);
   assert.ok(record(api, "daily_plan_items", "daily_delete_me").deletedAt);
+  assert.equal(record(api, "daily_plan_items", "daily_delete_me").contractVersion, "2.0");
 }
 
 {
@@ -271,12 +294,14 @@ function routinePatch(overrides = {}) {
   api.state.workouts = [{ id: "workout_existing", date: "2099-04-01", type: "easyWalk", status: "completed" }];
   const patch = {
     schema: "coach_plan_patch",
+    contractVersion: "2.0",
     effectiveFrom: "2099-04-01",
     dailyPlanItems: [{
       id: "daily_skip_actual",
       date: "2099-04-01",
       trainingType: "strength",
-      title: "Strength"
+      title: "Strength",
+      status: "planned"
     }]
   };
   const preview = api.previewPlanPatch(patch);
@@ -292,6 +317,7 @@ function routinePatch(overrides = {}) {
   reset(api);
   const patch = {
     schema: "coach_plan_patch",
+    contractVersion: "2.0",
     effectiveFrom: "2099-05-01",
     routineTemplates: [{ title: "Missing ID", steps: [{ stepId: "x", durationSeconds: 60 }] }]
   };
@@ -305,6 +331,7 @@ function routinePatch(overrides = {}) {
   reset(api);
   const patch = {
     schema: "coach_plan_patch",
+    contractVersion: "2.0",
     effectiveFrom: "2099-05-02",
     routineTemplates: [routinePatch({
       id: "routine_execution_recovery",
@@ -344,6 +371,7 @@ function routinePatch(overrides = {}) {
   reset(api);
   const patch = {
     schema: "coach_plan_patch",
+    contractVersion: "2.0",
     effectiveFrom: "2099-05-03",
     routineTemplates: [routinePatch({
       id: "routine_bad_execution",
@@ -364,12 +392,14 @@ function routinePatch(overrides = {}) {
   reset(api);
   const patch = {
     schema: "coach_plan_patch",
+    contractVersion: "2.0",
     effectiveFrom: "2099-06-01",
     dailyPlanItems: [{
       id: "daily_missing_routine_id",
       date: "2099-06-01",
       trainingType: "recovery",
       title: "Recovery",
+      status: "planned",
       needsTimer: true
     }]
   };
@@ -384,12 +414,14 @@ function routinePatch(overrides = {}) {
   reset(api);
   const patch = {
     schema: "coach_plan_patch",
+    contractVersion: "2.0",
     effectiveFrom: "2099-06-02",
     dailyPlanItems: [{
       id: "daily_unknown_routine",
       date: "2099-06-02",
       trainingType: "strength",
       title: "Strength",
+      status: "planned",
       routineId: "routine_not_found"
     }]
   };
@@ -405,12 +437,14 @@ function routinePatch(overrides = {}) {
   upsert(api, "routine_templates", routinePatch({ id: "routine_existing_strength", title: "Existing Strength" }));
   const patch = {
     schema: "coach_plan_patch",
+    contractVersion: "2.0",
     effectiveFrom: "2099-06-03",
     dailyPlanItems: [{
       id: "daily_existing_routine",
       date: "2099-06-03",
       trainingType: "strength",
       title: "Strength",
+      status: "planned",
       routineId: "routine_existing_strength"
     }]
   };
@@ -424,16 +458,21 @@ function routinePatch(overrides = {}) {
   reset(api);
   const patch = {
     schema: "coach_plan_patch",
+    contractVersion: "2.0",
     effectiveFrom: "2099-07-01",
     effectiveTo: "2099-07-10",
     planAdjustments: [{
+      id: "adjust_low_pressure_2099_07_01",
       date: "2099-07-01",
-      title: "低压恢复",
-      trainingType: "recovery",
-      estimatedMinutes: 15,
-      status: "planned",
       reason: "主动降负荷。",
-      notes: "做恢复拉伸或完全休息。"
+      toSnapshot: {
+        date: "2099-07-01",
+        title: "低压恢复",
+        trainingType: "recovery",
+        estimatedMinutes: 15,
+        status: "planned",
+        notes: "做恢复拉伸或完全休息。"
+      }
     }]
   };
   const preview = api.previewPlanPatch(patch);
@@ -455,10 +494,21 @@ function routinePatch(overrides = {}) {
   reset(api);
   const patch = {
     schema: "coach_plan_patch",
+    contractVersion: "2.0",
     effectiveFrom: "2099-08-01",
     planAdjustments: [
-      { date: "2099-08-01", title: "Easy walk", trainingType: "easy_walk", reason: "First adjustment" },
-      { date: "2099-08-01", title: "Recovery", trainingType: "recovery", reason: "Second adjustment" }
+      {
+        id: "adjust_easy_walk_2099_08_01",
+        date: "2099-08-01",
+        reason: "First adjustment",
+        toSnapshot: { date: "2099-08-01", title: "Easy walk", trainingType: "easy_walk", status: "planned" }
+      },
+      {
+        id: "adjust_recovery_2099_08_01",
+        date: "2099-08-01",
+        reason: "Second adjustment",
+        toSnapshot: { date: "2099-08-01", title: "Recovery", trainingType: "recovery", status: "planned" }
+      }
     ]
   };
   const result = api.applyCoachPlanPatch(patch);
@@ -508,6 +558,7 @@ function routinePatch(overrides = {}) {
   upsert(api, "routine_templates", routinePatch({ id: "routine_published", lifecycle: "published" }));
   const preview = api.previewPlanPatch({
     schema: "coach_plan_patch",
+    contractVersion: "2.0",
     effectiveFrom: "2099-09-01",
     routineTemplates: [routinePatch({ id: "routine_published", title: "Changed" })]
   });
@@ -520,6 +571,7 @@ function routinePatch(overrides = {}) {
   reset(api);
   const missingRole = api.previewPlanPatch({
     schema: "coach_plan_patch",
+    contractVersion: "2.0",
     effectiveFrom: "2099-10-01",
     routineTemplates: [routinePatch({ id: "routine_missing_role", role: undefined })]
   });
@@ -528,6 +580,7 @@ function routinePatch(overrides = {}) {
 
   const legacyLifecycle = api.previewPlanPatch({
     schema: "coach_plan_patch",
+    contractVersion: "2.0",
     effectiveFrom: "2099-10-01",
     routineTemplates: [routinePatch({ id: "routine_legacy_active", lifecycle: "active" })]
   });
@@ -536,6 +589,7 @@ function routinePatch(overrides = {}) {
 
   const missingVisibility = api.previewPlanPatch({
     schema: "coach_plan_patch",
+    contractVersion: "2.0",
     effectiveFrom: "2099-10-01",
     routineTemplates: [routinePatch({ id: "routine_missing_visibility", calendarVisible: undefined })]
   });

@@ -126,13 +126,11 @@ fun TrainingRoute(
         if (snapshot.state != TimerEngineState.IDLE) return@LaunchedEffect
         val guidance = request.guidance
         launchContext = request
-        preferredScene = guidance?.trainingType?.let(::sceneForTrainingEntry)
         launchNotice = null
-        if (guidance?.source == GuidanceSource.FORMAL_PLAN &&
-            guidance.trainingType in setOf("strength", "recovery")
-        ) {
+        if (guidance?.source == GuidanceSource.FORMAL_PLAN && !guidance.routineId.isNullOrBlank()) {
             val routineId = guidance.routineId
-            val routine = routineId?.let { id -> available.routines.firstOrNull { it.id == id } }
+            val routine = available.routines.firstOrNull { it.id == routineId }
+            preferredScene = routine?.scene
             when {
                 routine != null -> coordinator.select(
                     routine = routine,
@@ -140,7 +138,6 @@ fun TrainingRoute(
                     dailyPlanItemId = guidance.dailyPlanItemId,
                     planTemplateId = guidance.planTemplateId,
                 )
-                routineId == null -> launchNotice = "今天的计划没有指定计时方案，请手动选择。"
                 else -> launchNotice = "计划指定的方案尚未缓存，请联网同步后重试。"
             }
         }
@@ -190,6 +187,12 @@ fun TrainingRoute(
                 launchContext = null
             },
             onPending = { completion = it.session },
+            onIgnorePending = { item ->
+                scope.launch {
+                    sessionRepository.ignoreCompletion(item.session)
+                    SyncScheduler(context).enqueue()
+                }
+            },
         )
         TimerEngineState.PREVIEW -> RoutinePreviewScreen(
             snapshot = snapshot,
@@ -245,6 +248,7 @@ private fun RoutineLibraryScreen(
     notice: String?,
     onSelect: (RoutineTemplate) -> Unit,
     onPending: (PendingTimerCompletion) -> Unit,
+    onIgnorePending: (PendingTimerCompletion) -> Unit,
 ) {
     var scene by remember(preferredScene) { mutableStateOf(preferredScene ?: RoutineScene.HOME) }
     LaunchedEffect(library.routines) {
@@ -258,41 +262,17 @@ private fun RoutineLibraryScreen(
             .testTag("training-screen"),
         containerColor = MaterialTheme.colorScheme.background,
         bottomBar = {
-            Surface(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .navigationBarsPadding()
-                    .testTag("training-scene-dock"),
-                color = MaterialTheme.colorScheme.background,
-            ) {
-                Column {
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-                    Row(
-                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    ) {
-                        RoutineScene.entries.forEach { value ->
-                            if (value == scene) {
-                                Button(
-                                    onClick = { scene = value },
-                                    modifier = Modifier
-                                        .weight(1f)
-                                        .height(50.dp)
-                                        .testTag("scene-${value.name.lowercase()}"),
-                                ) { Text(value.displayName, maxLines = 1) }
-                            } else {
-                                FilledTonalButton(
-                                    onClick = { scene = value },
-                                    modifier = Modifier
-                                        .weight(1f)
-                                        .height(50.dp)
-                                        .testTag("scene-${value.name.lowercase()}"),
-                                ) { Text(value.displayName, maxLines = 1) }
-                            }
-                        }
-                    }
-                }
-            }
+            ThumbActionDock(
+                actions = RoutineScene.entries.map { value ->
+                    ThumbAction(
+                        label = value.displayName,
+                        onClick = { scene = value },
+                        testTag = "scene-${value.name.lowercase()}",
+                        selected = value == scene,
+                    )
+                },
+                modifier = Modifier.testTag("training-scene-dock"),
+            )
         },
     ) { scaffoldPadding ->
         LazyColumn(
@@ -315,16 +295,23 @@ private fun RoutineLibraryScreen(
             }
             items(pending.take(3), key = { it.session.id }) { item ->
                 Surface(
-                    modifier = Modifier.fillMaxWidth().clickable { onPending(item) },
+                    modifier = Modifier.fillMaxWidth(),
                     color = MaterialTheme.colorScheme.tertiaryContainer,
                     shape = RoundedCornerShape(18.dp),
                 ) {
-                    Row(Modifier.padding(18.dp), horizontalArrangement = Arrangement.SpaceBetween) {
-                        Column {
+                    Row(
+                        Modifier.padding(horizontal = 18.dp, vertical = 12.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Column(Modifier.weight(1f)) {
                             Text(item.routineTitle, fontWeight = FontWeight.SemiBold)
                             Text("${item.session.date} · ${formatDuration(item.session.actualSeconds)}", color = MaterialTheme.colorScheme.secondary)
                         }
-                        Text("补记录", color = MaterialTheme.colorScheme.tertiary)
+                        Row {
+                            TextButton(onClick = { onIgnorePending(item) }) { Text("忽略") }
+                            TextButton(onClick = { onPending(item) }) { Text("补记录") }
+                        }
                     }
                 }
             }
@@ -740,11 +727,3 @@ private fun formatDuration(seconds: Int): String = when {
 }
 
 private fun formatClock(seconds: Int): String = "%02d:%02d".format(seconds / 60, seconds % 60)
-
-private fun sceneForTrainingEntry(trainingType: String): RoutineScene? = when (trainingType) {
-    "easy_walk", "quality_walk" -> RoutineScene.WALK
-    "strength" -> RoutineScene.HOME
-    "recovery" -> RoutineScene.RECOVERY
-    "travel_strength", "seat_recovery" -> RoutineScene.TRAVEL
-    else -> null
-}

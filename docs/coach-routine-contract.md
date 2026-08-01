@@ -126,7 +126,7 @@
 ```json
 {
   "schema": "coach_plan_patch",
-  "contractVersion": "1.0",
+  "contractVersion": "2.0",
   "generatedBy": "coach",
   "generatedAt": "YYYY-MM-DDTHH:mm:ss+08:00",
   "effectiveFrom": "YYYY-MM-DD",

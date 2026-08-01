@@ -5,6 +5,7 @@ import io.s2qtech.shenk.sync.LocalFirstRepository
 import io.s2qtech.shenk.sync.CalendarRecordRepository
 import io.s2qtech.shenk.sync.CloudConnectionManager
 import io.s2qtech.shenk.sync.NativeTimerSessionRepository
+import io.s2qtech.shenk.sync.PlanCollaborationRepository
 import io.s2qtech.shenk.sync.RoutineLibraryRepository
 import io.s2qtech.shenk.sync.ShenkDatabase
 import io.s2qtech.shenk.sync.TodayRecordRepository
@@ -37,6 +38,10 @@ class ShenkApplication : Application() {
 
     val timerSessionRepository: NativeTimerSessionRepository by lazy {
         NativeTimerSessionRepository(localFirstRepository)
+    }
+
+    val planCollaborationRepository: PlanCollaborationRepository by lazy {
+        PlanCollaborationRepository(localFirstRepository)
     }
 
     val cloudConnectionManager: CloudConnectionManager by lazy {

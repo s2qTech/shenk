@@ -12,6 +12,7 @@
   const DEFAULT_TIMER_URL = "https://s2qtech.github.io/home-training-timer/";
   const SHARED_SCHEMA_VERSION = "2026-06-19-001";
   const SHARED_CONTRACT_VERSION = "1.0";
+  const PLAN_PATCH_CONTRACT_VERSION = "2.0";
   const AUTO_PUSH_RETRY_DELAYS = [5000, 15000, 60000];
   const LEGACY_CHECKPOINT_INTERVAL_MS = 15 * 60 * 1000;
   const LEGACY_CHECKPOINT_META_KEY = "legacy-snapshot-checkpoint-v2";
@@ -760,6 +761,9 @@
     "strength", "easy_walk", "quality_walk", "indoor_cardio", "warmup",
     "cooldown", "recovery", "travel_strength", "seat_recovery", "stretch", "rest"
   ]);
+  const COMPLETION_STATUSES = new Set([
+    "planned", "completed", "short_version", "stretch_only", "skipped", "rested", "modified_by_user"
+  ]);
 
   function normalizeRoutineTemplateLifecycle(value) {
     const lifecycle = String(value || "").trim().toLowerCase();
@@ -1172,9 +1176,9 @@
     };
   }
 
-  function upsertSharedEnvelope(records, entity, data, existingOverride = null) {
+  function upsertSharedEnvelope(records, entity, data, existingOverride = null, options = {}) {
     const existing = existingOverride || records[entity].find((item) => item.id === data.id) || null;
-    const envelope = makeSharedEnvelope(entity, data, existing);
+    const envelope = makeSharedEnvelope(entity, data, existing, options);
     if (!envelope) return;
     records[entity] = records[entity].filter((item) => item.id !== envelope.id).concat(envelope).sort(compareSharedEnvelopes);
   }
@@ -1201,7 +1205,7 @@
     });
   }
 
-  function makeSharedEnvelope(entity, data, existing = null) {
+  function makeSharedEnvelope(entity, data, existing = null, options = {}) {
     const now = new Date().toISOString();
     const normalized = normalizeSharedEntityData(entity, data);
     if (!normalized) return null;
@@ -1211,7 +1215,7 @@
     return {
       id,
       entity,
-      contractVersion: existing?.contractVersion || data.contractVersion || SHARED_CONTRACT_VERSION,
+      contractVersion: options.contractVersion || existing?.contractVersion || data.contractVersion || SHARED_CONTRACT_VERSION,
       data: normalized,
       revision: existing?.revision || Math.max(1, Math.round(toNullableNumber(data.revision) || 1)),
       deviceId: existing?.deviceId || data.deviceId || getDeviceId(),
@@ -3211,17 +3215,16 @@
     const token = config.token || "";
     const timerToken = config.timerToken || "";
     const configProfileId = config.configProfileId || "";
-    const showConnectionConfig = !(apiBase && token);
     const status = state.syncStatus.busy ? "云端读写中..." : state.syncStatus.lastResult || "未连接";
     const error = state.syncStatus.lastError;
     const retryText = state.syncStatus.retryAt ? `，下次自动重试 ${formatLocalDateTime(state.syncStatus.retryAt)}` : "";
     return `
       <form class="sync-form" id="sync-config-form">
-        <details class="settings-block sync-config-block" ${showConnectionConfig ? "open" : ""}>
-          <summary class="settings-block-head">
+        <section class="settings-block sync-config-block">
+          <div class="settings-block-head">
             <strong>连接配置</strong>
             <span>仅首次连接或更换服务时修改。</span>
-          </summary>
+          </div>
           <div class="settings-block-content">
             <div class="settings-form-grid">
             <label>
@@ -3246,7 +3249,7 @@
               <button type="button" data-action="sync-health">测试连接</button>
             </div>
           </div>
-        </details>
+        </section>
 
         <section class="settings-block sync-status-block">
           <div class="settings-block-head">
@@ -3302,11 +3305,11 @@
           </div>
         </section>
 
-        <details class="settings-block sync-transfer sync-profile-block">
-          <summary>
+        <section class="settings-block sync-transfer sync-profile-block">
+          <div class="settings-block-head">
             <strong>多端配置</strong>
             <span>用一段迁移码连接新浏览器</span>
-          </summary>
+          </div>
           <p>旧浏览器生成迁移码；新浏览器粘贴后即可读取配置。云端只保存加密数据和迁移码哈希，不保存明文密钥。</p>
           <label class="sync-transfer-code">
             <span>迁移码</span>
@@ -3323,7 +3326,7 @@
             </div>
           </div>
           <p class="sync-transfer-note">迁移码等同于新设备的钥匙，请只粘贴到自己的浏览器。</p>
-        </details>
+        </section>
       </form>
     `;
   }
@@ -4039,10 +4042,7 @@
   }
 
   function getPatchPlanTemplates(patch) {
-    const list = getPatchArray(patch, "planTemplates");
-    if (list.length) return list;
-    const single = patch?.planTemplate;
-    return isNonEmptyObject(single) ? [single] : [];
+    return getPatchArray(patch, "planTemplates");
   }
 
   function isNonEmptyObject(value) {
@@ -4056,7 +4056,7 @@
 
   function isPatchDeleteItem(item) {
     if (!item || typeof item !== "object") return false;
-    const operation = String(item.operation || item.op || item.action || "").trim().toLowerCase();
+    const operation = String(item.operation || "").trim().toLowerCase();
     return operation === "delete" || Boolean(item.deletedAt || item.deleted_at);
   }
 
@@ -4224,7 +4224,6 @@
   function previewPlanPatch(patch) {
     const errors = validateCoachPlanPatch(patch);
     const warnings = [...errors];
-    if (patch?.replaceMode) warnings.push("检测到 replaceMode: true。身刻仍按安全合并处理，只有明确 operation: delete 或 deletedAt 的记录才会删除。");
     const now = new Date().toISOString();
     const availableRoutineIds = getAvailableRoutineIdsForPatch(patch);
     const planPreview = buildPatchEntityPreview(
@@ -4315,20 +4314,39 @@
     const errors = [];
     if (!patch || typeof patch !== "object") return ["计划草案不是有效对象。"];
     if (patch.schema !== "coach_plan_patch") errors.push("schema 必须是 coach_plan_patch。");
-    if (patch.contractVersion && patch.contractVersion !== SHARED_CONTRACT_VERSION) errors.push(`contractVersion 仅支持 ${SHARED_CONTRACT_VERSION}。`);
+    if (patch.contractVersion !== PLAN_PATCH_CONTRACT_VERSION) errors.push(`contractVersion 必须是 ${PLAN_PATCH_CONTRACT_VERSION}。`);
     if (!isIsoDate(patch.effectiveFrom)) errors.push("effectiveFrom 必须是 YYYY-MM-DD。");
     if (patch.effectiveTo && !isIsoDate(patch.effectiveTo)) errors.push("effectiveTo 必须是 YYYY-MM-DD。");
+    if (patch.replaceMode === true) errors.push("计划草案只接受 merge/upsert，不接受 replaceMode: true。");
+    if (patch.planTemplate !== undefined) errors.push("Contract v2 使用 planTemplates 数组，不再接受 planTemplate 单对象。");
+    ["planTemplates", "routineTemplates", "dailyPlanItems", "planAdjustments"].forEach((field) => {
+      if (patch[field] !== undefined && !Array.isArray(patch[field])) errors.push(`${field} 必须是数组。`);
+    });
     const hasPlan = getPatchPlanTemplates(patch).length > 0;
     const hasRoutines = Array.isArray(patch.routineTemplates) && patch.routineTemplates.length;
     const hasDaily = Array.isArray(patch.dailyPlanItems) && patch.dailyPlanItems.length;
     const hasAdjustments = Array.isArray(patch.planAdjustments) && patch.planAdjustments.length;
     if (!hasPlan && !hasRoutines && !hasDaily && !hasAdjustments) errors.push("草案没有可写入的计划内容。");
+    if (hasPlan) {
+      patch.planTemplates.forEach((plan, index) => {
+        const path = `planTemplates[${index}]`;
+        if (!plan || typeof plan !== "object" || Array.isArray(plan)) {
+          errors.push(`${path} 不是有效对象。`);
+          return;
+        }
+        if (!validatePatchOperation(plan, path, errors)) return;
+        if (isPatchDeleteItem(plan)) return;
+        if (!getPatchItemId(plan)) errors.push(`${path}.id 必填。`);
+        if (!String(plan.title || "").trim()) errors.push(`${path}.title 必填。`);
+      });
+    }
     if (hasRoutines) {
       patch.routineTemplates.forEach((routine, routineIndex) => {
         if (!routine || typeof routine !== "object") {
           errors.push(`routineTemplates[${routineIndex}] 不是有效对象。`);
           return;
         }
+        if (!validatePatchOperation(routine, `routineTemplates[${routineIndex}]`, errors)) return;
         if (isPatchDeleteItem(routine)) {
           if (!getPatchItemId(routine)) errors.push(`routineTemplates[${routineIndex}] 删除操作缺少 id。`);
           return;
@@ -4341,14 +4359,49 @@
       patch.dailyPlanItems.forEach((item, index) => {
         if (!item || typeof item !== "object") {
           errors.push(`dailyPlanItems[${index}] 不是有效对象。`);
+        } else if (!validatePatchOperation(item, `dailyPlanItems[${index}]`, errors)) {
+          return;
         } else if (isPatchDeleteItem(item)) {
           if (!getPatchItemId(item)) errors.push(`dailyPlanItems[${index}] 删除操作缺少 id。`);
-        } else if (!isIsoDate(item.date)) {
-          errors.push(`dailyPlanItems[${index}] 缺少有效日期。`);
+        } else {
+          const path = `dailyPlanItems[${index}]`;
+          if (!getPatchItemId(item)) errors.push(`${path}.id 必填。`);
+          if (!isIsoDate(item.date)) errors.push(`${path}.date 必须是 YYYY-MM-DD。`);
+          if (!String(item.title || "").trim()) errors.push(`${path}.title 必填。`);
+          if (!ROUTINE_TRAINING_TYPES.has(String(item.trainingType || "").trim())) errors.push(`${path}.trainingType 无效。`);
+          if (!COMPLETION_STATUSES.has(String(item.status || "").trim())) errors.push(`${path}.status 无效。`);
+        }
+      });
+    }
+    if (hasAdjustments) {
+      patch.planAdjustments.forEach((adjustment, index) => {
+        const path = `planAdjustments[${index}]`;
+        if (!adjustment || typeof adjustment !== "object" || Array.isArray(adjustment)) {
+          errors.push(`${path} 不是有效对象。`);
+          return;
+        }
+        if (!validatePatchOperation(adjustment, path, errors)) return;
+        if (isPatchDeleteItem(adjustment)) {
+          if (!getPatchItemId(adjustment)) errors.push(`${path} 删除操作缺少 id。`);
+          return;
+        }
+        if (!getPatchItemId(adjustment)) errors.push(`${path}.id 必填。`);
+        if (!isIsoDate(adjustment.date)) errors.push(`${path}.date 必须是 YYYY-MM-DD。`);
+        if (!String(adjustment.reason || "").trim()) errors.push(`${path}.reason 必填。`);
+        if (!adjustment.toSnapshot || typeof adjustment.toSnapshot !== "object" || Array.isArray(adjustment.toSnapshot)) {
+          errors.push(`${path}.toSnapshot 必须是完整计划快照。`);
         }
       });
     }
     return errors;
+  }
+
+  function validatePatchOperation(item, path, errors) {
+    if (item.operation === undefined) return true;
+    const operation = String(item.operation || "").trim().toLowerCase();
+    if (operation === "upsert" || operation === "delete") return true;
+    errors.push(`${path}.operation 只能是 upsert 或 delete。`);
+    return false;
   }
 
   function validateRoutineTemplateAuthority(routine, routineIndex, errors) {
@@ -4372,9 +4425,18 @@
   function validateRoutineTemplateSteps(routine, routineIndex, errors) {
     const steps = Array.isArray(routine.steps) ? routine.steps : parseJsonArrayValue(routine.stepsJson || routine.steps_json);
     steps.forEach((step, stepIndex) => {
-      if (!step || typeof step !== "object" || Array.isArray(step) || step.execution === undefined || step.execution === null) return;
+      const stepPath = `routineTemplates[${routineIndex}].steps[${stepIndex}]`;
+      if (!step || typeof step !== "object" || Array.isArray(step)) {
+        errors.push(`${stepPath} 不是有效对象。`);
+        return;
+      }
+      if (!String(step.stepId || "").trim()) errors.push(`${stepPath}.stepId 必填。`);
+      if (!Number.isFinite(Number(step.durationSeconds)) || Number(step.durationSeconds) <= 0) {
+        errors.push(`${stepPath}.durationSeconds 必须大于 0。`);
+      }
+      if (step.execution === undefined || step.execution === null) return;
       const execution = step.execution;
-      const path = `routineTemplates[${routineIndex}].steps[${stepIndex}].execution`;
+      const path = `${stepPath}.execution`;
       if (!execution || typeof execution !== "object" || Array.isArray(execution)) {
         errors.push(`${path} 必须是对象。`);
         return;
@@ -4496,7 +4558,7 @@
 
   function applyPatchEntityRecord(entity, rawItem, normalizedData, counters, now) {
     if (isPatchDeleteItem(rawItem)) {
-      const deleted = markSharedRecordDeleted(entity, rawItem, now);
+      const deleted = markSharedRecordDeleted(entity, rawItem, now, PLAN_PATCH_CONTRACT_VERSION);
       counters[deleted ? "deleted" : "skipped"] += 1;
       return { applied: deleted, action: deleted ? "deleted" : "skipped" };
     }
@@ -4505,13 +4567,15 @@
       return { applied: false, action: "skipped" };
     }
     const existing = findSharedRecordById(entity, normalizedData.id, true);
-    upsertSharedEnvelope(state.records, entity, normalizedData, existing);
+    upsertSharedEnvelope(state.records, entity, normalizedData, existing, {
+      contractVersion: PLAN_PATCH_CONTRACT_VERSION
+    });
     const added = !existing || existing.deletedAt;
     counters[added ? "added" : "updated"] += 1;
     return { applied: true, action: added ? "added" : "updated" };
   }
 
-  function markSharedRecordDeleted(entity, rawItem, now) {
+  function markSharedRecordDeleted(entity, rawItem, now, contractVersion = null) {
     const id = getPatchItemId(rawItem);
     if (!id) return false;
     const existing = findSharedRecordById(entity, id, true);
@@ -4525,6 +4589,7 @@
     };
     const envelope = {
       ...existing,
+      contractVersion: contractVersion || existing.contractVersion || SHARED_CONTRACT_VERSION,
       data,
       updatedAt: now,
       deletedAt,

@@ -1599,40 +1599,17 @@ textarea {
   padding-bottom: 10px;
 }
 
-details.settings-block > summary {
-  cursor: pointer;
-  list-style: none;
-}
-
-details.settings-block > summary::-webkit-details-marker {
-  display: none;
-}
-
-details.settings-block > summary::after {
-  content: "⌄";
-  color: var(--muted);
-  font-size: 18px;
-  line-height: 1;
-  transition: transform 0.16s ease;
-}
-
-details.settings-block[open] > summary::after {
-  transform: rotate(180deg);
-}
-
 .settings-block-content {
   display: grid;
   gap: 12px;
 }
 
-.settings-block-head strong,
-.sync-transfer summary strong {
+.settings-block-head strong {
   color: var(--ink);
   font-size: 16px;
 }
 
-.settings-block-head span,
-.sync-transfer summary span {
+.settings-block-head span {
   min-width: 0;
   color: var(--muted);
   font-size: 12px;
@@ -1698,17 +1675,8 @@ details.settings-block[open] > summary::after {
   background: var(--surface-2);
 }
 
-.sync-transfer summary,
 .sync-advanced summary {
   cursor: pointer;
-}
-
-.sync-transfer summary {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  flex-wrap: wrap;
-  gap: 12px;
 }
 
 .sync-transfer p {
@@ -3350,7 +3318,6 @@ details.settings-block[open] > summary::after {
   }
 
   .settings-block-head,
-  .sync-transfer summary,
   .settings-subsection-head {
     align-items: flex-start;
     flex-direction: column;

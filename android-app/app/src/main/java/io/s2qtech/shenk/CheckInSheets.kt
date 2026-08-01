@@ -191,7 +191,7 @@ fun MorningCheckInSheet(
             onClick = {
                 val now = Instant.now().toString()
                 val checkin = StatusCheckin(
-                    id = "status:${date}:morning",
+                    id = previous?.id ?: "status_checkin:${date}:morning",
                     date = date.toString(),
                     kind = CheckinKind.MORNING,
                     observedAt = now,
@@ -211,7 +211,7 @@ fun MorningCheckInSheet(
                     note = note.takeIf { it.isNotBlank() },
                 )
                 val metric = BodyMetric(
-                    id = "metric:${date}:morning",
+                    id = existing?.metric?.id ?: "body_metric:${date}:morning",
                     date = date.toString(),
                     observedAt = now,
                     weightKg = weight,

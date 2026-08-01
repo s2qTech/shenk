@@ -46,7 +46,7 @@ Contract v2 is additive and is available to compatible clients without replacing
 - The D1 `cloud_records` table remains unchanged because entity data is stored in `data_json`. No destructive database migration is required.
 - Unknown compatible fields are preserved in the record JSON. Clients must retain the raw entity payload when they may round-trip records they do not fully understand.
 - Rollback means returning a client to `1.0`; it does not delete or rewrite v2 records. V2-only records remain stored and become visible again to a v2 client.
-- Production Web clients continue to default to v1 during the migration window. Android may opt into v2 only through its package-specific compatibility gate.
+- Production Web clients continue to default to v1 for general shared-record operations during the migration window. Records added, updated, or explicitly deleted by a confirmed Contract v2 `coach_plan_patch` are written back as v2 envelopes; unrelated legacy records are not rewritten.
 - Plans are modified only through explicit coach/user-confirmed updates, not automatically by the app.
 - `routine_templates` in Cloudflare D1 are the source of truth for timer-executable routines.
 - `home-training-timer` may cache `routine_templates` locally for offline execution, but cache is only a replica.
@@ -236,7 +236,7 @@ Timer runtime speech should use expanded labels such as `准备，小腿直膝�
 
 ## Coach Plan Patch Merge Rules
 
-`coach_plan_patch` is always merge/upsert by default.
+`coach_plan_patch` imports use Contract v2 across Web, Android, Worker, and MCP. New imports must include `contractVersion: "2.0"`; missing or different versions are rejected as a whole. Web and Android persist every record touched by an accepted patch with a v2 envelope, including explicit tombstones.
 
 - Missing entity fields mean "do not process this entity".
 - Empty arrays mean "do not process this entity".
@@ -244,7 +244,7 @@ Timer runtime speech should use expanded labels such as `准备，小腿直膝�
 - `routineTemplates`, `dailyPlanItems`, `planAdjustments`, and `planTemplates` are upserted by `id`.
 - A routine-only patch must not modify plan templates, daily plan items, or adjustments.
 - Existing records may be deleted only when the incoming record explicitly includes `operation: "delete"` or `deletedAt`.
-- `replaceMode` must not be used as an implicit permission to clear records unless deletion records are explicit and shown in preview.
+- `replaceMode: true` is rejected. Collection replacement is not an import mode.
 - The import preview must show add/update/delete counts. Any non-zero delete count requires a second confirmation.
 
 Calendar updates are explicit:
@@ -255,25 +255,15 @@ Calendar updates are explicit:
 - If a patch has no `dailyPlanItems` and no `planAdjustments`, the calendar must not change.
 - If `effectiveTo` is present, the patch should include daily plan items or adjustments covering every date that should change through that date. Missing dates keep existing plans or local fallback suggestions.
 
-`planAdjustments` may use either explicit snapshots or a short inline form. These two are equivalent after normalization:
+New `planAdjustments` imports must use a stable `id` and an explicit `toSnapshot`:
 
 ```json
 {
-  "date": "2026-07-10",
-  "title": "低压恢复",
-  "trainingType": "recovery",
-  "estimatedMinutes": 15,
-  "status": "planned",
-  "reason": "主动降负荷。",
-  "notes": "做恢复拉伸或完全休息。"
-}
-```
-
-```json
-{
+  "id": "adjust_2026-07-10_low_pressure",
   "date": "2026-07-10",
   "reason": "主动降负荷。",
   "toSnapshot": {
+    "date": "2026-07-10",
     "title": "低压恢复",
     "trainingType": "recovery",
     "estimatedMinutes": 15,
@@ -282,6 +272,8 @@ Calendar updates are explicit:
   }
 }
 ```
+
+Existing locally stored legacy adjustments remain readable for backward compatibility, but Web and Android no longer accept the short inline form as a new import.
 
 ### Completion Status
 
@@ -506,7 +498,7 @@ Timer sessions are written by `home-training-timer`.
 
 ## Timer Session Link (Legacy)
 
-`timer_session_links` is kept for older records and schema compatibility. New Web flows should not create link-only handling records. A timer fact becomes part of the official record only when the user opens an editable training draft and saves it as a `training_logs` record with `timerSessionId` and `timerSessionIds`.
+`timer_session_links` is kept for older records and schema compatibility. New flows must not use link-only `linked` or `converted` records as a substitute for a formal log. Android may write an `action: "ignored"` acknowledgement when the user dismisses an unwanted pending completion; this only suppresses the pending prompt and never changes the immutable `timer_sessions` fact. A timer fact becomes part of the official record only when the user opens an editable training draft and saves it as a `training_logs` record with `timerSessionId` and `timerSessionIds`.
 
 ```json
 {

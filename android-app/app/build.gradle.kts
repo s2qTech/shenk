@@ -11,8 +11,8 @@ android {
         applicationId = "io.s2qtech.shenk"
         minSdk = 36
         targetSdk = 36
-        versionCode = 2
-        versionName = "0.5.1-package5"
+        versionCode = 3
+        versionName = "0.6.0-package6"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 

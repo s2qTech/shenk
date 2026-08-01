@@ -197,7 +197,7 @@ fun CalendarScreen(
                 enter = fadeIn() + scaleIn(initialScale = 0.9f),
                 exit = fadeOut() + scaleOut(targetScale = 0.94f),
             ) {
-                ExtendedFloatingActionButton(
+                ThumbDockButton(
                     onClick = {
                         scope.launch {
                             val todayIndex = days.indexOfFirst { it.date == today }
@@ -207,8 +207,8 @@ fun CalendarScreen(
                         }
                     },
                     modifier = Modifier.padding(bottom = 14.dp).testTag("calendar-return-today"),
-                    icon = { Icon(Icons.Rounded.CalendarToday, contentDescription = null) },
-                    text = { Text("今天") },
+                    icon = Icons.Rounded.CalendarToday,
+                    label = "今天",
                 )
             }
         }

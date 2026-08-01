@@ -71,6 +71,27 @@ class TimerRepositoriesInstrumentedTest {
             assertFalse(sessions.persistIfAbsent(fact))
             assertEquals(1, database.outbox().due(Long.MAX_VALUE, 100).count { it.entity == "timer_sessions" })
             assertEquals(1, sessions.observePendingCompletion().first().size)
+
+            sessions.ignoreCompletion(fact)
+            assertTrue(sessions.observePendingCompletion().first().isEmpty())
+            assertEquals(1, database.outbox().due(Long.MAX_VALUE, 100).count { it.entity == "timer_session_links" })
+        }
+    }
+
+    @Test
+    fun completionMustExplicitlyCountTowardTraining() {
+        runBlocking {
+            val repository = NativeTimerSessionRepository(local)
+            local.persistAndEnqueue(
+                timerSessionRecord("session-auxiliary", countsTowardTraining = false),
+                SharedEntityOwner.TIMER,
+            )
+            local.persistAndEnqueue(
+                timerSessionRecord("session-legacy", countsTowardTraining = null),
+                SharedEntityOwner.TIMER,
+            )
+
+            assertTrue(repository.observePendingCompletion().first().isEmpty())
         }
     }
 
@@ -94,6 +115,33 @@ class TimerRepositoriesInstrumentedTest {
                     put("durationSeconds", JsonPrimitive(60))
                 })
             })
+        },
+        contractVersion = "2.0",
+    )
+
+    private fun timerSessionRecord(id: String, countsTowardTraining: Boolean?): SharedRecord = SharedRecord.create(
+        "timer_sessions",
+        id,
+        buildJsonObject {
+            put("id", JsonPrimitive(id))
+            put("date", JsonPrimitive("2026-07-18"))
+            put("routineId", JsonPrimitive("routine-test"))
+            put("routineVersion", JsonPrimitive("1"))
+            put("routineDigest", JsonPrimitive("sha256:test"))
+            put("routineSnapshot", buildJsonObject { put("title", JsonPrimitive("辅助流程")) })
+            put("trainingType", JsonPrimitive("warmup"))
+            put("startedAt", JsonPrimitive("2026-07-18T10:00:00Z"))
+            put("endedAt", JsonPrimitive("2026-07-18T10:05:00Z"))
+            put("completion", JsonPrimitive("completed"))
+            put("actualSeconds", JsonPrimitive(300))
+            put("activeSeconds", JsonPrimitive(300))
+            put("elapsedSeconds", JsonPrimitive(300))
+            put("pausedSeconds", JsonPrimitive(0))
+            put("calendarVisible", JsonPrimitive(false))
+            countsTowardTraining?.let { put("countsTowardTraining", JsonPrimitive(it)) }
+            put("stepResults", buildJsonArray {})
+            put("devicePlatform", JsonPrimitive("android"))
+            put("idempotencyKey", JsonPrimitive(id))
         },
         contractVersion = "2.0",
     )

@@ -48,15 +48,19 @@ class TodayRecordRepository(
         val dateText = date.toString()
         val parsedCheckins = checkins.mapNotNull(::decodeCheckin)
         val parsedMetrics = metrics.mapNotNull(::decodeMetric)
-        val morning = parsedCheckins.firstOrNull { it.date == dateText && it.kind == CheckinKind.MORNING }
-        val preWorkout = parsedCheckins.firstOrNull {
+        val morning = parsedCheckins.filter {
+            it.date == dateText && it.kind == CheckinKind.MORNING
+        }.maxByOrNull { it.observedAt }
+        val preWorkout = parsedCheckins.filter {
             it.date == dateText && it.kind == CheckinKind.PRE_WORKOUT
-        }
+        }.maxByOrNull { it.observedAt }
         TodayRecords(
             date = dateText,
             morning = morning,
             preWorkout = preWorkout,
-            metric = parsedMetrics.firstOrNull { it.date == dateText && it.context == "morning" },
+            metric = parsedMetrics.filter {
+                it.date == dateText && it.context == "morning"
+            }.maxByOrNull { it.observedAt },
             latestMetric = parsedMetrics.maxByOrNull { it.observedAt },
             effectiveStatus = EffectiveStatusResolver.resolve(morning, preWorkout),
             guidance = GuidanceResolution.resolve(date, logs, plans, adjustments).guidance,

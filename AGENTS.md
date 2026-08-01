@@ -6,7 +6,7 @@
 
 - 当前日期基线：2026-07-18。
 - Web 身刻和 Web `home-training-timer` 是可用基线，保持独立仓库和部署。
-- 正式 Android 产品已完成需求收束；Packages 0-5 已通过门禁，进度为 `6 / 9`。Package 5 原生方案库与计时器已通过 CI 和小米 14 真机门禁；开始 Package 6 前仍须收到用户明确指令。
+- 正式 Android 产品已完成需求收束；Packages 0-5 已通过门禁，进度为 `6 / 9`。Package 6 计划收件箱与周复盘已实现并通过自动化门禁，正在等待小米 14 真机验收；验收前不得开始 Package 7。
 - `mobile/` 是冻结的 Capacitor 验证原型，不是正式 Android 基础，不得继续向其中添加生产功能。
 - 正式 Android 技术路线是 Kotlin + Jetpack Compose，生产工程位于 `android-app/`。
 - 正式 Android 是面向当前自用主设备的现代原生产品：只支持当前稳定 Android 平台，默认采用官方兼容交集内最新稳定工具链，不为假设中的旧机型、旧系统或旧 Java 环境保留兼容分支。

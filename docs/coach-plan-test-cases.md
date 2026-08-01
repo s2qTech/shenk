@@ -6,7 +6,9 @@
 ## 基本规则
 
 - 顶层必须是 `schema: "coach_plan_patch"`。
+- 顶层必须显式包含 `contractVersion: "2.0"`；缺失版本或其它版本整份拒绝。
 - 默认是 merge/upsert 模式。
+- 不允许 `replaceMode: true`。
 - 缺省字段表示不处理该实体。
 - 空数组表示不处理该实体。
 - 只有 `operation: "delete"` 或 `deletedAt` 表示删除。
@@ -24,6 +26,7 @@
 ```json
 {
   "schema": "coach_plan_patch",
+  "contractVersion": "2.0",
   "generatedBy": "coach",
   "reason": "说明本次调整原因",
   "effectiveFrom": "YYYY-MM-DD"
@@ -134,6 +137,7 @@
 ```json
 {
   "schema": "coach_plan_patch",
+  "contractVersion": "2.0",
   "generatedBy": "coach",
   "reason": "只更新恢复流程",
   "effectiveFrom": "2099-01-01",
@@ -175,6 +179,7 @@
 ```json
 {
   "schema": "coach_plan_patch",
+  "contractVersion": "2.0",
   "generatedBy": "coach",
   "reason": "更新拉伸动作执行结构",
   "effectiveFrom": "2099-01-02",
@@ -224,6 +229,7 @@
 ```json
 {
   "schema": "coach_plan_patch",
+  "contractVersion": "2.0",
   "generatedBy": "coach",
   "reason": "新增未来普通走计划",
   "effectiveFrom": "2099-02-01",
@@ -277,6 +283,7 @@
 ```json
 {
   "schema": "coach_plan_patch",
+  "contractVersion": "2.0",
   "generatedBy": "coach",
   "reason": "测试已有记录保护",
   "effectiveFrom": "2099-03-01",
@@ -306,6 +313,7 @@
 ```json
 {
   "schema": "coach_plan_patch",
+  "contractVersion": "2.0",
   "generatedBy": "coach",
   "reason": "取消某天计划",
   "effectiveFrom": "2099-04-01",
@@ -330,6 +338,7 @@
 ```json
 {
   "schema": "coach_plan_patch",
+  "contractVersion": "2.0",
   "generatedBy": "coach",
   "reason": "无效流程测试",
   "effectiveFrom": "2099-05-01",

@@ -35,7 +35,7 @@ fun ReminderSettingsSheet(
             .navigationBarsPadding()
             .padding(horizontal = 22.dp, vertical = 8.dp),
     ) {
-        Text("状态提醒", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.SemiBold)
+        Text("提醒", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.SemiBold)
         Text(
             "只提醒一次；已经记录后不会再出现。",
             color = MaterialTheme.colorScheme.secondary,
@@ -49,6 +49,16 @@ fun ReminderSettingsSheet(
             onEnabled = { value = value.copy(morningEnabled = it) },
             onTime = { hour, minute -> value = value.copy(morningHour = hour, morningMinute = minute) },
         )
+        Spacer(Modifier.height(22.dp))
+        ReminderRow(
+            title = "周复盘",
+            enabled = value.weeklyEnabled,
+            hour = value.weeklyHour,
+            minute = value.weeklyMinute,
+            onEnabled = { value = value.copy(weeklyEnabled = it) },
+            onTime = { hour, minute -> value = value.copy(weeklyHour = hour, weeklyMinute = minute) },
+        )
+        Text("每周六生成资料，提醒你分享到 ChatGPT。", color = MaterialTheme.colorScheme.secondary)
         Spacer(Modifier.height(22.dp))
         ReminderRow(
             title = "中午补记",

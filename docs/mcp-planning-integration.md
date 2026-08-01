@@ -20,6 +20,20 @@ This integration lets a scheduled ChatGPT task read a bounded Shenk planning sna
 3. Complete authorization by entering the pairing code in the Worker authorization page.
 4. The pairing code is consumed once and is never stored in plaintext.
 
+## End-to-end operating flow
+
+The three surfaces have different responsibilities. They are not interchangeable:
+
+1. **ChatGPT Web** calls `get_planning_snapshot`, reasons over `planning.effectiveDailyPlans`, and shows the proposed result in the conversation.
+2. **ChatGPT Web** calls `submit_coach_plan_patch` only after it has a complete Contract v2 patch. Submission creates a `coach_plan_patches` record with status `pending`; it does not change the calendar.
+3. **Cloudflare Worker + D1** stores the planning run and pending patch. It validates the exchange boundary but never applies the patch to formal planning entities.
+4. **Shenk Android** performs normal cloud synchronization. The pending record then appears under `Today -> Plan collaboration -> Drafts`.
+5. **Shenk Android** validates the whole patch and previews additions, updates, and deletions. A failed validation writes nothing.
+6. **The user in Shenk Android** chooses Apply or Reject. Apply writes formal plan records, the import batch, and the handled patch state to Room/outbox in one transaction. Reject changes only the exchange record status.
+7. **Shenk Android cloud sync** uploads the local result. Handled drafts no longer appear in the pending inbox, while formal calendar priority remains actual record > effective formal plan > local fallback suggestion.
+
+Manual sharing or paste remains an offline fallback. It enters the same Android validation and confirmation path but does not create a cloud `coach_plan_patches` exchange record first.
+
 ## Tools
 
 ### `get_planning_snapshot`

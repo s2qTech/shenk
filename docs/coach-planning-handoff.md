@@ -8,6 +8,8 @@
 
 `coach_plan_patch` 默认是 merge/upsert。计划端只输出本次需要新增、更新或删除的实体字段。
 
+- 所有新草案必须显式使用 `contractVersion: "2.0"`；Web、Android 和 MCP 共用同一校验规则。
+- `replaceMode: true`、缺失版本、旧版本以及 `planTemplate` 单对象均整份拒绝。
 - 不需要修改的实体字段直接省略。
 - 不推荐输出 `planTemplates: []`、`routineTemplates: []`、`dailyPlanItems: []`、`planAdjustments: []`。
 - 身刻会把空数组当作 no-op 兼容处理，但空数组永远不能表示清空。
@@ -123,14 +125,13 @@ Codex 根据摘要输出两部分：
 ```json
 {
   "schema": "coach_plan_patch",
-  "contractVersion": "1.0",
-  "schemaVersion": "1.0",
+  "contractVersion": "2.0",
   "generatedAt": "2026-06-27T21:00:00+08:00",
   "generatedBy": "codex",
   "reason": "根据最近 7 天训练记录和小腿/腰臀反馈调整。",
   "effectiveFrom": "2026-06-28",
   "effectiveTo": "2026-07-05",
-  "planTemplate": {
+  "planTemplates": [{
     "id": "plan_2026_06_base_v2",
     "version": "2.0.0",
     "title": "基础减脂与体能滚动计划",
@@ -145,7 +146,7 @@ Codex 根据摘要输出两部分：
       "noMakeupWorkout": true,
       "workloadCountsAsLoad": true
     }
-  },
+  }],
   "routineTemplates": [
     {
       "id": "routine_recovery_low_pressure_v2",
@@ -286,7 +287,7 @@ Codex 根据摘要输出两部分：
 
 请输出顶层 schema 为 coach_plan_patch 的 JSON：
 - schema
-- contractVersion: "1.0"
+- contractVersion: "2.0"
 - generatedAt
 - generatedBy
 - reason
@@ -309,6 +310,7 @@ Codex 根据摘要输出两部分：
 ```json
 {
   "schema": "coach_plan_patch",
+  "contractVersion": "2.0",
   "generatedAt": "2026-07-10T09:00:00+08:00",
   "generatedBy": "coach",
   "effectiveFrom": "2026-07-10",
@@ -340,11 +342,12 @@ Codex 根据摘要输出两部分：
 }
 ```
 
-临时调整某天计划时可以使用简写：
+临时调整某天计划时必须使用带稳定 `id` 和完整 `toSnapshot` 的 Contract v2 结构：
 
 ```json
 {
   "schema": "coach_plan_patch",
+  "contractVersion": "2.0",
   "generatedAt": "2026-07-10T09:00:00+08:00",
   "generatedBy": "coach",
   "effectiveFrom": "2026-07-10",
@@ -352,13 +355,17 @@ Codex 根据摘要输出两部分：
   "reason": "根据小腿疲劳降负荷。",
   "planAdjustments": [
     {
+      "id": "adjust_2026-07-10_low_pressure",
       "date": "2026-07-10",
-      "title": "低压恢复",
-      "trainingType": "recovery",
-      "estimatedMinutes": 15,
-      "status": "planned",
       "reason": "今天主动降负荷。",
-      "notes": "做恢复拉伸或完全休息；不补训练。"
+      "toSnapshot": {
+        "date": "2026-07-10",
+        "title": "低压恢复",
+        "trainingType": "recovery",
+        "estimatedMinutes": 15,
+        "status": "planned",
+        "notes": ["做恢复拉伸或完全休息；不补训练。"]
+      }
     }
   ]
 }

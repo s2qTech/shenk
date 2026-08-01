@@ -20,12 +20,14 @@ import io.s2qtech.shenk.model.SharedRecord
 import io.s2qtech.shenk.timer.TimerEngineState
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
+import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import org.junit.Rule
 import org.junit.Test
 import org.junit.Assert.assertTrue
+import org.junit.Assert.assertEquals
 import org.junit.runner.RunWith
 
 @RunWith(AndroidJUnit4::class)
@@ -41,6 +43,12 @@ class MainActivityTest {
         composeRule.onNodeWithTag("morning-action").performClick()
         composeRule.onNodeWithText("今天身体怎么样？").assertIsDisplayed()
         composeRule.onNodeWithText("保存晨起状态").performScrollTo().assertIsDisplayed()
+    }
+
+    @Test
+    fun fallbackSuggestionWithoutRoutineDoesNotExposeTimerAction() {
+        composeRule.onNodeWithTag("today-screen").assertIsDisplayed()
+        assertTrue(composeRule.onAllNodesWithTag("today-open-training").fetchSemanticsNodes().isEmpty())
     }
 
     @Test
@@ -78,7 +86,7 @@ class MainActivityTest {
         composeRule.waitForIdle()
         composeRule.onNodeWithTag("today-screen").assertIsDisplayed()
 
-        composeRule.onNodeWithTag("today-open-training").performClick()
+        composeRule.onNodeWithTag("primary-pager").performTouchInput { swipeLeft() }
         composeRule.onNodeWithTag("training-screen").assertIsDisplayed()
 
         composeRule.activityRule.scenario.onActivity { activity ->
@@ -90,7 +98,7 @@ class MainActivityTest {
 
     @Test
     fun trainingSceneSwitcherStaysInLowerThumbZone() {
-        composeRule.onNodeWithTag("today-open-training").performClick()
+        composeRule.onNodeWithTag("primary-pager").performTouchInput { swipeLeft() }
         composeRule.onNodeWithTag("training-screen").assertIsDisplayed()
         val screenBounds = composeRule.onNodeWithTag("training-screen").getUnclippedBoundsInRoot()
         val dockBounds = composeRule.onNodeWithTag("training-scene-dock").getUnclippedBoundsInRoot()
@@ -99,6 +107,27 @@ class MainActivityTest {
         RoutineScene.entries.forEach { scene ->
             composeRule.onNodeWithTag("scene-${scene.name.lowercase()}").assertIsDisplayed()
         }
+        val sceneHeights = RoutineScene.entries.map { scene ->
+            val bounds = composeRule.onNodeWithTag("scene-${scene.name.lowercase()}")
+                .getUnclippedBoundsInRoot()
+            bounds.bottom - bounds.top
+        }
+        sceneHeights.forEach { height ->
+            assertEquals(sceneHeights.first().value, height.value, 0.5f)
+        }
+    }
+
+    @Test
+    fun todaySecondaryDestinationsUseTheSameLowerThumbZone() {
+        val screenBounds = composeRule.onNodeWithTag("today-screen").getUnclippedBoundsInRoot()
+        val dockBounds = composeRule.onNodeWithTag("today-destination-bar").getUnclippedBoundsInRoot()
+
+        assertTrue((dockBounds.top + dockBounds.bottom) > (screenBounds.top + screenBounds.bottom))
+        val dataBounds = composeRule.onNodeWithTag("today-open-data").getUnclippedBoundsInRoot()
+        val planningBounds = composeRule.onNodeWithTag("today-open-planning").getUnclippedBoundsInRoot()
+        val dataHeight = dataBounds.bottom - dataBounds.top
+        val planningHeight = planningBounds.bottom - planningBounds.top
+        assertEquals(dataHeight.value, planningHeight.value, 0.5f)
     }
 
     @Test
@@ -114,6 +143,57 @@ class MainActivityTest {
         }
         composeRule.onNodeWithTag("cloud-connection-error").assertIsDisplayed()
         composeRule.onNodeWithTag("today-screen").assertIsDisplayed()
+    }
+
+    @Test
+    fun planCollaborationIsReachableFromToday() {
+        composeRule.onNodeWithTag("today-destination-bar").assertIsDisplayed()
+        composeRule.onNodeWithTag("today-open-planning").assertIsDisplayed().performClick()
+        composeRule.onNodeWithTag("planning-screen").assertIsDisplayed()
+        composeRule.onNodeWithTag("plan-patch-input").assertIsDisplayed()
+    }
+
+    @Test
+    fun dataHasOneFixedNativeEntryOnToday() {
+        composeRule.onNodeWithTag("today-destination-bar").assertIsDisplayed()
+        composeRule.onNodeWithTag("today-open-data").assertIsDisplayed().performClick()
+        composeRule.onNodeWithTag("data-screen").assertIsDisplayed()
+    }
+
+    @Test
+    fun cloudCoachPatchAppearsAsPendingAndRequiresPreview() {
+        val app = composeRule.activity.application as ShenkApplication
+        runBlocking {
+            app.localFirstRepository.persistAndEnqueue(
+                SharedRecord.create(
+                    entity = "coach_plan_patches",
+                    id = "synthetic-pending-patch",
+                    data = buildJsonObject {
+                        put("id", JsonPrimitive("synthetic-pending-patch"))
+                        put("runId", JsonPrimitive("synthetic-run"))
+                        put("status", JsonPrimitive("pending"))
+                        put("receivedAt", JsonPrimitive("2100-01-01T00:00:00Z"))
+                        put("snapshotDigest", JsonPrimitive("synthetic-digest"))
+                        put("patch", Json.parseToJsonElement(validPendingPatch()))
+                    },
+                    contractVersion = "2.0",
+                ),
+                SharedEntityOwner.PLANNING_EXCHANGE,
+            )
+        }
+
+        composeRule.onNodeWithTag("today-open-planning").performClick()
+        composeRule.waitUntil(timeoutMillis = 5_000) {
+            composeRule.onAllNodesWithTag("pending-plan-synthetic-pending-patch")
+                .fetchSemanticsNodes()
+                .isNotEmpty()
+        }
+        composeRule.onNodeWithTag("pending-plan-synthetic-pending-patch")
+            .assertIsDisplayed()
+            .performClick()
+        composeRule.onNodeWithTag("plan-patch-preview").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithTag("apply-plan-patch").performScrollTo().assertIsDisplayed()
+        assertTrue(runBlocking { app.localFirstRepository.get("daily_plan_items", "synthetic-plan") } == null)
     }
 
     @Test
@@ -170,4 +250,21 @@ class MainActivityTest {
         composeRule.onNodeWithTag("timer-start").assertExists()
         composeRule.onNodeWithText("原地慢走").assertExists()
     }
+
+    private fun validPendingPatch() = """
+        {
+          "schema":"coach_plan_patch",
+          "contractVersion":"2.0",
+          "effectiveFrom":"2100-01-01",
+          "reason":"云端待确认测试",
+          "dailyPlanItems":[{
+            "id":"synthetic-plan",
+            "date":"2100-01-01",
+            "title":"普通走",
+            "trainingType":"easy_walk",
+            "estimatedMinutes":35,
+            "status":"planned"
+          }]
+        }
+    """.trimIndent()
 }

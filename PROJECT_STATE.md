@@ -1,6 +1,6 @@
 # Project State
 
-Updated: 2026-07-19
+Updated: 2026-08-01
 
 ## Android Platform Baseline
 
@@ -37,7 +37,7 @@ Timer modules write:
 
 - `timer_sessions`
 
-`timer_session_links` is legacy compatibility only. New flows use an editable training draft and save `training_logs.timerSessionId` / `timerSessionIds` after user confirmation.
+`timer_session_links` is legacy compatibility for linked/converted records. Android may additionally write an `action: "ignored"` acknowledgement so an unwanted timer fact stops appearing in the local-first pending-completion queue. Formal records still use an editable draft and save `training_logs.timerSessionId` / `timerSessionIds` after user confirmation.
 
 ## Implemented Baseline
 
@@ -45,7 +45,7 @@ Timer modules write:
 - IndexedDB/localStorage persistence and offline application shell.
 - Cloud sync through Cloudflare Worker + D1.
 - Encrypted multi-device sync profiles; one migration code derives the opaque profile ID, decrypts locally, and authorizes ciphertext download. Cloud stores ciphertext and a code hash only.
-- Merge/upsert `coach_plan_patch` import; missing fields and empty arrays are no-op; deletes are explicit.
+- Web, Android, Worker, and MCP use the same strict Contract v2 `coach_plan_patch` import boundary. New imports require `contractVersion: "2.0"`; missing fields and empty arrays are no-op; `replaceMode: true`, the legacy singular `planTemplate`, and legacy adjustment shorthand are rejected; deletes are explicit. Records touched by an accepted patch are persisted as v2 envelopes on both clients without rewriting unrelated legacy Web data.
 - Dynamic `routine_templates` source of truth with timer local cache and fallback warning.
 - Timer step `execution` expansion for preparation and bilateral actions.
 - `timer_sessions` read in 身刻 and used only to prefill editable formal-record drafts.
@@ -139,7 +139,7 @@ Repository governance is enforced through:
 - accepted decisions in `docs/adr/`;
 - `tests/governance.test.js` in the normal CI test suite.
 
-Native Android Packages 0 through 5 are complete. Package 0 established the accepted Compose module graph and passed CI plus Xiaomi 14 installation, restart, and offline-launch checks. Package 1 added additive Contract v2 schema/OpenAPI/fixtures, Worker `1.0`/`2.0` negotiation and validation, and Web/Worker/Web timer/Android conformance checks. Package 2 added the Room local source of truth, transactional outbox, visible conflict handling, WorkManager cloud sync, DataStore/Keystore configuration, encrypted migration-profile interoperability, and SAF business backup/restore. Package 3 added the native Today surface, morning check-in, optional pre-workout delta, body measurements, explicit missing-data states, effective guidance resolution, one-handed recording controls, and configurable morning/midday reminders. Package 4 added the continuous cross-month calendar agenda, actual/plan/suggestion priority, activity icons, fast-scroll week-distance feedback, a bottom current-date anchor, date details, multiple formal logs per day, the correction window, local-first record changes, 30-day body trends, and per-date body-measurement changes against each field's previous valid value. Its calendar refinement keeps agenda rows transparent, fades the lower stream edge, and uses a lightweight native pager transition without whole-page scale/alpha layers. Package 5 adds the offline routine library, native timer state machine, platform interruption behavior, terminal timer facts, pending completion, and user-confirmed formal-log completion. Its Xiaomi 14 corrective gate also verified scrollable long cues, a persistent upcoming-action strip including rest, fixed icon navigation, portrait/landscape continuity, Chinese TTS, and music ducking. Native Android progress is now `6 / 9`. Contract v1 remains the production default during migration; the Worker accepts v2 without a D1 table migration.
+Native Android Packages 0 through 5 are complete. Package 0 established the accepted Compose module graph and passed CI plus Xiaomi 14 installation, restart, and offline-launch checks. Package 1 added additive Contract v2 schema/OpenAPI/fixtures, Worker `1.0`/`2.0` negotiation and validation, and Web/Worker/Web timer/Android conformance checks. Package 2 added the Room local source of truth, transactional outbox, visible conflict handling, WorkManager cloud sync, DataStore/Keystore configuration, encrypted migration-profile interoperability, and SAF business backup/restore. Package 3 added the native Today surface, morning check-in, optional pre-workout delta, body measurements, explicit missing-data states, effective guidance resolution, one-handed recording controls, and configurable morning/midday reminders. Package 4 added the continuous cross-month calendar agenda, actual/plan/suggestion priority, activity icons, fast-scroll week-distance feedback, a bottom current-date anchor, date details, multiple formal logs per day, the correction window, local-first record changes, 30-day body trends, and per-date body-measurement changes against each field's previous valid value. Its calendar refinement keeps agenda rows transparent, fades the lower stream edge, and uses a lightweight native pager transition without whole-page scale/alpha layers. Package 5 adds the offline routine library, native timer state machine, platform interruption behavior, terminal timer facts, pending completion, and user-confirmed formal-log completion. Its Xiaomi 14 corrective gate also verified scrollable long cues, a persistent upcoming-action strip including rest, fixed icon navigation, portrait/landscape continuity, Chinese TTS, and music ducking. Native Android progress is now `6 / 9`. General Web shared-record envelopes remain Contract v1-compatible during migration, while all new `coach_plan_patch` imports use Contract v2. The Worker accepts both envelope versions without a D1 table migration.
 
 The accepted primary-space corrective pass removes duplicate top-right Calendar/Today/More shortcuts, removes the redundant standalone Records page, makes the morning record/adjust action visually dominant, changes the Calendar current-date anchor from persistent to visibility-driven, and integrates the Training scene switcher into the bottom surface instead of a floating dock. This is corrective work within accepted Packages 3-5 and does not start Package 6.
 
@@ -147,4 +147,6 @@ The earlier seven Web/foundation work packages remain completed historical work.
 
 ## Immediate Next Step
 
-Package 5 passed its automated gates and Xiaomi 14 acceptance on 2026-07-19, including audible TTS and music ducking. Its implementation and acceptance paths are recorded in `docs/android-package5-native-timer.md`. Package 6 is the next eligible package, but it must not start without a new explicit user instruction.
+Package 6 is implemented and has passed JVM tests, Android lint, debug APK, and instrumentation APK build gates. Cloud-synchronized `coach_plan_patches` now enter the Android pending inbox; ChatGPT submission does not change formal plans, and Android apply/reject remains the authority boundary. Its behavior and Xiaomi 14 acceptance path are recorded in `docs/android-package6-plan-collaboration.md`. Progress remains `6 / 9` until the cloud pending flow, whole-patch rejection, no-op empty arrays, latest-only undo, offline outbox, weekly feedback, and ChatGPT share flow pass on the primary device. Package 7 must not start before that acceptance.
+
+The 2026-07-27 Package 5 corrective pass makes timer completion eligibility fail closed: a session is offered as a formal-record draft only when its immutable snapshot explicitly has `countsTowardTraining: true`; missing legacy visibility fields no longer default to true. Pending completions can be acknowledged as ignored without modifying `timer_sessions`. Formal logs inherit the timer snapshot's `calendarVisible` and `countsTowardTraining`. Today exposes a timer action only when the effective formal plan explicitly references a cached `routineId`; rest, walking plans and fallback suggestions without a routine remain guidance only. Dark theme surfaces now define explicit foreground and container colors. Android progress remains `6 / 9`.
