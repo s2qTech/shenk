@@ -49,7 +49,7 @@ Responsibilities:
 
 | Module | Responsibility |
 | --- | --- |
-| `:app` | Compose UI, navigation, Android lifecycle, notifications, share targets, settings |
+| `:app` | Compose UI, navigation, Android lifecycle, notifications, clipboard exchange, settings |
 | `:core:model-domain` | Contract models, effective-day resolver, plan validation, trend and review inputs |
 | `:core:data-sync` | Room, repositories, outbox, Worker API, encrypted configuration, backup |
 | `:feature:timer-engine` | Routine expansion, timer state machine, persistence, audio/TTS/call handling |

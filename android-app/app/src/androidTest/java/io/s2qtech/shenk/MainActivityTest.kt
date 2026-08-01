@@ -161,7 +161,7 @@ class MainActivityTest {
     }
 
     @Test
-    fun cloudCoachPatchAppearsAsPendingAndRequiresPreview() {
+    fun cloudCoachPatchDoesNotEnterPhaseOneClipboardInbox() {
         val app = composeRule.activity.application as ShenkApplication
         runBlocking {
             app.localFirstRepository.persistAndEnqueue(
@@ -183,16 +183,12 @@ class MainActivityTest {
         }
 
         composeRule.onNodeWithTag("today-open-planning").performClick()
-        composeRule.waitUntil(timeoutMillis = 5_000) {
+        composeRule.onNodeWithTag("plan-patch-input").assertIsDisplayed()
+        assertTrue(
             composeRule.onAllNodesWithTag("pending-plan-synthetic-pending-patch")
                 .fetchSemanticsNodes()
-                .isNotEmpty()
-        }
-        composeRule.onNodeWithTag("pending-plan-synthetic-pending-patch")
-            .assertIsDisplayed()
-            .performClick()
-        composeRule.onNodeWithTag("plan-patch-preview").performScrollTo().assertIsDisplayed()
-        composeRule.onNodeWithTag("apply-plan-patch").performScrollTo().assertIsDisplayed()
+                .isEmpty(),
+        )
         assertTrue(runBlocking { app.localFirstRepository.get("daily_plan_items", "synthetic-plan") } == null)
     }
 

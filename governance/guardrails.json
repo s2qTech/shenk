@@ -1,6 +1,6 @@
 {
   "schema": "shenk_project_guardrails/v1",
-  "updatedAt": "2026-07-19",
+  "updatedAt": "2026-08-02",
   "activeDelivery": {
     "phase": "android_package_6_ready",
     "progress": "6/9",
@@ -101,6 +101,10 @@
     {
       "id": "G-AI-002",
       "rule": "Advanced AI integrations may only submit pending coach_plan_patches; formal plan entities change only after Shenk validates and the user confirms the patch."
+    },
+    {
+      "id": "G-AI-003",
+      "rule": "Phase 1 advanced-AI exchange uses only provider-neutral clipboard copy/paste. Later API, MCP, or Skill integrations may replace transport only and must preserve the same normalized snapshot, coach_plan_patch, validation, confirmation, and audit semantics."
     },
     {
       "id": "G-SEC-001",

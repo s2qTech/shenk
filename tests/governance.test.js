@@ -40,6 +40,7 @@ test("critical guardrails keep stable identifiers and ownership", () => {
     "G-ROUTINE-001",
     "G-TIMER-001",
     "G-AI-001",
+    "G-AI-003",
     "G-SEC-001",
     "G-ANDROID-001",
     "G-DELETE-001"
@@ -68,7 +69,8 @@ test("accepted ADRs and historical-document warnings remain visible", () => {
     "docs/adr/0002-local-first-room-outbox.md",
     "docs/adr/0003-ai-authority-and-day-priority.md",
     "docs/adr/0004-timer-facts-and-formal-records.md",
-    "docs/adr/0005-explicit-routine-scene-role.md"
+    "docs/adr/0005-explicit-routine-scene-role.md",
+    "docs/adr/0008-provider-neutral-clipboard-ai-exchange.md"
   ];
   for (const relativePath of acceptedAdrs) {
     assert.match(read(relativePath), /Status: Accepted/);

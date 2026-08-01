@@ -1,6 +1,6 @@
 # ADR 0007: ChatGPT MCP planning exchange
 
-Status: Accepted
+Status: Deferred for phase 1; superseded by ADR 0008 for the user-facing exchange
 Date: 2026-07-22
 
 ## Context
@@ -28,6 +28,7 @@ The existing Worker bearer tokens are application credentials. They must not be 
 - A compromised MCP token cannot write health facts, training facts, routines, or formal plans.
 - Android and Web can consume pending drafts later without changing existing formal-plan semantics.
 - Removing the MCP routes and revoking OAuth tokens disables the integration without rewriting formal data.
+- The implemented endpoint may remain as dormant future infrastructure, but phase 1 UI and acceptance must not depend on it.
 
 ## Non-goals
 

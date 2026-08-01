@@ -60,10 +60,10 @@ Exit: a full routine completes on Xiaomi 14 through rotation, interruption, back
 
 ### Package 6: Plan Inbox and Weekly Feedback
 
-- Android share target and paste fallback.
-- Cloud-synchronized pending draft inbox for MCP-submitted `coach_plan_patches`.
+- Provider-neutral clipboard paste into the plan inbox.
+- Dormant cloud pending-draft compatibility may remain, but is not exposed or required by phase 1.
 - Whole-patch validation, preview, apply, and undo-latest.
-- Saturday feedback package and ChatGPT share flow.
+- Saturday feedback package copied to the clipboard for the established fitness-planning task.
 
 Exit: an AI patch cannot partially apply, clear unrelated arrays, infer scenes, or bypass delete confirmation.
 

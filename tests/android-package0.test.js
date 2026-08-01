@@ -111,6 +111,25 @@ test("Package 5 keeps local-first records and adds the native routine and timer 
   assert.match(timerPlatform, /AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK/);
 });
 
+test("Package 6 keeps advanced AI exchange provider-neutral and clipboard-only", () => {
+  const manifest = read("android-app/app/src/main/AndroidManifest.xml");
+  const mainActivity = read("android-app/app/src/main/java/io/s2qtech/shenk/MainActivity.kt");
+  const planningScreen = read("android-app/app/src/main/java/io/s2qtech/shenk/PlanningScreen.kt");
+  const webApp = read("src/app.js");
+  const constraints = read("docs/development-constraints.md");
+  const guardrails = JSON.parse(read("governance/guardrails.json"));
+
+  assert.match(planningScreen, /copy-weekly-feedback/);
+  assert.match(planningScreen, /clipboard\.setText/);
+  assert.match(planningScreen, /plan-patch-input/);
+  assert.doesNotMatch(planningScreen, /Intent\.ACTION_SEND|share-weekly-feedback|分享到 ChatGPT/);
+  assert.doesNotMatch(manifest, /android\.intent\.action\.SEND/);
+  assert.doesNotMatch(mainActivity, /Intent\.ACTION_SEND|Intent\.EXTRA_TEXT/);
+  assert.doesNotMatch(webApp, /<section class="settings-block mcp-connect-block">/);
+  assert.match(constraints, /第一期高级 AI 协作只允许规范化摘要复制/);
+  assert.ok(guardrails.requiredInvariants.some((item) => item.id === "G-AI-003"));
+});
+
 test("native CI gates emulator tests behind Package 5 verification", () => {
   const workflow = read(".github/workflows/android-native.yml");
   const instrumentationScript = read("android-app/ci/run-instrumentation.sh");

@@ -1793,68 +1793,6 @@ textarea {
   margin-top: 12px;
 }
 
-.mcp-connect-block {
-  gap: 14px;
-}
-
-.mcp-server-url {
-  display: grid;
-  gap: 6px;
-}
-
-.mcp-copy-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 132px;
-  gap: 10px;
-}
-
-.mcp-copy-row button,
-.mcp-pairing-actions > button {
-  min-height: 42px;
-}
-
-.mcp-pairing-actions {
-  display: grid;
-  grid-template-columns: minmax(180px, 220px) minmax(0, 1fr);
-  align-items: center;
-  gap: 12px;
-}
-
-.mcp-pairing-actions > p {
-  margin: 0;
-  color: var(--muted);
-  font-size: 13px;
-  line-height: 1.5;
-}
-
-.mcp-pairing-result {
-  display: grid;
-  grid-template-columns: minmax(130px, max-content) minmax(0, 1fr) 132px;
-  align-items: center;
-  gap: 12px;
-  min-height: 52px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-sm);
-  background: var(--surface);
-  padding: 8px 10px 8px 14px;
-}
-
-.mcp-pairing-result strong {
-  color: var(--ink);
-  font-size: 18px;
-  letter-spacing: 2px;
-}
-
-.mcp-pairing-result span {
-  color: var(--muted);
-  font-size: 12px;
-}
-
-.mcp-pairing-result button {
-  width: 100%;
-  min-height: 36px;
-}
-
 .sync-legacy-config .settings-subsection-head {
   margin-top: 10px;
 }
@@ -3296,18 +3234,10 @@ textarea {
   .sync-migration-actions,
   .sync-profile-block .sync-advanced .settings-actions,
   .sync-profile-export,
-  .mcp-copy-row,
-  .mcp-pairing-actions,
-  .mcp-pairing-result,
   .local-data-transfer,
   .local-data-actions,
   .local-data-panel .settings-danger-zone {
     grid-template-columns: 1fr;
-  }
-
-  .mcp-pairing-actions > button,
-  .mcp-pairing-result button {
-    width: 100%;
   }
 
   .sync-migration-action + .sync-migration-action {

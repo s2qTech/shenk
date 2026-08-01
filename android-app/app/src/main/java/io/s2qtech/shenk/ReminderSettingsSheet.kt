@@ -58,7 +58,7 @@ fun ReminderSettingsSheet(
             onEnabled = { value = value.copy(weeklyEnabled = it) },
             onTime = { hour, minute -> value = value.copy(weeklyHour = hour, weeklyMinute = minute) },
         )
-        Text("每周六生成资料，提醒你分享到 ChatGPT。", color = MaterialTheme.colorScheme.secondary)
+        Text("每周六生成资料，提醒你复制到健身计划任务。", color = MaterialTheme.colorScheme.secondary)
         Spacer(Modifier.height(22.dp))
         ReminderRow(
             title = "中午补记",

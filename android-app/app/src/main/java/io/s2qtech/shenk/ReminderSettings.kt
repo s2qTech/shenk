@@ -185,7 +185,7 @@ class WeeklyReviewWorker(
         val notification = NotificationCompat.Builder(applicationContext, CHANNEL_ID)
             .setSmallIcon(android.R.drawable.ic_popup_reminder)
             .setContentTitle("本周复盘资料已就绪")
-            .setContentText("打开身刻，分享到 ChatGPT 完成本周复盘")
+            .setContentText("打开身刻，复制资料到健身计划任务完成本周复盘")
             .setContentIntent(
                 PendingIntent.getActivity(
                     applicationContext,

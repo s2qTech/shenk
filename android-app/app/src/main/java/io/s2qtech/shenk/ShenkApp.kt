@@ -42,7 +42,6 @@ fun ShenkApp(
     planCollaborationRepository: PlanCollaborationRepository,
     reminderStore: ReminderSettingsStore,
     cloudConnectionManager: CloudConnectionManager,
-    incomingPlanPatch: String? = null,
     requestedSpace: String? = null,
     onExternalRequestConsumed: () -> Unit = {},
 ) {
@@ -50,12 +49,10 @@ fun ShenkApp(
     val scope = rememberCoroutineScope()
     var secondary by remember { mutableStateOf<SecondarySpace?>(null) }
     var trainingLaunch by remember { mutableStateOf<TrainingLaunchRequest?>(null) }
-    var pendingPlanPatch by remember { mutableStateOf<String?>(null) }
     var pendingFeedback by remember { mutableStateOf(false) }
 
-    androidx.compose.runtime.LaunchedEffect(incomingPlanPatch, requestedSpace) {
-        if (incomingPlanPatch != null || requestedSpace in setOf("plan", "feedback")) {
-            pendingPlanPatch = incomingPlanPatch
+    androidx.compose.runtime.LaunchedEffect(requestedSpace) {
+        if (requestedSpace in setOf("plan", "feedback")) {
             pendingFeedback = requestedSpace == "feedback"
             secondary = SecondarySpace.PLANNING
             onExternalRequestConsumed()
@@ -79,10 +76,8 @@ fun ShenkApp(
             )
             SecondarySpace.PLANNING -> PlanningRoute(
                 repository = planCollaborationRepository,
-                initialPatch = pendingPlanPatch,
                 initialFeedback = pendingFeedback,
                 onBack = {
-                    pendingPlanPatch = null
                     pendingFeedback = false
                     secondary = null
                 },

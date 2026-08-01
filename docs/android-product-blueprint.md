@@ -36,7 +36,7 @@ The Android app is the primary daily product and should eventually cover about 8
 | Source | May do | Must not do |
 | --- | --- | --- |
 | User | Execute, skip, rest, correct records, report discomfort, choose a shorter strength routine | Be forced to follow a plan that conflicts with actual condition |
-| Advanced AI through ChatGPT | Create weekly strategy, plans, goals, routines, and plan patches | Write directly without validation and confirmation |
+| Advanced AI planning task | Create weekly strategy, plans, goals, routines, and plan patches from canonical project context | Write directly without validation and confirmation |
 | Daily compatible AI | Review the day, warn, explain, and suggest within the latest advanced-AI strategy | Modify formal plans or routines |
 | Local fallback engine | Offer generic guidance when a formal plan is unavailable or offline | Pretend to be a formal AI plan |
 
@@ -48,14 +48,14 @@ The Android app is the primary daily product and should eventually cover about 8
 - Morning check-in and optional pre-workout delta check-in.
 - Weight, body-fat percentage, muscle mass, and waist recording.
 - Total sleep duration, deep-sleep duration, sleep quality, fatigue, and regional pain.
-- Formal plan inbox through Android share and paste fallback.
+- Formal plan inbox through provider-neutral clipboard paste.
 - Patch validation, preview, apply, and undo-latest.
 - Sunday-to-Saturday formal weekly plan; future dates beyond the plan use clearly labelled local suggestions.
 - Native timer with routine selection, preview, voice, keep-screen-on, pause/resume, call interruption handling, music ducking, and post-workout completion.
 - Routine library with explicit scene and role, details, active/inactive state, and enable/disable control.
 - Formal training and rest records, recent-record correction, and data trends.
 - Daily AI review after training or confirmed rest.
-- Weekly feedback package generated Saturday evening and shared to ChatGPT.
+- Weekly feedback package generated Saturday evening and copied to the established fitness-planning task.
 - Offline-first storage, durable outbox, encrypted configuration migration, and full JSON backup.
 - Four configurable reminders: morning, midday missing data, evening unrecorded, and weekly review.
 
@@ -252,10 +252,10 @@ Walking records may come from wearable data or manual entry and do not require a
 
 ## 11. Weekly Feedback and Plan Intake
 
-- Saturday at 22:30, generate a shareable feedback package.
+- Saturday at 22:30, generate a copyable feedback package.
 - Include 14-day details, 30-day trend summary, current plan and routine versions, unresolved discomfort, skips, short versions, and relevant reasons.
-- Share directly to the established ChatGPT coaching conversation.
-- Plan patches enter through Android share or paste.
+- Copy the package to the clipboard; the user pastes it into the established fitness-planning task.
+- Plan patches return through clipboard paste only in phase 1.
 - A patch is validated as a whole, previewed, and only then applied.
 - Validation failure rejects the whole patch.
 - Only the latest applied patch needs one-step undo.
@@ -281,5 +281,5 @@ The first release succeeds when the user can stop opening the Web app for most d
 4. Save actual training and generate a daily review.
 5. See one month of rhythm and one month of body trends.
 6. Import and undo a validated weekly plan patch.
-7. Produce and share the weekly feedback package to ChatGPT.
+7. Produce and copy the weekly feedback package for the fitness-planning task.
 8. Reconnect after offline use and synchronize without silent data loss.

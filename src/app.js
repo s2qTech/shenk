@@ -3309,30 +3309,6 @@
           <p class="sync-status ${error ? "sync-error" : ""}">${escapeHtml(`${error || status}${retryText}`)}</p>
         </section>
 
-        <section class="settings-block mcp-connect-block">
-          <div class="settings-block-head">
-            <strong>ChatGPT 规划连接</strong>
-            <span>让 ChatGPT 安全读取规划摘要并提交待确认草案。</span>
-          </div>
-          <label class="mcp-server-url">
-            <span>MCP 服务器地址</span>
-            <div class="mcp-copy-row">
-              <input type="text" readonly value="${escapeHtml(getMcpServerUrl())}">
-              <button type="button" data-action="copy-mcp-url">复制地址</button>
-            </div>
-          </label>
-          <div class="mcp-pairing-actions">
-            <button type="button" class="primary" data-action="create-mcp-pairing" ${state.syncStatus.busy ? "disabled" : ""}>生成一次性配对码</button>
-            ${state.mcpPairing ? `
-              <div class="mcp-pairing-result" role="status">
-                <strong>${escapeHtml(state.mcpPairing.code)}</strong>
-                <span>${escapeHtml(formatPairingExpiry(state.mcpPairing.expiresAt))}</span>
-                <button type="button" data-action="copy-mcp-pairing">复制配对码</button>
-              </div>
-            ` : `<p>在 ChatGPT 新建自定义插件时填写上方地址；授权页面会要求输入此配对码。</p>`}
-          </div>
-        </section>
-
         <section class="settings-block sync-transfer sync-profile-block">
           <div class="settings-block-head">
             <strong>多端配置</strong>

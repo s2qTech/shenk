@@ -53,6 +53,8 @@
 - 删除预览非零时必须二次确认。
 - 新 routine 必须显式包含 `scene` 和 `role`；禁止根据标题、trainingType、routineId 或动作内容推断、覆盖或批量迁移分类。
 - 高级 AI patch 可更新正式计划和 routine；日常兼容 AI 不得写计划、调整、目标、策略或 routine。
+- 第一期高级 AI 协作只允许规范化摘要复制和 `coach_plan_patch` 粘贴；不得调用系统分享面板、绑定特定 AI 厂商或把外部回复绕过校验直接写入。
+- 后期 API、MCP 或 Skill 只能替换传输适配层，必须复用同一规划快照、patch schema、权限边界、整包校验、确认和审计语义。
 
 ## 4. 日历与正式记录
 

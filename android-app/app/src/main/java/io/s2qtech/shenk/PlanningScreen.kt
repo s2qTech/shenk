@@ -1,8 +1,6 @@
 package io.s2qtech.shenk
 
-import android.content.ActivityNotFoundException
 import android.content.Context
-import android.content.Intent
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -21,9 +19,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.CheckCircle
+import androidx.compose.material.icons.rounded.ContentCopy
 import androidx.compose.material.icons.rounded.ContentPaste
 import androidx.compose.material.icons.rounded.DeleteOutline
-import androidx.compose.material.icons.rounded.IosShare
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -43,7 +41,6 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -55,6 +52,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -62,7 +60,6 @@ import io.s2qtech.shenk.model.PatchChangeAction
 import io.s2qtech.shenk.model.PlanPatchPreview
 import io.s2qtech.shenk.sync.PlanCollaborationRepository
 import io.s2qtech.shenk.sync.PlanImportStatus
-import io.s2qtech.shenk.sync.PendingCoachPatch
 import io.s2qtech.shenk.sync.SyncScheduler
 import io.s2qtech.shenk.sync.WeeklyFeedback
 import kotlinx.coroutines.launch
@@ -72,7 +69,6 @@ private enum class PlanningTab { PLAN, FEEDBACK }
 @Composable
 fun PlanningRoute(
     repository: PlanCollaborationRepository,
-    initialPatch: String? = null,
     initialFeedback: Boolean = false,
     onBack: () -> Unit,
 ) {
@@ -82,21 +78,12 @@ fun PlanningRoute(
     val snackbar = remember { SnackbarHostState() }
     val importStatus by repository.observeImportStatus().collectAsState(PlanImportStatus(null, false, null))
     val latestFeedback by repository.observeLatestFeedback().collectAsState(null)
-    val pendingPatches by repository.observePendingCoachPatches().collectAsState(emptyList())
     var tab by remember { mutableStateOf(if (initialFeedback) PlanningTab.FEEDBACK else PlanningTab.PLAN) }
-    var patchText by remember { mutableStateOf(initialPatch.orEmpty()) }
+    var patchText by remember { mutableStateOf("") }
     var preview by remember { mutableStateOf<PlanPatchPreview?>(null) }
-    var selectedPendingId by remember { mutableStateOf<String?>(null) }
     var busy by remember { mutableStateOf(false) }
     var confirmingDelete by remember { mutableStateOf(false) }
 
-    LaunchedEffect(initialPatch) {
-        if (!initialPatch.isNullOrBlank()) {
-            tab = PlanningTab.PLAN
-            patchText = initialPatch
-            preview = repository.preview(initialPatch)
-        }
-    }
     BackHandler(onBack = onBack)
 
     Scaffold(
@@ -125,8 +112,6 @@ fun PlanningRoute(
         when (tab) {
             PlanningTab.PLAN -> PlanInbox(
                 modifier = Modifier.padding(padding),
-                pendingPatches = pendingPatches,
-                selectedPendingId = selectedPendingId,
                 patchText = patchText,
                 preview = preview,
                 status = importStatus,
@@ -134,36 +119,10 @@ fun PlanningRoute(
                 onTextChange = {
                     patchText = it
                     preview = null
-                    selectedPendingId = null
                 },
                 onPaste = {
                     patchText = clipboard.getText()?.text.orEmpty()
                     preview = null
-                    selectedPendingId = null
-                },
-                onSelectPending = { pending ->
-                    scope.launch {
-                        selectedPendingId = pending.id
-                        patchText = pending.patchText
-                        preview = repository.preview(pending.patchText)
-                    }
-                },
-                onRejectPending = { pending ->
-                    scope.launch {
-                        busy = true
-                        runCatching { repository.rejectPending(pending.id) }
-                            .onSuccess {
-                                if (selectedPendingId == pending.id) {
-                                    selectedPendingId = null
-                                    patchText = ""
-                                    preview = null
-                                }
-                                SyncScheduler(context).enqueue()
-                                snackbar.showSnackbar("草案已拒绝，正式计划未改变")
-                            }
-                            .onFailure { snackbar.showSnackbar(it.message ?: "拒绝草案失败") }
-                        busy = false
-                    }
                 },
                 onValidate = {
                     scope.launch {
@@ -173,10 +132,9 @@ fun PlanningRoute(
                 onApply = {
                     val ready = preview ?: return@PlanInbox
                     if (ready.deleted > 0) confirmingDelete = true
-                    else scope.applyPatch(repository, patchText, selectedPendingId, context, snackbar, onBusy = { busy = it }) {
+                    else scope.applyPatch(repository, patchText, context, snackbar, onBusy = { busy = it }) {
                             preview = null
                             patchText = ""
-                            selectedPendingId = null
                     }
                 },
                 onUndo = {
@@ -208,7 +166,14 @@ fun PlanningRoute(
                         busy = false
                     }
                 },
-                onShare = { latestFeedback?.let { shareFeedback(context, it.markdown) } },
+                onCopy = {
+                    latestFeedback?.let { feedback ->
+                        clipboard.setText(AnnotatedString(feedback.markdown))
+                        scope.launch {
+                            snackbar.showSnackbar("复盘资料已复制，可粘贴到健身计划任务")
+                        }
+                    }
+                },
             )
         }
     }
@@ -223,10 +188,9 @@ fun PlanningRoute(
                 Button(
                     onClick = {
                         confirmingDelete = false
-                        scope.applyPatch(repository, patchText, selectedPendingId, context, snackbar, onBusy = { busy = it }) {
+                        scope.applyPatch(repository, patchText, context, snackbar, onBusy = { busy = it }) {
                                 preview = null
                                 patchText = ""
-                                selectedPendingId = null
                         }
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
@@ -266,16 +230,12 @@ private fun PlanningTabs(tab: PlanningTab, onSelect: (PlanningTab) -> Unit) {
 @Composable
 private fun PlanInbox(
     modifier: Modifier,
-    pendingPatches: List<PendingCoachPatch>,
-    selectedPendingId: String?,
     patchText: String,
     preview: PlanPatchPreview?,
     status: PlanImportStatus,
     busy: Boolean,
     onTextChange: (String) -> Unit,
     onPaste: () -> Unit,
-    onSelectPending: (PendingCoachPatch) -> Unit,
-    onRejectPending: (PendingCoachPatch) -> Unit,
     onValidate: () -> Unit,
     onApply: () -> Unit,
     onUndo: () -> Unit,
@@ -287,33 +247,12 @@ private fun PlanInbox(
     ) {
         item {
             Text("计划草案收件箱", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold)
-            Text("云端草案只会进入待确认列表，校验和确认后才会改变正式计划。", color = MaterialTheme.colorScheme.secondary)
-        }
-        if (pendingPatches.isEmpty()) {
-            item {
-                Surface(
-                    modifier = Modifier.fillMaxWidth().testTag("pending-plan-empty"),
-                    shape = RoundedCornerShape(22.dp),
-                    color = MaterialTheme.colorScheme.surfaceVariant,
-                ) {
-                    Text("暂无云端待确认草案", modifier = Modifier.padding(18.dp), color = MaterialTheme.colorScheme.secondary)
-                }
-            }
-        } else {
-            items(pendingPatches, key = { it.id }) { pending ->
-                PendingPatchCard(
-                    pending = pending,
-                    selected = selectedPendingId == pending.id,
-                    busy = busy,
-                    onSelect = { onSelectPending(pending) },
-                    onReject = { onRejectPending(pending) },
-                )
-            }
+            Text("复制高级 AI 或 Codex 生成的 coach_plan_patch，在这里粘贴、校验并确认生效。", color = MaterialTheme.colorScheme.secondary)
         }
         item {
             HorizontalDivider()
             Text("手动导入", modifier = Modifier.padding(top = 8.dp), fontWeight = FontWeight.SemiBold)
-            Text("分享或粘贴 coach_plan_patch，作为云端收件箱的离线兜底。", color = MaterialTheme.colorScheme.secondary)
+            Text("粘贴 coach_plan_patch，校验和确认后才会写入正式计划。", color = MaterialTheme.colorScheme.secondary)
         }
         item {
             OutlinedTextField(
@@ -321,7 +260,7 @@ private fun PlanInbox(
                 onValueChange = onTextChange,
                 modifier = Modifier.fillMaxWidth().height(210.dp).testTag("plan-patch-input"),
                 label = { Text("计划草案") },
-                placeholder = { Text("粘贴 ChatGPT 生成的 JSON 或包含 JSON 的回复") },
+                placeholder = { Text("粘贴高级 AI 或 Codex 生成的 JSON，也可粘贴包含 JSON 的完整回复") },
             )
         }
         item {
@@ -387,66 +326,6 @@ private fun PlanInbox(
 }
 
 @Composable
-private fun PendingPatchCard(
-    pending: PendingCoachPatch,
-    selected: Boolean,
-    busy: Boolean,
-    onSelect: () -> Unit,
-    onReject: () -> Unit,
-) {
-    Surface(
-        onClick = onSelect,
-        modifier = Modifier.fillMaxWidth().testTag("pending-plan-${pending.id}"),
-        shape = RoundedCornerShape(24.dp),
-        color = if (selected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant,
-    ) {
-        Column(Modifier.padding(18.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) {
-                    Text(
-                        pending.reason?.takeIf(String::isNotBlank) ?: "ChatGPT 计划草案",
-                        fontWeight = FontWeight.SemiBold,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    Text(
-                        buildString {
-                            append(pending.effectiveFrom)
-                            pending.effectiveTo?.let { append(" 至 $it") }
-                            append(" · ${pending.changeCount} 项变更")
-                        },
-                        color = MaterialTheme.colorScheme.secondary,
-                        style = MaterialTheme.typography.bodySmall,
-                    )
-                }
-                Text(
-                    "待确认",
-                    color = MaterialTheme.colorScheme.primary,
-                    style = MaterialTheme.typography.labelLarge,
-                )
-            }
-            Text(
-                "收到于 ${pending.receivedAt.replace('T', ' ').take(16)}",
-                modifier = Modifier.padding(top = 10.dp),
-                color = MaterialTheme.colorScheme.secondary,
-                style = MaterialTheme.typography.bodySmall,
-            )
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
-            ) {
-                FilledTonalButton(onClick = onSelect, enabled = !busy, modifier = Modifier.weight(1f)) {
-                    Text(if (selected) "已载入预览" else "校验并预览")
-                }
-                OutlinedButton(onClick = onReject, enabled = !busy, modifier = Modifier.weight(1f)) {
-                    Text("拒绝")
-                }
-            }
-        }
-    }
-}
-
-@Composable
 private fun PreviewSummary(preview: PlanPatchPreview) {
     Surface(
         modifier = Modifier.fillMaxWidth().testTag("plan-patch-preview"),
@@ -488,7 +367,7 @@ private fun FeedbackWorkspace(
     latest: WeeklyFeedback?,
     busy: Boolean,
     onGenerate: () -> Unit,
-    onShare: () -> Unit,
+    onCopy: () -> Unit,
 ) {
     LazyColumn(
         modifier = modifier.fillMaxSize().navigationBarsPadding(),
@@ -497,7 +376,7 @@ private fun FeedbackWorkspace(
     ) {
         item {
             Text("周复盘", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold)
-            Text("汇总 14 天训练事实与 30 天身体趋势，交给 ChatGPT 做完整复盘。", color = MaterialTheme.colorScheme.secondary)
+            Text("汇总 14 天训练事实与 30 天身体趋势，复制给健身计划任务做完整复盘。", color = MaterialTheme.colorScheme.secondary)
         }
         item {
             Surface(
@@ -523,10 +402,10 @@ private fun FeedbackWorkspace(
         }
         if (latest != null) {
             item {
-                FilledTonalButton(onClick = onShare, modifier = Modifier.fillMaxWidth().height(56.dp).testTag("share-weekly-feedback")) {
-                    Icon(Icons.Rounded.IosShare, contentDescription = null)
+                FilledTonalButton(onClick = onCopy, modifier = Modifier.fillMaxWidth().height(56.dp).testTag("copy-weekly-feedback")) {
+                    Icon(Icons.Rounded.ContentCopy, contentDescription = null)
                     Spacer(Modifier.padding(4.dp))
-                    Text("分享到 ChatGPT")
+                    Text("复制复盘资料")
                 }
             }
             item {
@@ -539,7 +418,6 @@ private fun FeedbackWorkspace(
 private fun kotlinx.coroutines.CoroutineScope.applyPatch(
     repository: PlanCollaborationRepository,
     text: String,
-    pendingPatchId: String?,
     context: Context,
     snackbar: SnackbarHostState,
     onBusy: (Boolean) -> Unit,
@@ -547,10 +425,7 @@ private fun kotlinx.coroutines.CoroutineScope.applyPatch(
 ) {
     launch {
         onBusy(true)
-        runCatching {
-            if (pendingPatchId == null) repository.apply(text)
-            else repository.applyPending(pendingPatchId)
-        }
+        runCatching { repository.apply(text) }
             .onSuccess { result ->
                 SyncScheduler(context).enqueue()
                 snackbar.showSnackbar("已写入：新增 ${result.added}，更新 ${result.updated}，删除 ${result.deleted}")
@@ -558,18 +433,6 @@ private fun kotlinx.coroutines.CoroutineScope.applyPatch(
             }
             .onFailure { snackbar.showSnackbar(it.message ?: "应用失败") }
         onBusy(false)
-    }
-}
-
-private fun shareFeedback(context: Context, markdown: String) {
-    val base = Intent(Intent.ACTION_SEND).apply {
-        type = "text/plain"
-        putExtra(Intent.EXTRA_TEXT, markdown)
-    }
-    try {
-        context.startActivity(Intent(base).setPackage("com.openai.chatgpt"))
-    } catch (_: ActivityNotFoundException) {
-        context.startActivity(Intent.createChooser(base, "分享复盘资料"))
     }
 }
 
