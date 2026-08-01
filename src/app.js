@@ -2364,13 +2364,18 @@
       while (cursor <= end) {
         const date = dateToISO(cursor);
         const record = getWorkoutByDate(date);
-        if (!record && !entries.has(date)) {
-          const recommendation = getRecommendation(date, virtualWorkouts);
-          if (date >= monthStart) {
-            const kind = date === today ? "suggestion" : "forecast";
-            entries.set(date, calendarEntryFromRecommendation(date, recommendation, kind));
+        if (!record) {
+          const effectivePlan = getEffectivePlanForDate(date);
+          if (effectivePlan) {
+            virtualWorkouts.push(makeVirtualWorkoutFromEffectivePlan(date, effectivePlan));
+          } else {
+            const recommendation = getRecommendation(date, virtualWorkouts);
+            if (date >= monthStart && !entries.has(date)) {
+              const kind = date === today ? "suggestion" : "forecast";
+              entries.set(date, calendarEntryFromRecommendation(date, recommendation, kind));
+            }
+            virtualWorkouts.push(makeVirtualWorkout(date, recommendation));
           }
-          virtualWorkouts.push(makeVirtualWorkout(date, recommendation));
         }
         cursor.setDate(cursor.getDate() + 1);
       }
@@ -2394,9 +2399,14 @@
       const current = dateToISO(cursor);
       const record = getWorkoutByDate(current);
       if (!record) {
-        const nextRecommendation = getRecommendation(current, virtualWorkouts);
-        if (current === date) return nextRecommendation;
-        virtualWorkouts.push(makeVirtualWorkout(current, nextRecommendation));
+        const effectivePlan = getEffectivePlanForDate(current);
+        if (effectivePlan) {
+          virtualWorkouts.push(makeVirtualWorkoutFromEffectivePlan(current, effectivePlan));
+        } else {
+          const nextRecommendation = getRecommendation(current, virtualWorkouts);
+          if (current === date) return nextRecommendation;
+          virtualWorkouts.push(makeVirtualWorkout(current, nextRecommendation));
+        }
       }
       cursor.setDate(cursor.getDate() + 1);
     }
@@ -2477,6 +2487,24 @@
       status: recommendation.type === "rest" ? "skipped" : "completed",
       source: "forecast",
       durationSec: recommendation.minutes * 60,
+      fatigue: "normal",
+      pain: { calf: 0, back: 0, wrist: 0, outerThigh: 0 },
+      notes: ""
+    };
+  }
+
+  function makeVirtualWorkoutFromEffectivePlan(date, effectivePlan) {
+    const data = effectivePlan?.data || {};
+    const type = toLegacyTrainingType(data.trainingType || data.type);
+    const estimatedMinutes = toNullableNumber(data.estimatedMinutes ?? data.estimated_minutes) || 0;
+    return {
+      id: `forecast-plan-${effectivePlan?.envelope?.id || date}`,
+      date,
+      type,
+      status: type === "rest" ? "skipped" : "completed",
+      source: "forecast",
+      forecastBasis: "formalPlan",
+      durationSec: estimatedMinutes * 60,
       fatigue: "normal",
       pain: { calf: 0, back: 0, wrist: 0, outerThigh: 0 },
       notes: ""

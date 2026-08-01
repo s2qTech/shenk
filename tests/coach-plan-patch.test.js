@@ -27,7 +27,12 @@ function loadAppTestApi() {
     applyCoachPlanPatch,
     findSharedRecordById,
     getEffectivePlanForDate,
-    buildMonthCalendarEntries
+    buildMonthCalendarEntries,
+    getRollingRecommendation,
+    makeVirtualWorkoutFromEffectivePlan,
+    setRecommendationEngine(fn) {
+      window.ShenkeRecommendationEngine.getRecommendation = fn;
+    }
   };
 `;
   const instrumented = source.replace(/\}\)\(\);\s*$/, `${hook}\n})();`);
@@ -99,6 +104,12 @@ function upsert(api, entity, data) {
 
 function record(api, entity, id) {
   return api.findSharedRecordById(entity, id, true);
+}
+
+function addDays(date, days) {
+  const value = new Date(`${date}T12:00:00`);
+  value.setDate(value.getDate() + days);
+  return `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, "0")}-${String(value.getDate()).padStart(2, "0")}`;
 }
 
 function routinePatch(overrides = {}) {
@@ -550,6 +561,45 @@ function routinePatch(overrides = {}) {
   assert.equal(calendarEntry.kind, "plan");
   assert.equal(calendarEntry.type, "strength");
   assert.match(calendarEntry.text, /New strength/);
+}
+
+{
+  const api = loadAppTestApi();
+  reset(api);
+  const today = new Date();
+  const start = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+  const lastPlanDate = addDays(start, 6);
+  const suggestionDate = addDays(start, 7);
+
+  for (let index = 0; index < 7; index += 1) {
+    const date = addDays(start, index);
+    upsert(api, "daily_plan_items", {
+      id: `daily_plan_${date}`,
+      date,
+      title: index === 6 ? "Strength" : "Easy walk",
+      trainingType: index === 6 ? "strength" : "easy_walk",
+      estimatedMinutes: index === 6 ? 47 : 35,
+      status: "planned"
+    });
+  }
+
+  api.setRecommendationEngine((date, workouts) => {
+    const yesterday = addDays(date, -1);
+    const previous = workouts.find((item) => item.date === yesterday);
+    const type = previous?.type === "strength" ? "easyWalk" : "strength";
+    return { type, label: "Test", title: type, minutes: 35, reasons: [], sourceLabel: "Test" };
+  });
+
+  const [year, month] = suggestionDate.split("-").map(Number);
+  const entry = api.buildMonthCalendarEntries(year, month).get(suggestionDate);
+  assert.equal(entry.kind, "forecast");
+  assert.equal(entry.type, "easyWalk", "fallback suggestions should continue from the imported formal-plan rhythm");
+  assert.equal(api.getRollingRecommendation(suggestionDate).type, "easyWalk", "date detail should use the same plan-aware forecast timeline");
+
+  const virtualPlan = api.makeVirtualWorkoutFromEffectivePlan(lastPlanDate, api.getEffectivePlanForDate(lastPlanDate));
+  assert.equal(virtualPlan.type, "strength");
+  assert.equal(virtualPlan.source, "forecast");
+  assert.equal(virtualPlan.forecastBasis, "formalPlan");
 }
 
 {
