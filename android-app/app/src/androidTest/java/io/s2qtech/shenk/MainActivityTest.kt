@@ -76,7 +76,7 @@ class MainActivityTest {
     }
 
     @Test
-    fun systemBackCollapsesCalendarAndTrainingToToday() {
+    fun systemBackCollapsesCalendarToToday() {
         composeRule.onNodeWithTag("primary-pager").performTouchInput { swipeRight() }
         composeRule.onNodeWithTag("calendar-screen").assertIsDisplayed()
 
@@ -85,13 +85,11 @@ class MainActivityTest {
         }
         composeRule.waitForIdle()
         composeRule.onNodeWithTag("today-screen").assertIsDisplayed()
+    }
 
+    @Test
+    fun systemBackCollapsesTrainingToToday() {
         composeRule.onNodeWithTag("primary-pager").performTouchInput { swipeLeft() }
-        composeRule.waitUntil(timeoutMillis = 5_000) {
-            runCatching {
-                composeRule.onNodeWithTag("training-screen").assertIsDisplayed()
-            }.isSuccess
-        }
         composeRule.onNodeWithTag("training-screen").assertIsDisplayed()
 
         composeRule.activityRule.scenario.onActivity { activity ->
