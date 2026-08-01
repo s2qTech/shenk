@@ -87,6 +87,11 @@ class MainActivityTest {
         composeRule.onNodeWithTag("today-screen").assertIsDisplayed()
 
         composeRule.onNodeWithTag("primary-pager").performTouchInput { swipeLeft() }
+        composeRule.waitUntil(timeoutMillis = 5_000) {
+            runCatching {
+                composeRule.onNodeWithTag("training-screen").assertIsDisplayed()
+            }.isSuccess
+        }
         composeRule.onNodeWithTag("training-screen").assertIsDisplayed()
 
         composeRule.activityRule.scenario.onActivity { activity ->
