@@ -95,6 +95,26 @@ class TimerRepositoriesInstrumentedTest {
         }
     }
 
+    @Test
+    fun deletingRoutineHidesItAndQueuesTombstoneWithoutTouchingHistory() {
+        runBlocking {
+            local.persistAndEnqueue(routine("delete-me", includeScene = true), SharedEntityOwner.PLANNING)
+            val repository = RoutineLibraryRepository(local)
+            assertEquals(1, repository.observeLibrary().first().routines.size)
+
+            assertTrue(repository.deleteRoutine("delete-me"))
+            assertTrue(repository.observeLibrary().first().routines.isEmpty())
+
+            val tombstone = requireNotNull(local.get("routine_templates", "delete-me"))
+            assertTrue(tombstone.deletedAt != null)
+            val queued = database.outbox().due(Long.MAX_VALUE, 100).single {
+                it.entity == "routine_templates" && it.recordId == "delete-me"
+            }
+            assertEquals("delete", queued.operation)
+            assertFalse(repository.deleteRoutine("delete-me"))
+        }
+    }
+
     private fun routine(id: String, includeScene: Boolean): SharedRecord = SharedRecord.create(
         "routine_templates",
         id,

@@ -1,6 +1,6 @@
 # Project State
 
-Updated: 2026-08-01
+Updated: 2026-08-03
 
 ## Android Platform Baseline
 
@@ -150,3 +150,5 @@ The earlier seven Web/foundation work packages remain completed historical work.
 Package 6 is implemented and has passed JVM tests, Android lint, debug APK, and instrumentation APK build gates. Its accepted phase-1 advanced-AI transport is now provider-neutral clipboard copy/paste: Android copies the normalized weekly review package, and accepts only a pasted `coach_plan_patch` that passes whole-patch validation, preview, and confirmation. Android no longer sends or receives planning content through the system share surface, and the Web no longer exposes ChatGPT-specific MCP setup in normal settings. Existing MCP/OAuth code remains dormant future infrastructure and is not a Package 6 acceptance dependency. Its behavior and Xiaomi 14 acceptance path are recorded in `docs/android-package6-plan-collaboration.md`. Progress remains `6 / 9` until whole-patch rejection, no-op empty arrays, latest-only undo, offline outbox, weekly feedback copy, and plan-paste paths pass on the primary device. Package 7 must not start before that acceptance.
 
 The 2026-07-27 Package 5 corrective pass makes timer completion eligibility fail closed: a session is offered as a formal-record draft only when its immutable snapshot explicitly has `countsTowardTraining: true`; missing legacy visibility fields no longer default to true. Pending completions can be acknowledged as ignored without modifying `timer_sessions`. Formal logs inherit the timer snapshot's `calendarVisible` and `countsTowardTraining`. Today exposes a timer action only when the effective formal plan explicitly references a cached `routineId`; rest, walking plans and fallback suggestions without a routine remain guidance only. Dark theme surfaces now define explicit foreground and container colors. Android progress remains `6 / 9`.
+
+The 2026-08-03 Package 5 corrective pass adds explicit routine removal to the native timer library. A user-confirmed removal writes a local-first `routine_templates` tombstone, immediately removes the routine from ordinary timer UI, and queues a cloud `delete` operation. Existing `timer_sessions` and `training_logs` remain unchanged. This is routine-library maintenance inside Package 5 and does not start Package 7.

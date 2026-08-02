@@ -27,12 +27,14 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
@@ -45,6 +47,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.DeleteOutline
 import androidx.compose.material.icons.rounded.Pause
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.SkipNext
@@ -193,6 +196,13 @@ fun TrainingRoute(
                     SyncScheduler(context).enqueue()
                 }
             },
+            onDeleteRoutine = { routine ->
+                scope.launch {
+                    if (routineRepository.deleteRoutine(routine.id)) {
+                        SyncScheduler(context).enqueue()
+                    }
+                }
+            },
         )
         TimerEngineState.PREVIEW -> RoutinePreviewScreen(
             snapshot = snapshot,
@@ -249,8 +259,10 @@ private fun RoutineLibraryScreen(
     onSelect: (RoutineTemplate) -> Unit,
     onPending: (PendingTimerCompletion) -> Unit,
     onIgnorePending: (PendingTimerCompletion) -> Unit,
+    onDeleteRoutine: (RoutineTemplate) -> Unit,
 ) {
     var scene by remember(preferredScene) { mutableStateOf(preferredScene ?: RoutineScene.HOME) }
+    var routinePendingDelete by remember { mutableStateOf<RoutineTemplate?>(null) }
     LaunchedEffect(library.routines) {
         if (library.byScene[scene].isNullOrEmpty()) {
             scene = RoutineScene.entries.firstOrNull { library.byScene[it].orEmpty().isNotEmpty() } ?: scene
@@ -360,7 +372,16 @@ private fun RoutineLibraryScreen(
                             Text(routine.title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
                             Text("${formatDuration(expandedSeconds)} · ${routine.steps.size} 个动作", color = MaterialTheme.colorScheme.secondary)
                         }
-                        Text("查看", color = MaterialTheme.colorScheme.primary)
+                        IconButton(
+                            onClick = { routinePendingDelete = routine },
+                            modifier = Modifier.testTag("delete-routine-${routine.id}"),
+                        ) {
+                            Icon(
+                                imageVector = Icons.Rounded.DeleteOutline,
+                                contentDescription = "删除${routine.title}",
+                                tint = MaterialTheme.colorScheme.error,
+                            )
+                        }
                     }
                 }
             }
@@ -369,6 +390,28 @@ private fun RoutineLibraryScreen(
             item { Text("有 ${library.rejectedCount} 个方案缺少权威字段或格式无效，未加入计时器。", color = MaterialTheme.colorScheme.error) }
         }
         }
+    }
+
+    routinePendingDelete?.let { routine ->
+        AlertDialog(
+            onDismissRequest = { routinePendingDelete = null },
+            title = { Text("删除“${routine.title}”？") },
+            text = {
+                Text("删除后，该方案会从本机和同步设备的计时器中移除。已经完成的训练和计时记录会保留。")
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        routinePendingDelete = null
+                        onDeleteRoutine(routine)
+                    },
+                    modifier = Modifier.testTag("confirm-delete-routine"),
+                ) { Text("删除", color = MaterialTheme.colorScheme.error) }
+            },
+            dismissButton = {
+                TextButton(onClick = { routinePendingDelete = null }) { Text("取消") }
+            },
+        )
     }
 }
 

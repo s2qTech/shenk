@@ -60,6 +60,11 @@ data class SharedRecord(
         put("data", data)
     })
 
+    fun withDeletedAt(deletedAt: String): SharedRecord = SharedRecord(buildJsonObject {
+        envelope.forEach { (key, value) -> put(key, value) }
+        put("deletedAt", JsonPrimitive(deletedAt))
+    })
+
     companion object {
         fun create(
             entity: String,

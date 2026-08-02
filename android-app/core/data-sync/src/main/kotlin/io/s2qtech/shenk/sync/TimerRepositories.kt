@@ -47,6 +47,16 @@ class RoutineLibraryRepository(
             rejectedCount = decoded.count { it.routine == null },
         )
     }
+
+    suspend fun deleteRoutine(id: String): Boolean {
+        val current = records.get("routine_templates", id) ?: return false
+        if (current.deletedAt != null) return false
+        records.persistAndEnqueue(
+            current.withDeletedAt(Instant.now().toString()),
+            SharedEntityOwner.PLANNING,
+        )
+        return true
+    }
 }
 
 class NativeTimerSessionRepository(
