@@ -39,10 +39,12 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -651,6 +653,10 @@ private fun DurationWheelEditor(
 ) {
     val safeMaximum = (maxMinutes ?: (16 * 60)).coerceAtLeast(1)
     val safeValue = valueMinutes.coerceIn(1, safeMaximum)
+    val editorValue = remember(label, safeMaximum) { mutableIntStateOf(safeValue) }
+    LaunchedEffect(safeValue, safeMaximum) {
+        editorValue.intValue = safeValue
+    }
     WheelEditorFrame(label = label, onClear = onClear, onDone = onDone) {
         key(label) {
             Row(
@@ -660,22 +666,28 @@ private fun DurationWheelEditor(
             ) {
                 IntWheelColumn(
                     values = 0..(safeMaximum / 60),
-                    selected = safeValue / 60,
+                    selected = editorValue.intValue / 60,
                     suffix = "小时",
                     modifier = Modifier.weight(1f),
                     onSelected = { hour ->
-                        val minute = safeValue % 60
-                        onValueChange((hour * 60 + minute).coerceIn(1, safeMaximum))
+                        val changed = durationMinutesWithHour(editorValue.intValue, hour, safeMaximum)
+                        if (changed != editorValue.intValue) {
+                            editorValue.intValue = changed
+                            onValueChange(changed)
+                        }
                     },
                 )
                 IntWheelColumn(
                     values = 0..59,
-                    selected = safeValue % 60,
+                    selected = editorValue.intValue % 60,
                     suffix = "分",
                     modifier = Modifier.weight(1f),
                     onSelected = { minute ->
-                        val hour = safeValue / 60
-                        onValueChange((hour * 60 + minute).coerceIn(1, safeMaximum))
+                        val changed = durationMinutesWithMinute(editorValue.intValue, minute, safeMaximum)
+                        if (changed != editorValue.intValue) {
+                            editorValue.intValue = changed
+                            onValueChange(changed)
+                        }
                     },
                 )
             }
@@ -772,6 +784,7 @@ private fun WheelColumn(
     val listState = rememberLazyListState(initialFirstVisibleItemIndex = initialIndex)
     val flingBehavior = rememberSnapFlingBehavior(lazyListState = listState)
     val scope = rememberCoroutineScope()
+    val latestOnSelected by rememberUpdatedState(onSelected)
     val centeredIndex by remember(listState, initialIndex) {
         derivedStateOf {
             val layout = listState.layoutInfo
@@ -788,7 +801,13 @@ private fun WheelColumn(
             .filter { it != null }
             .map { requireNotNull(it) }
             .distinctUntilChanged()
-            .collect(onSelected)
+            .collect { latestOnSelected(it) }
+    }
+
+    LaunchedEffect(initialIndex, itemCount) {
+        if (!listState.isScrollInProgress && centeredIndex != initialIndex) {
+            listState.scrollToItem(initialIndex)
+        }
     }
 
     Box(modifier.height(152.dp)) {
@@ -825,6 +844,18 @@ private fun WheelColumn(
             }
         }
     }
+}
+
+internal fun durationMinutesWithHour(currentMinutes: Int, hour: Int, maximumMinutes: Int): Int {
+    val maximum = maximumMinutes.coerceAtLeast(1)
+    val minute = currentMinutes.coerceAtLeast(0) % 60
+    return (hour.coerceAtLeast(0) * 60 + minute).coerceIn(1, maximum)
+}
+
+internal fun durationMinutesWithMinute(currentMinutes: Int, minute: Int, maximumMinutes: Int): Int {
+    val maximum = maximumMinutes.coerceAtLeast(1)
+    val hour = currentMinutes.coerceAtLeast(0) / 60
+    return (hour * 60 + minute.coerceIn(0, 59)).coerceIn(1, maximum)
 }
 
 private fun formatDuration(minutes: Int): String = buildString {
