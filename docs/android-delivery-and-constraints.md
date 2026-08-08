@@ -1,7 +1,7 @@
 # Android Delivery Plan and Constraints
 
-Updated: 2026-07-20
-Status: confirmed planning baseline; Packages 0-5 accepted, Package 6 implemented and awaiting Xiaomi 14 acceptance, progress `6 / 9`
+Updated: 2026-08-08
+Status: confirmed planning baseline; Packages 0-6 accepted, Package 7 not started, progress `7 / 9`
 
 ## 1. Delivery Model
 

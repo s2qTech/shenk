@@ -1,7 +1,7 @@
 # Android Package 6: Plan Collaboration and Weekly Feedback
 
-Updated: 2026-08-02
-Status: implemented; Xiaomi 14 acceptance pending; Android delivery progress remains `6 / 9`
+Updated: 2026-08-08
+Status: accepted on Xiaomi 14; Android delivery progress is `7 / 9`; Package 7 has not started
 
 ## Scope
 
@@ -68,6 +68,8 @@ Package 6 adds the native plan inbox and weekly feedback workspace to `android-a
 14. Enable the weekly reminder and verify reminder permission handling and the configured Saturday time are preserved after restart.
 
 ## Risks and Rollback
+
+Package 6 passed the Xiaomi 14 acceptance gate on 2026-08-08. The device run covered strict add/apply, routine-only empty-array no-op, whole-patch rejection for a missing authoritative `scene`, explicit-delete confirmation, latest-only undo, and cleanup. Earlier accepted device checks cover offline outbox recovery and weekly feedback copy. During acceptance, apply and undo were corrected to release their busy state before showing a snackbar so the next action is immediately available.
 
 - Clipboard content can be read by the user-selected destination and may be visible to the operating system for a limited time. The app never chooses the AI destination on the user's behalf.
 - Weekly reminders are best-effort under HyperOS background scheduling and may be delayed by the operating system.

@@ -143,10 +143,13 @@ fun PlanningRoute(
                         runCatching { repository.undoLatest() }
                             .onSuccess {
                                 SyncScheduler(context).enqueue()
+                                busy = false
                                 snackbar.showSnackbar("最近一次计划草案已撤销")
                             }
-                            .onFailure { snackbar.showSnackbar(it.message ?: "撤销失败") }
-                        busy = false
+                            .onFailure {
+                                busy = false
+                                snackbar.showSnackbar(it.message ?: "撤销失败")
+                            }
                     }
                 },
             )
@@ -428,11 +431,14 @@ private fun kotlinx.coroutines.CoroutineScope.applyPatch(
         runCatching { repository.apply(text) }
             .onSuccess { result ->
                 SyncScheduler(context).enqueue()
-                snackbar.showSnackbar("已写入：新增 ${result.added}，更新 ${result.updated}，删除 ${result.deleted}")
                 onSuccess()
+                onBusy(false)
+                snackbar.showSnackbar("已写入：新增 ${result.added}，更新 ${result.updated}，删除 ${result.deleted}")
             }
-            .onFailure { snackbar.showSnackbar(it.message ?: "应用失败") }
-        onBusy(false)
+            .onFailure {
+                onBusy(false)
+                snackbar.showSnackbar(it.message ?: "应用失败")
+            }
     }
 }
 
