@@ -6,7 +6,7 @@ const path = require("node:path");
 const vm = require("node:vm");
 const nodeCrypto = require("node:crypto");
 
-function loadWorker() {
+function loadWorker(fetchImpl = fetch) {
   const workerPath = path.join(__dirname, "..", "cloudflare", "worker.js");
   const source = fs.readFileSync(workerPath, "utf8")
     .replace("export default {", "globalThis.__worker = {");
@@ -15,6 +15,7 @@ function loadWorker() {
     Request,
     Response,
     Headers,
+    fetch: fetchImpl,
     TextEncoder,
     crypto: { randomUUID: () => "event_test", subtle: nodeCrypto.webcrypto.subtle },
     globalThis: null
@@ -30,6 +31,166 @@ function request(url, options = {}) {
 }
 
 async function run() {
+{
+  const worker = loadWorker();
+  const response = await worker.fetch(
+    request("https://worker.example/api/ai/connection-test", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ provider: {} })
+    }),
+    { SHENK_TOKEN: "valid" }
+  );
+  assert.equal(response.status, 401);
+}
+
+{
+  const worker = loadWorker();
+  const response = await worker.fetch(
+    request("https://worker.example/api/ai/connection-test", {
+      method: "POST",
+      headers: { Authorization: "Bearer timer", "Content-Type": "application/json" },
+      body: JSON.stringify({ provider: {} })
+    }),
+    { TIMER_TOKEN: "timer" }
+  );
+  assert.equal(response.status, 403);
+  assert.equal((await response.json()).error, "forbidden_ai_review_role");
+}
+
+{
+  const worker = loadWorker(() => { throw new Error("private provider must not be called"); });
+  const response = await worker.fetch(
+    request("https://worker.example/api/ai/connection-test", {
+      method: "POST",
+      headers: { Authorization: "Bearer valid", "Content-Type": "application/json" },
+      body: JSON.stringify({
+        provider: { id: "custom", baseUrl: "https://127.0.0.1/v1", model: "fixture", apiKey: "fixture-secret" }
+      })
+    }),
+    { SHENK_TOKEN: "valid" }
+  );
+  assert.equal(response.status, 400);
+  assert.equal((await response.json()).error, "private_ai_provider_url_forbidden");
+}
+
+{
+  let upstreamRequest;
+  const worker = loadWorker(async (url, options) => {
+    upstreamRequest = { url, options };
+    return new Response(JSON.stringify({ choices: [{ message: { content: "OK" } }] }), {
+      status: 200,
+      headers: { "Content-Type": "application/json" }
+    });
+  });
+  const response = await worker.fetch(
+    request("https://worker.example/api/ai/connection-test", {
+      method: "POST",
+      headers: { Authorization: "Bearer valid", "Content-Type": "application/json" },
+      body: JSON.stringify({
+        provider: { id: "deepseek", baseUrl: "https://api.deepseek.com", model: "deepseek-v4-flash", apiKey: "fixture-secret" }
+      })
+    }),
+    { SHENK_TOKEN: "valid" }
+  );
+  const upstreamBody = JSON.parse(upstreamRequest.options.body);
+  assert.equal(response.status, 200);
+  assert.equal(upstreamRequest.url, "https://api.deepseek.com/chat/completions");
+  assert.equal(upstreamBody.max_tokens, 32);
+  assert.deepEqual(upstreamBody.thinking, { type: "disabled" });
+}
+
+{
+  let upstreamRequest;
+  const worker = loadWorker(async (url, options) => {
+    upstreamRequest = { url, options };
+    return new Response(JSON.stringify({
+        choices: [{ message: { content: JSON.stringify({
+          conclusion: "Synthetic review.",
+          assessment: "Recovery is appropriate today.",
+          actions: ["Keep the planned easy session."],
+          evidence: ["fixture"],
+          cautions: [],
+          localSuggestion: {
+            date: "2099-01-01",
+            title: "Easy walk",
+            trainingType: "easy_walk",
+            estimatedMinutes: 25,
+            reason: "No formal plan exists."
+          }
+        }) } }]
+    }), { status: 200, headers: { "Content-Type": "application/json" } });
+  });
+  const response = await worker.fetch(
+    request("https://worker.example/api/ai/daily-review", {
+      method: "POST",
+      headers: { Authorization: "Bearer valid", "Content-Type": "application/json" },
+      body: JSON.stringify({
+        provider: { id: "custom", baseUrl: "https://provider.example/v1", model: "fixture", apiKey: "fixture-secret" },
+        snapshot: {
+          schema: "daily_review_snapshot",
+          contractVersion: "2.0",
+          date: "2099-01-01",
+          missingCriticalFields: [],
+          records: []
+        }
+      })
+    }),
+    { SHENK_TOKEN: "valid" }
+  );
+  const body = await response.json();
+    assert.equal(response.status, 200);
+    assert.equal(body.review.conclusion, "Synthetic review.");
+    assert.equal(body.review.assessment, "Recovery is appropriate today.");
+    assert.equal(body.review.localSuggestion.title, "Easy walk");
+    assert.deepEqual(body.review.actions, ["Keep the planned easy session."]);
+  assert.equal(upstreamRequest.url, "https://provider.example/v1/chat/completions");
+  assert.equal(upstreamRequest.options.headers.Authorization, "Bearer fixture-secret");
+    assert.deepEqual(JSON.parse(upstreamRequest.options.body).thinking, { type: "enabled" });
+    assert.doesNotMatch(JSON.stringify(body), /fixture-secret/);
+  }
+
+  {
+    const worker = loadWorker(async () => new Response(JSON.stringify({
+      choices: [{ message: { content: JSON.stringify({
+        conclusion: "Keep the formal plan.",
+        assessment: "The current plan remains suitable.",
+        actions: ["Follow the formal plan."],
+        evidence: [],
+        cautions: [],
+        localSuggestion: {
+          date: "2099-01-02",
+          title: "Unauthorized replacement",
+          trainingType: "recovery"
+        }
+      }) } }]
+    }), { status: 200, headers: { "Content-Type": "application/json" } }));
+    const response = await worker.fetch(
+      request("https://worker.example/api/ai/daily-review", {
+        method: "POST",
+        headers: { Authorization: "Bearer valid", "Content-Type": "application/json" },
+        body: JSON.stringify({
+          provider: { id: "custom", baseUrl: "https://provider.example/v1", model: "fixture", apiKey: "fixture-secret" },
+          snapshot: {
+            schema: "daily_review_snapshot",
+            contractVersion: "2.0",
+            date: "2099-01-02",
+            missingCriticalFields: [],
+            records: [{
+              entity: "daily_plan_items",
+              id: "plan-1",
+              data: { date: "2099-01-02", title: "Strength", trainingType: "strength" }
+            }]
+          }
+        })
+      }),
+      { SHENK_TOKEN: "valid" }
+    );
+    const body = await response.json();
+    assert.equal(response.status, 200);
+    assert.equal(body.review.localSuggestion, null);
+  }
+
 {
   const worker = loadWorker();
   const response = await worker.fetch(

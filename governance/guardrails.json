@@ -35,7 +35,8 @@
   "dayDisplayPriority": [
     "training_logs",
     "effective_formal_plan",
-    "local_fallback_suggestion"
+    "ai_local_suggestion",
+    "deterministic_fallback_suggestion"
   ],
   "entityOwnership": {
     "planning_module": [
@@ -80,7 +81,7 @@
     },
     {
       "id": "G-PLAN-001",
-      "rule": "Formal actual record outranks effective formal plan, which outranks local fallback suggestion."
+      "rule": "Formal actual record outranks effective formal plan, which outranks AI local suggestion, which outranks deterministic fallback suggestion."
     },
     {
       "id": "G-PLAN-002",
@@ -96,7 +97,7 @@
     },
     {
       "id": "G-AI-001",
-      "rule": "Daily compatible AI cannot mutate formal plans, adjustments, goals, strategies, or routines."
+      "rule": "Daily compatible AI may write daily_reviews and an optional local suggestion inside that review, but cannot mutate formal plans, adjustments, goals, strategies, routines, or their entities."
     },
     {
       "id": "G-AI-002",

@@ -7,7 +7,12 @@ import android.view.WindowManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.snap
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -23,6 +28,7 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -59,12 +65,17 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -241,6 +252,9 @@ fun TrainingRoute(
             onSave = { log ->
                 scope.launch {
                     recordRepository.saveTrainingLog(log)
+                    val reviewRepository = (context.applicationContext as ShenkApplication).dailyReviewRepository
+                    val review = reviewRepository.enqueue(java.time.LocalDate.parse(log.date), allowIncomplete = false)
+                    if (review.queued) DailyReviewScheduler.enqueue(context)
                     SyncScheduler(context).enqueue()
                     completion = null
                     if (snapshot.request?.sessionId == session.id) coordinator.reset()
@@ -263,6 +277,7 @@ private fun RoutineLibraryScreen(
 ) {
     var scene by remember(preferredScene) { mutableStateOf(preferredScene ?: RoutineScene.HOME) }
     var routinePendingDelete by remember { mutableStateOf<RoutineTemplate?>(null) }
+    var revealedRoutineId by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(library.routines) {
         if (library.byScene[scene].isNullOrEmpty()) {
             scene = RoutineScene.entries.firstOrNull { library.byScene[it].orEmpty().isNotEmpty() } ?: scene
@@ -354,36 +369,20 @@ private fun RoutineLibraryScreen(
         } else {
             items(routines, key = RoutineTemplate::id) { routine ->
                 val expandedSeconds = expandRoutine(routine).sumOf { it.seconds }
-                Surface(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable { onSelect(routine) }
-                        .testTag("routine-${routine.id}"),
-                    color = MaterialTheme.colorScheme.surface,
-                    tonalElevation = 1.dp,
-                    shape = RoundedCornerShape(22.dp),
-                ) {
-                    Row(
-                        Modifier.padding(horizontal = 20.dp, vertical = 18.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Column(Modifier.weight(1f)) {
-                            Text(routine.title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
-                            Text("${formatDuration(expandedSeconds)} · ${routine.steps.size} 个动作", color = MaterialTheme.colorScheme.secondary)
-                        }
-                        IconButton(
-                            onClick = { routinePendingDelete = routine },
-                            modifier = Modifier.testTag("delete-routine-${routine.id}"),
-                        ) {
-                            Icon(
-                                imageVector = Icons.Rounded.DeleteOutline,
-                                contentDescription = "删除${routine.title}",
-                                tint = MaterialTheme.colorScheme.error,
-                            )
-                        }
-                    }
-                }
+                SwipeRevealRoutineCard(
+                    routine = routine,
+                    expandedSeconds = expandedSeconds,
+                    revealed = revealedRoutineId == routine.id,
+                    onReveal = { revealedRoutineId = routine.id },
+                    onClose = {
+                        if (revealedRoutineId == routine.id) revealedRoutineId = null
+                    },
+                    onSelect = { onSelect(routine) },
+                    onDelete = {
+                        revealedRoutineId = null
+                        routinePendingDelete = routine
+                    },
+                )
             }
         }
         if (library.rejectedCount > 0) {
@@ -412,6 +411,105 @@ private fun RoutineLibraryScreen(
                 TextButton(onClick = { routinePendingDelete = null }) { Text("取消") }
             },
         )
+    }
+}
+
+@Composable
+private fun SwipeRevealRoutineCard(
+    routine: RoutineTemplate,
+    expandedSeconds: Int,
+    revealed: Boolean,
+    onReveal: () -> Unit,
+    onClose: () -> Unit,
+    onSelect: () -> Unit,
+    onDelete: () -> Unit,
+) {
+    val actionWidth = 88.dp
+    val actionWidthPx = with(LocalDensity.current) { actionWidth.toPx() }
+    var dragOffset by remember(routine.id) { mutableFloatStateOf(0f) }
+    var dragging by remember(routine.id) { mutableStateOf(false) }
+    val visibleOffset by animateFloatAsState(
+        targetValue = dragOffset,
+        animationSpec = if (dragging) snap() else spring(stiffness = Spring.StiffnessMediumLow),
+        label = "routine-swipe-offset",
+    )
+
+    LaunchedEffect(revealed, actionWidthPx) {
+        if (!dragging) dragOffset = if (revealed) -actionWidthPx else 0f
+    }
+
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(88.dp)
+            .clip(RoundedCornerShape(22.dp)),
+    ) {
+        Surface(
+            modifier = Modifier.fillMaxSize(),
+            color = MaterialTheme.colorScheme.errorContainer,
+        ) {
+            Box(contentAlignment = Alignment.CenterEnd) {
+                IconButton(
+                    onClick = onDelete,
+                    modifier = Modifier
+                        .width(actionWidth)
+                        .testTag("delete-routine-${routine.id}"),
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.DeleteOutline,
+                        contentDescription = "删除${routine.title}",
+                        tint = MaterialTheme.colorScheme.onErrorContainer,
+                    )
+                }
+            }
+        }
+        Surface(
+            modifier = Modifier
+                .fillMaxSize()
+                .graphicsLayer { translationX = visibleOffset }
+                .pointerInput(routine.id, actionWidthPx) {
+                    detectHorizontalDragGestures(
+                        onDragStart = {
+                            dragging = true
+                            onReveal()
+                        },
+                        onDragCancel = {
+                            dragging = false
+                            dragOffset = if (revealed) -actionWidthPx else 0f
+                        },
+                        onDragEnd = {
+                            dragging = false
+                            if (dragOffset <= -actionWidthPx * 0.45f) {
+                                dragOffset = -actionWidthPx
+                                onReveal()
+                            } else {
+                                dragOffset = 0f
+                                onClose()
+                            }
+                        },
+                    ) { change, amount ->
+                        change.consume()
+                        dragOffset = (dragOffset + amount).coerceIn(-actionWidthPx, 0f)
+                    }
+                }
+                .clickable {
+                    if (revealed || dragOffset < 0f) {
+                        dragOffset = 0f
+                        onClose()
+                    } else {
+                        onSelect()
+                    }
+                }
+                .testTag("routine-${routine.id}"),
+            color = MaterialTheme.colorScheme.surface,
+            tonalElevation = 1.dp,
+            shape = RoundedCornerShape(22.dp),
+        ) {
+            Column(Modifier.padding(horizontal = 20.dp, vertical = 18.dp)) {
+                Text(routine.title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
+                Text("${formatDuration(expandedSeconds)} · ${routine.steps.size} 个动作", color = MaterialTheme.colorScheme.secondary)
+            }
+        }
     }
 }
 

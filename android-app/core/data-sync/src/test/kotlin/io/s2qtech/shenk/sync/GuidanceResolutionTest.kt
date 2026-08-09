@@ -12,6 +12,55 @@ import org.junit.Test
 
 class GuidanceResolutionTest {
     @Test
+    fun generatedReviewSuggestionIsUsedOnlyWithoutFormalPlan() {
+        val date = LocalDate.of(2099, 1, 2)
+        val review = SharedRecord.create(
+            entity = "daily_reviews",
+            id = "review-1",
+            data = buildJsonObject {
+                put("date", JsonPrimitive(date.toString()))
+                put("status", JsonPrimitive("generated"))
+                put("version", JsonPrimitive(1))
+                put("localSuggestion", buildJsonObject {
+                    put("date", JsonPrimitive(date.toString()))
+                    put("title", JsonPrimitive("轻松走"))
+                    put("trainingType", JsonPrimitive("easy_walk"))
+                    put("estimatedMinutes", JsonPrimitive(25))
+                })
+            },
+        )
+
+        val suggestionOnly = GuidanceResolution.resolve(
+            date = date,
+            logs = emptyList(),
+            plans = emptyList(),
+            adjustments = emptyList(),
+            reviews = listOf(review),
+        )
+        assertEquals("轻松走", suggestionOnly.guidance.title)
+        assertEquals(25, suggestionOnly.guidance.estimatedMinutes)
+
+        val plan = SharedRecord.create(
+            entity = "daily_plan_items",
+            id = "plan-1",
+            data = buildJsonObject {
+                put("date", JsonPrimitive(date.toString()))
+                put("title", JsonPrimitive("力量训练"))
+                put("trainingType", JsonPrimitive("strength"))
+            },
+        )
+        val withPlan = GuidanceResolution.resolve(
+            date = date,
+            logs = emptyList(),
+            plans = listOf(plan),
+            adjustments = emptyList(),
+            reviews = listOf(review),
+        )
+        assertEquals(GuidanceSource.FORMAL_PLAN, withPlan.guidance.source)
+        assertEquals("力量训练", withPlan.guidance.title)
+    }
+
+    @Test
     fun structuredLegacyFieldsRemainMissingInsteadOfCrashingCalendar() {
         val malformedDate = buildJsonArray { add(JsonPrimitive("2026-07-18")) }
         val malformedRecords = listOf(

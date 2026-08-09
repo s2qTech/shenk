@@ -197,8 +197,17 @@ Phase-2 wearable workouts may become formal records directly when their stable `
   "version": 3,
   "status": "generated",
   "conclusion": "...",
+  "assessment": "...",
+  "actions": ["..."],
   "evidence": ["..."],
   "cautions": ["..."],
+  "localSuggestion": {
+    "title": "轻松走",
+    "trainingType": "easy_walk",
+    "estimatedMinutes": 30,
+    "reason": "...",
+    "notes": "..."
+  },
   "inputDigest": "sha256:...",
   "provider": "deepseek",
   "model": "...",
@@ -206,7 +215,7 @@ Phase-2 wearable workouts may become formal records directly when their stable `
 }
 ```
 
-Provider metadata never includes a key. A changed input digest invalidates the visible review and schedules regeneration.
+Provider metadata never includes a key. A changed input digest invalidates the visible review and schedules regeneration. `localSuggestion` is nullable, applies only to the review date, and must be removed whenever an effective formal plan exists. It is not a plan entity and cannot carry mutations for plans, adjustments, routines, goals, or strategies.
 
 ## 10. New Entity: `plan_import_batches`
 
@@ -237,7 +246,8 @@ The domain resolver produces one user-facing day state:
 ```text
 formal actual record
   else effective formal plan (latest valid adjustment resolved over daily snapshot)
-  else local fallback suggestion
+  else AI local suggestion embedded in the latest valid daily review
+  else deterministic offline fallback
 ```
 
 Supporting facts such as timer sessions, body metrics, and status check-ins are attached to the day but do not compete as top-level calendar layers.

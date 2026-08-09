@@ -8,6 +8,7 @@ import androidx.compose.animation.AnimatedContent
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ShowChart
 import androidx.compose.material.icons.rounded.AutoAwesome
+import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -18,10 +19,12 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
@@ -64,7 +67,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
-private enum class TodaySheet { MORNING, PRE_WORKOUT, REMINDERS, CONNECTION }
+private enum class TodaySheet { MORNING, PRE_WORKOUT, REMINDERS, CONNECTION, DAILY_REVIEW, SETTINGS, AI_SETTINGS }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -82,6 +85,12 @@ fun TodayRoute(
     val snackbar = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
+    val dailyReviewRepository = remember(context) {
+        (context.applicationContext as ShenkApplication).dailyReviewRepository
+    }
+    val dailyReviewState by dailyReviewRepository.observe(date).collectAsState(
+        initial = io.s2qtech.shenk.sync.DailyReviewState(),
+    )
     var reminders by remember { mutableStateOf(ReminderSettings()) }
     var connection by remember { mutableStateOf(CloudConnectionState(false, "")) }
     var connectionBusy by remember { mutableStateOf(false) }
@@ -101,6 +110,7 @@ fun TodayRoute(
             TodayDestinationBar(
                 onData = onData,
                 onPlanning = onPlanning,
+                onSettings = { sheet = TodaySheet.SETTINGS },
             )
         },
     ) { innerPadding ->
@@ -110,9 +120,10 @@ fun TodayRoute(
             modifier = Modifier.padding(innerPadding),
             onMorning = { sheet = TodaySheet.MORNING },
             onPreWorkout = { sheet = TodaySheet.PRE_WORKOUT },
-            onReminders = { sheet = TodaySheet.REMINDERS },
             onConnect = { sheet = TodaySheet.CONNECTION },
             cloudConfigured = connection.configured,
+            dailyReviewState = dailyReviewState,
+            onDailyReview = { sheet = TodaySheet.DAILY_REVIEW },
             onTraining = { onTraining(records?.guidance) },
         )
     }
@@ -126,6 +137,10 @@ fun TodayRoute(
                     scope.launch {
                         runCatching { repository.saveMorning(checkin, metric) }
                             .onSuccess {
+                                val reviewRepository = (context.applicationContext as ShenkApplication).dailyReviewRepository
+                                reviewRepository.requeueIfReviewed(date)
+                                    ?.takeIf { it.queued }
+                                    ?.let { DailyReviewScheduler.enqueue(context) }
                                 SyncScheduler(context).enqueue()
                                 sheet = null
                                 snackbar.showSnackbar("晨起状态已保存在本机，等待同步")
@@ -144,6 +159,10 @@ fun TodayRoute(
                     scope.launch {
                         runCatching { repository.savePreWorkout(checkin) }
                             .onSuccess {
+                                val reviewRepository = (context.applicationContext as ShenkApplication).dailyReviewRepository
+                                reviewRepository.requeueIfReviewed(date)
+                                    ?.takeIf { it.queued }
+                                    ?.let { DailyReviewScheduler.enqueue(context) }
                                 SyncScheduler(context).enqueue()
                                 sheet = null
                                 snackbar.showSnackbar("训练前变化已记录")
@@ -161,7 +180,7 @@ fun TodayRoute(
                         reminderStore.save(value)
                         reminders = value
                         sheet = null
-                        if ((value.morningEnabled || value.middayEnabled || value.weeklyEnabled) &&
+                        if ((value.morningEnabled || value.middayEnabled || value.eveningEnabled || value.weeklyEnabled) &&
                             context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) !=
                             PackageManager.PERMISSION_GRANTED
                         ) {
@@ -214,6 +233,28 @@ fun TodayRoute(
                 },
             )
         }
+        TodaySheet.DAILY_REVIEW -> ModalBottomSheet(onDismissRequest = { sheet = null }) {
+            DailyReviewSheet(
+                date = date,
+                repository = dailyReviewRepository,
+                state = dailyReviewState,
+                onQueued = { DailyReviewScheduler.enqueue(context) },
+                onOpenAiSettings = { sheet = TodaySheet.AI_SETTINGS },
+                onMessage = { message -> scope.launch { snackbar.showSnackbar(message) } },
+            )
+        }
+        TodaySheet.SETTINGS -> ModalBottomSheet(onDismissRequest = { sheet = null }) {
+            AppSettingsSheet(
+                onReminders = { sheet = TodaySheet.REMINDERS },
+                onAiService = { sheet = TodaySheet.AI_SETTINGS },
+            )
+        }
+        TodaySheet.AI_SETTINGS -> ModalBottomSheet(onDismissRequest = { sheet = null }) {
+            AiProviderSettingsSheet(
+                repository = dailyReviewRepository,
+                onMessage = { message -> scope.launch { snackbar.showSnackbar(message) } },
+            )
+        }
         null -> Unit
     }
 }
@@ -225,9 +266,10 @@ private fun TodayScreen(
     modifier: Modifier = Modifier,
     onMorning: () -> Unit,
     onPreWorkout: () -> Unit,
-    onReminders: () -> Unit,
     onConnect: () -> Unit,
     cloudConfigured: Boolean,
+    dailyReviewState: io.s2qtech.shenk.sync.DailyReviewState,
+    onDailyReview: () -> Unit,
     onTraining: () -> Unit,
 ) {
     Column(
@@ -262,7 +304,12 @@ private fun TodayScreen(
                     Text("正在读取今天…", color = MaterialTheme.colorScheme.secondary)
                 }
             } else {
-                GuidanceBlock(guidance, onTraining)
+                GuidanceBlock(
+                    guidance = guidance,
+                    dailyReviewState = dailyReviewState,
+                    onTraining = onTraining,
+                    onDailyReview = onDailyReview,
+                )
             }
         }
         Spacer(Modifier.height(30.dp))
@@ -273,7 +320,6 @@ private fun TodayScreen(
             records = records,
             onMorning = onMorning,
             onPreWorkout = onPreWorkout,
-            onReminders = onReminders,
         )
         Spacer(Modifier.height(24.dp))
     }
@@ -283,6 +329,7 @@ private fun TodayScreen(
 private fun TodayDestinationBar(
     onData: () -> Unit,
     onPlanning: () -> Unit,
+    onSettings: () -> Unit,
 ) {
     ThumbActionDock(
         actions = listOf(
@@ -298,17 +345,28 @@ private fun TodayDestinationBar(
                 testTag = "today-open-planning",
                 icon = Icons.Rounded.AutoAwesome,
             ),
+            ThumbAction(
+                label = "设置",
+                onClick = onSettings,
+                testTag = "today-open-settings",
+                icon = Icons.Rounded.Settings,
+            ),
         ),
         modifier = Modifier.testTag("today-destination-bar"),
     )
 }
 
 @Composable
-private fun GuidanceBlock(guidance: io.s2qtech.shenk.model.TodayGuidance, onTraining: () -> Unit) {
+private fun GuidanceBlock(
+    guidance: io.s2qtech.shenk.model.TodayGuidance,
+    dailyReviewState: io.s2qtech.shenk.sync.DailyReviewState,
+    onTraining: () -> Unit,
+    onDailyReview: () -> Unit,
+) {
     val source = when (guidance.source) {
         GuidanceSource.ACTUAL -> "今日已完成"
         GuidanceSource.FORMAL_PLAN -> "今日计划"
-        GuidanceSource.LOCAL_SUGGESTION -> "离线建议"
+        GuidanceSource.LOCAL_SUGGESTION -> "本地建议"
     }
     Surface(
         color = when (guidance.source) {
@@ -337,6 +395,39 @@ private fun GuidanceBlock(guidance: io.s2qtech.shenk.model.TodayGuidance, onTrai
                     onClick = onTraining,
                     modifier = Modifier.fillMaxWidth().height(52.dp).testTag("today-open-training"),
                 ) { Text("进入训练") }
+            }
+
+            when {
+                dailyReviewState.review != null -> {
+                    val review = requireNotNull(dailyReviewState.review)
+                    Spacer(Modifier.height(22.dp))
+                    HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f))
+                    Spacer(Modifier.height(18.dp))
+                    Text("教练简评", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.secondary)
+                    Spacer(Modifier.height(6.dp))
+                    Text(review.conclusion, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                    TextButton(onClick = onDailyReview, modifier = Modifier.align(Alignment.End)) {
+                        Text("查看完整简评")
+                    }
+                }
+                dailyReviewState.jobState in setOf("PENDING", "RUNNING", "RETRY") -> {
+                    Spacer(Modifier.height(22.dp))
+                    HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f))
+                    Spacer(Modifier.height(16.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                        CircularProgressIndicator(modifier = Modifier.size(22.dp), strokeWidth = 2.dp)
+                        Column {
+                            Text("正在生成今日简评", fontWeight = FontWeight.SemiBold)
+                            Text("完成后会自动出现在这里", color = MaterialTheme.colorScheme.secondary)
+                        }
+                    }
+                }
+                else -> {
+                    Spacer(Modifier.height(14.dp))
+                    TextButton(onClick = onDailyReview, modifier = Modifier.align(Alignment.End)) {
+                        Text("生成今日简评")
+                    }
+                }
             }
         }
     }
@@ -382,7 +473,6 @@ private fun MorningStatusSection(
     records: TodayRecords?,
     onMorning: () -> Unit,
     onPreWorkout: () -> Unit,
-    onReminders: () -> Unit,
 ) {
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -475,7 +565,6 @@ private fun MorningStatusSection(
             TextButton(onClick = onPreWorkout) {
                 Text(if (records.preWorkout == null) "训练前有变化" else "调整训练前状态")
             }
-            TextButton(onClick = onReminders) { Text("提醒") }
         }
     }
 }

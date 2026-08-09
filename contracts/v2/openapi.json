@@ -51,6 +51,34 @@
         "responses": { "200": { "description": "Idempotent timer session result" }, "403": { "description": "Wrong role" } }
       }
     },
+    "/ai/connection-test": {
+      "post": {
+        "security": [{ "bearerAuth": [] }],
+        "description": "Tests an OpenAI-compatible provider through the transient Worker proxy. Provider credentials are never persisted.",
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/AiProviderRequest" } } } },
+        "responses": {
+          "200": { "description": "Provider connection succeeded" },
+          "400": { "$ref": "#/components/responses/ContractError" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "description": "Client role cannot use the AI review proxy" }
+        }
+      }
+    },
+    "/ai/daily-review": {
+      "post": {
+        "security": [{ "bearerAuth": [] }],
+        "description": "Generates a factual daily review only. It cannot mutate plans or routines.",
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/DailyReviewRequest" } } } },
+        "responses": {
+          "200": { "description": "Strict daily review payload", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/DailyReviewResponse" } } } },
+          "400": { "$ref": "#/components/responses/ContractError" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "description": "Client role cannot use the AI review proxy" },
+          "502": { "description": "Provider authentication or response failure" },
+          "503": { "description": "Provider temporarily unavailable" }
+        }
+      }
+    },
     "/sync-profiles/{profileId}": {
       "get": { "security": [{ "bearerAuth": [] }], "responses": { "200": { "description": "Encrypted profile only" }, "401": { "$ref": "#/components/responses/Unauthorized" } } },
       "put": { "security": [{ "bearerAuth": [] }], "responses": { "200": { "description": "Encrypted profile saved" }, "400": { "description": "Invalid encrypted profile" } } }
@@ -101,6 +129,81 @@
         "type": "object",
         "required": ["ok", "contractVersion", "accepted", "conflicts"],
         "properties": { "ok": { "const": true }, "contractVersion": { "const": "2.0" }, "accepted": { "type": "array" }, "conflicts": { "type": "array" } }
+      },
+      "AiProvider": {
+        "type": "object",
+        "required": ["id", "baseUrl", "model", "apiKey"],
+        "properties": {
+          "id": { "type": "string", "minLength": 1, "maxLength": 80 },
+          "baseUrl": { "type": "string", "format": "uri", "pattern": "^https://" },
+          "model": { "type": "string", "minLength": 1, "maxLength": 160 },
+          "apiKey": { "type": "string", "minLength": 1, "writeOnly": true }
+        },
+        "additionalProperties": false
+      },
+      "AiProviderRequest": {
+        "type": "object",
+        "required": ["provider"],
+        "properties": { "provider": { "$ref": "#/components/schemas/AiProvider" } },
+        "additionalProperties": false
+      },
+      "DailyReviewSnapshot": {
+        "type": "object",
+        "required": ["schema", "contractVersion", "date", "missingCriticalFields", "records"],
+        "properties": {
+          "schema": { "const": "daily_review_snapshot" },
+          "contractVersion": { "const": "2.0" },
+          "date": { "type": "string", "format": "date" },
+          "missingCriticalFields": { "type": "array", "items": { "type": "string" } },
+          "records": { "type": "array", "items": { "type": "object" } }
+        },
+        "additionalProperties": false
+      },
+      "DailyReviewRequest": {
+        "type": "object",
+        "required": ["provider", "snapshot"],
+        "properties": {
+          "provider": { "$ref": "#/components/schemas/AiProvider" },
+          "snapshot": { "$ref": "#/components/schemas/DailyReviewSnapshot" }
+        },
+        "additionalProperties": false
+      },
+      "DailyReviewResponse": {
+        "type": "object",
+        "required": ["ok", "review"],
+        "properties": {
+          "ok": { "const": true },
+          "review": {
+            "type": "object",
+            "required": ["conclusion", "actions", "evidence", "cautions"],
+            "properties": {
+                "conclusion": { "type": "string", "minLength": 1, "maxLength": 120 },
+                "assessment": { "type": "string", "maxLength": 600 },
+                "actions": { "type": "array", "minItems": 1, "maxItems": 4, "items": { "type": "string", "maxLength": 300 } },
+                "evidence": { "type": "array", "maxItems": 4, "items": { "type": "string", "maxLength": 300 } },
+                "cautions": { "type": "array", "maxItems": 3, "items": { "type": "string", "maxLength": 300 } },
+                "localSuggestion": {
+                  "anyOf": [
+                    { "type": "null" },
+                    {
+                      "type": "object",
+                      "required": ["date", "title", "trainingType"],
+                      "properties": {
+                        "date": { "type": "string", "format": "date" },
+                        "title": { "type": "string", "minLength": 1, "maxLength": 80 },
+                        "trainingType": { "type": "string", "minLength": 1, "maxLength": 80 },
+                        "estimatedMinutes": { "type": ["integer", "null"], "minimum": 0, "maximum": 180 },
+                        "reason": { "type": ["string", "null"], "maxLength": 300 }
+                      },
+                      "additionalProperties": false
+                    }
+                  ]
+                }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
       },
       "Entity": {
         "type": "string",

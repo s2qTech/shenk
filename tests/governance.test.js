@@ -51,7 +51,8 @@ test("critical guardrails keep stable identifiers and ownership", () => {
   assert.deepEqual(guardrails.dayDisplayPriority, [
     "training_logs",
     "effective_formal_plan",
-    "local_fallback_suggestion"
+    "ai_local_suggestion",
+    "deterministic_fallback_suggestion"
   ]);
   assert.deepEqual(guardrails.entityOwnership.timer_module, ["timer_sessions"]);
   assert.ok(!guardrails.entityOwnership.record_module.includes("timer_sessions"));

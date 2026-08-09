@@ -29,6 +29,7 @@ internal object GuidanceResolution {
         logs: List<SharedRecord>,
         plans: List<SharedRecord>,
         adjustments: List<SharedRecord>,
+        reviews: List<SharedRecord> = emptyList(),
     ): ResolvedDay {
         val dateText = date.toString()
         val actualLogs = logs
@@ -73,8 +74,27 @@ internal object GuidanceResolution {
             )
         }
 
+        val aiSuggestion = reviews
+            .filter { it.data.fieldString("date") == dateText && it.data.fieldString("status") == "generated" }
+            .maxByOrNull { it.data.fieldInt("version") ?: 0 }
+            ?.data
+            ?.get("localSuggestion")
+            ?.takeUnless { it is JsonNull }
+            ?.let { runCatching { it.jsonObject }.getOrNull() }
+            ?.takeIf { it.fieldString("date") == dateText }
+            ?.let { suggestion ->
+                val type = suggestion.fieldString("trainingType") ?: return@let null
+                TodayGuidance(
+                    source = GuidanceSource.LOCAL_SUGGESTION,
+                    title = suggestion.fieldString("title") ?: trainingTypeTitle(type),
+                    trainingType = type,
+                    estimatedMinutes = suggestion.fieldInt("estimatedMinutes"),
+                    note = suggestion.fieldString("reason"),
+                )
+            }
+
         return ResolvedDay(
-            guidance = TodayGuidanceResolver.resolve(actual, plan, DefaultSuggestionResolver.resolve(date)),
+            guidance = TodayGuidanceResolver.resolve(actual, plan, aiSuggestion, DefaultSuggestionResolver.resolve(date)),
             actualLogs = actualLogs,
         )
     }

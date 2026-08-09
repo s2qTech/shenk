@@ -1,7 +1,7 @@
 # Android Delivery Plan and Constraints
 
-Updated: 2026-08-08
-Status: confirmed planning baseline; Packages 0-6 accepted, Package 7 not started, progress `7 / 9`
+Updated: 2026-08-09
+Status: confirmed planning baseline; Packages 0-7 accepted, Package 8 not started, progress `8 / 9`
 
 ## 1. Delivery Model
 
@@ -69,7 +69,7 @@ Exit: an AI patch cannot partially apply, clear unrelated arrays, infer scenes, 
 
 ### Package 7: Daily AI Review
 
-- Compatible-provider settings and connection tests.
+- Fixed DeepSeek V4 Flash configuration with API-key-only setup and connection test.
 - Worker proxy with secret redaction.
 - Durable AI job queue and daily-review versioning.
 - Evening unrecorded prompt and review notification.
@@ -178,7 +178,7 @@ Phase-2 work starts only after Package 8: widget, Health Connect/Xiaomi data, an
 
 ### AI
 
-- Each provider template connection test.
+- DeepSeek V4 Flash connection test, including unauthorized and timeout handling.
 - Timeout, unauthorized, malformed JSON, partial response, and retry.
 - Offline queue and later generation.
 - Corrected day invalidates and regenerates latest review.

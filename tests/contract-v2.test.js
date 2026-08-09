@@ -100,6 +100,23 @@ test("OpenAPI v2 publishes version negotiation and disjoint entity ownership", (
   assert.deepEqual(owners.planning_exchange, ["planning_runs", "coach_plan_patches"]);
 });
 
+test("daily review contract is versioned, bounded, and exposed only through the review proxy", () => {
+  const review = schema.$defs.dailyReview;
+  assert.deepEqual(review.properties.status.enum, ["generated", "invalidated", "failed"]);
+  for (const field of ["inputDigest", "provider", "model", "generatedAt"]) {
+    assert.ok(review.required.includes(field), `dailyReview must require ${field}`);
+  }
+  assert.ok(openApi.paths["/ai/connection-test"]);
+  assert.ok(openApi.paths["/ai/daily-review"]);
+  assert.equal(openApi.components.schemas.AiProvider.properties.apiKey.writeOnly, true);
+  assert.equal(openApi.components.schemas.DailyReviewSnapshot.properties.contractVersion.const, "2.0");
+  assert.equal(openApi.components.schemas.DailyReviewResponse.properties.review.properties.conclusion.maxLength, 120);
+  assert.equal(openApi.components.schemas.DailyReviewResponse.properties.review.properties.assessment.maxLength, 600);
+  assert.equal(openApi.components.schemas.DailyReviewResponse.properties.review.properties.actions.maxItems, 4);
+  assert.equal(openApi.components.schemas.DailyReviewResponse.properties.review.properties.evidence.maxItems, 4);
+  assert.ok(openApi.components.schemas.DailyReviewResponse.properties.review.properties.localSuggestion);
+});
+
 test("planning exchange fixtures stay pending and cannot imply formal application", () => {
   const byEntity = new Map(fixtures.records.map(record => [record.entity, record]));
   const run = byEntity.get("planning_runs").data;

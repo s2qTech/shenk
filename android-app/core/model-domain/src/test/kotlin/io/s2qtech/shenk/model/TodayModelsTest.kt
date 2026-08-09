@@ -41,11 +41,13 @@ class TodayModelsTest {
     fun actualOutranksPlanAndSuggestion() {
         val actual = TodayGuidance(GuidanceSource.ACTUAL, "已完成力量", "strength")
         val plan = TodayGuidance(GuidanceSource.FORMAL_PLAN, "力量训练", "strength")
+        val aiSuggestion = TodayGuidance(GuidanceSource.LOCAL_SUGGESTION, "轻松走", "easy_walk")
         val fallback = TodayGuidance(GuidanceSource.LOCAL_SUGGESTION, "普通走", "easy_walk")
 
-        assertEquals(actual, TodayGuidanceResolver.resolve(actual, plan, fallback))
-        assertEquals(plan, TodayGuidanceResolver.resolve(null, plan, fallback))
-        assertEquals(fallback, TodayGuidanceResolver.resolve(null, null, fallback))
+        assertEquals(actual, TodayGuidanceResolver.resolve(actual, plan, aiSuggestion, fallback))
+        assertEquals(plan, TodayGuidanceResolver.resolve(null, plan, aiSuggestion, fallback))
+        assertEquals(aiSuggestion, TodayGuidanceResolver.resolve(null, null, aiSuggestion, fallback))
+        assertEquals(fallback, TodayGuidanceResolver.resolve(null, null, null, fallback))
     }
 
     @Test

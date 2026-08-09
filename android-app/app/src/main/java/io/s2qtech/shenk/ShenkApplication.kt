@@ -4,6 +4,9 @@ import android.app.Application
 import io.s2qtech.shenk.sync.LocalFirstRepository
 import io.s2qtech.shenk.sync.CalendarRecordRepository
 import io.s2qtech.shenk.sync.CloudConnectionManager
+import io.s2qtech.shenk.sync.DailyReviewRepository
+import io.s2qtech.shenk.sync.DevicePreferencesStore
+import io.s2qtech.shenk.sync.KeystoreSecretStore
 import io.s2qtech.shenk.sync.NativeTimerSessionRepository
 import io.s2qtech.shenk.sync.PlanCollaborationRepository
 import io.s2qtech.shenk.sync.RoutineLibraryRepository
@@ -48,6 +51,16 @@ class ShenkApplication : Application() {
         CloudConnectionManager(this)
     }
 
+    val dailyReviewRepository: DailyReviewRepository by lazy {
+        val preferences = DevicePreferencesStore(this)
+        DailyReviewRepository(
+            database = ShenkDatabase.get(this),
+            records = localFirstRepository,
+            preferences = preferences,
+            secrets = KeystoreSecretStore(preferences),
+        )
+    }
+
     val nativeTimerCoordinator: NativeTimerCoordinator by lazy {
         NativeTimerCoordinator(this, timerSessionRepository, applicationScope)
     }
@@ -63,6 +76,7 @@ class ShenkApplication : Application() {
                     cloudConnectionManager.synchronizeNow()
                 }
             }
+            DailyReviewScheduler.enqueue(this@ShenkApplication)
         }
     }
 }

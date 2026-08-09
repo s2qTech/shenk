@@ -231,6 +231,9 @@ fun CalendarScreen(
                     onSave = { log ->
                         scope.launch {
                             repository.saveTrainingLog(log)
+                            val reviewRepository = (context.applicationContext as ShenkApplication).dailyReviewRepository
+                            val review = reviewRepository.enqueue(date, allowIncomplete = false)
+                            if (review.queued) DailyReviewScheduler.enqueue(context)
                             SyncScheduler(context).enqueue()
                             editing = null
                             snackbar.showSnackbar("训练记录已保存在本机")
@@ -260,6 +263,9 @@ fun CalendarScreen(
                     onSave = { log ->
                         scope.launch {
                             repository.saveTrainingLog(log)
+                            val reviewRepository = (context.applicationContext as ShenkApplication).dailyReviewRepository
+                            val review = reviewRepository.enqueue(date, allowIncomplete = false)
+                            if (review.queued) DailyReviewScheduler.enqueue(context)
                             SyncScheduler(context).enqueue()
                             creating = false
                             snackbar.showSnackbar("训练记录已保存在本机")

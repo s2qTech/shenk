@@ -39,12 +39,19 @@ class TodayRecordRepository(
     private val records: LocalFirstRepository,
 ) {
     fun observe(date: LocalDate): Flow<TodayRecords> = combine(
-        records.observeActive("status_checkins"),
-        records.observeActive("body_metrics"),
-        records.observeActive("training_logs"),
-        records.observeActive("daily_plan_items"),
-        records.observeActive("plan_adjustments"),
-    ) { checkins, metrics, logs, plans, adjustments ->
+        combine(
+            records.observeActive("status_checkins"),
+            records.observeActive("body_metrics"),
+            records.observeActive("training_logs"),
+        ) { checkins, metrics, logs -> Triple(checkins, metrics, logs) },
+        combine(
+            records.observeActive("daily_plan_items"),
+            records.observeActive("plan_adjustments"),
+            records.observeActive("daily_reviews"),
+        ) { plans, adjustments, reviews -> Triple(plans, adjustments, reviews) },
+    ) { facts, guidanceRecords ->
+        val (checkins, metrics, logs) = facts
+        val (plans, adjustments, reviews) = guidanceRecords
         val dateText = date.toString()
         val parsedCheckins = checkins.mapNotNull(::decodeCheckin)
         val parsedMetrics = metrics.mapNotNull(::decodeMetric)
@@ -63,7 +70,7 @@ class TodayRecordRepository(
             }.maxByOrNull { it.observedAt },
             latestMetric = parsedMetrics.maxByOrNull { it.observedAt },
             effectiveStatus = EffectiveStatusResolver.resolve(morning, preWorkout),
-            guidance = GuidanceResolution.resolve(date, logs, plans, adjustments).guidance,
+            guidance = GuidanceResolution.resolve(date, logs, plans, adjustments, reviews).guidance,
         )
     }
 

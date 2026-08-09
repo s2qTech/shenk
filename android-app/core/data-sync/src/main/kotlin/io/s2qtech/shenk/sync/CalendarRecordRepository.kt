@@ -39,12 +39,13 @@ class CalendarRecordRepository(
             records.observeActive("daily_plan_items"),
             records.observeActive("plan_adjustments"),
             records.observeActive("body_metrics"),
-        ) { logs, plans, adjustments, metricRecords ->
+            records.observeActive("daily_reviews"),
+        ) { logs, plans, adjustments, metricRecords, reviews ->
             val metricsByDate = DailyMetricResolver.resolve(metricRecords.mapNotNull(::decodeBodyMetric))
             generateSequence(start) { current ->
                 current.plusDays(1).takeIf { it <= endInclusive }
             }.map { date ->
-                val resolved = GuidanceResolution.resolve(date, logs, plans, adjustments)
+                val resolved = GuidanceResolution.resolve(date, logs, plans, adjustments, reviews)
                 CalendarDay(
                     date = date,
                     guidance = resolved.guidance,
@@ -61,16 +62,18 @@ class CalendarRecordRepository(
         records.observeActive("daily_plan_items"),
         records.observeActive("plan_adjustments"),
         records.observeActive("body_metrics"),
-    ) { logs, plans, adjustments, metricRecords ->
-        buildMonth(month, logs, plans, adjustments, metricRecords)
+        records.observeActive("daily_reviews"),
+    ) { logs, plans, adjustments, metricRecords, reviews ->
+        buildMonth(month, logs, plans, adjustments, metricRecords, reviews)
     }
 
     fun observeDay(date: LocalDate): Flow<CalendarDayDetails> = combine(
         records.observeActive("training_logs"),
         records.observeActive("daily_plan_items"),
         records.observeActive("plan_adjustments"),
-    ) { logs, plans, adjustments ->
-        GuidanceResolution.resolve(date, logs, plans, adjustments).let {
+        records.observeActive("daily_reviews"),
+    ) { logs, plans, adjustments, reviews ->
+        GuidanceResolution.resolve(date, logs, plans, adjustments, reviews).let {
             CalendarDayDetails(date, it.guidance, it.actualLogs)
         }
     }
@@ -122,6 +125,7 @@ private fun buildMonth(
     plans: List<SharedRecord>,
     adjustments: List<SharedRecord>,
     metricRecords: List<SharedRecord>,
+    reviews: List<SharedRecord>,
 ): CalendarMonth {
     val metricsByDate = DailyMetricResolver.resolve(metricRecords.mapNotNull(::decodeBodyMetric))
     val first = month.atDay(1)
@@ -130,7 +134,7 @@ private fun buildMonth(
     val end = last.plusDays(((DayOfWeek.SUNDAY.value - last.dayOfWeek.value + 7) % 7).toLong())
     val days = generateSequence(start) { current -> current.plusDays(1).takeIf { it <= end } }
         .map { date ->
-            val resolved = GuidanceResolution.resolve(date, logs, plans, adjustments)
+            val resolved = GuidanceResolution.resolve(date, logs, plans, adjustments, reviews)
             CalendarDay(
                 date = date,
                 guidance = resolved.guidance,

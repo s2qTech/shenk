@@ -195,6 +195,18 @@ export default {
         }, 200, request, env);
       }
 
+      if (url.pathname === "/api/ai/connection-test" && request.method === "POST") {
+        assertAiReviewRole(client);
+        const body = await readJson(request);
+        return json(await testAiProviderConnection(body), 200, request, env);
+      }
+
+      if (url.pathname === "/api/ai/daily-review" && request.method === "POST") {
+        assertAiReviewRole(client);
+        const body = await readJson(request);
+        return json(await generateDailyReview(body), 200, request, env);
+      }
+
       if (url.pathname === "/api/records/query" && request.method === "POST") {
         const body = await readJson(request);
         return json(await queryRecords(env, body, client), 200, request, env);
@@ -1574,6 +1586,177 @@ function sanitizeEntities(value, contractVersion = ACTIVE_CONTRACT_VERSION) {
   const allowed = entitiesForContract(contractVersion);
   if (!Array.isArray(value) || !value.length) return allowed;
   return [...new Set(value.map(String).filter(entity => allowed.includes(entity)))];
+}
+
+function assertAiReviewRole(client) {
+  if (["admin", "shenk"].includes(client.role)) return;
+  const error = new Error("forbidden_ai_review_role");
+  error.status = 403;
+  throw error;
+}
+
+function validateAiProvider(value) {
+  const provider = value?.provider || {};
+  const id = String(provider.id || "").trim();
+  const model = String(provider.model || "").trim();
+  const apiKey = String(provider.apiKey || "").trim();
+  let baseUrl;
+  try {
+    baseUrl = new URL(String(provider.baseUrl || "").trim());
+  } catch {
+    const error = new Error("invalid_ai_provider_url");
+    error.status = 400;
+    throw error;
+  }
+  if (baseUrl.protocol !== "https:" || baseUrl.username || baseUrl.password || !id || !model || !apiKey) {
+    const error = new Error("invalid_ai_provider_configuration");
+    error.status = 400;
+    throw error;
+  }
+  const host = baseUrl.hostname.toLowerCase();
+  if (
+    host === "localhost" || host.endsWith(".localhost") || host.endsWith(".local") ||
+    host === "0.0.0.0" || host === "127.0.0.1" || host === "::1" ||
+    /^10\./.test(host) || /^192\.168\./.test(host) || /^169\.254\./.test(host) ||
+    /^172\.(1[6-9]|2\d|3[01])\./.test(host)
+  ) {
+    const error = new Error("private_ai_provider_url_forbidden");
+    error.status = 400;
+    throw error;
+  }
+  return { id, model, apiKey, baseUrl: baseUrl.toString().replace(/\/$/, "") };
+}
+
+async function testAiProviderConnection(body) {
+  const provider = validateAiProvider(body);
+  await callCompatibleAi(provider, [
+    { role: "system", content: "Reply with exactly OK." },
+    { role: "user", content: "connection test" }
+  ], 32);
+  return { ok: true, provider: provider.id, model: provider.model };
+}
+
+async function generateDailyReview(body) {
+  const provider = validateAiProvider(body);
+  const snapshot = body?.snapshot;
+  if (!snapshot || snapshot.schema !== "daily_review_snapshot" || !snapshot.date || !Array.isArray(snapshot.records)) {
+    const error = new Error("invalid_daily_review_snapshot");
+    error.status = 400;
+    throw error;
+  }
+  const system = [
+    "你是身刻的专业、克制、实事求是的每日运动复盘教练。",
+    "综合考虑身体测量、睡眠时长与深睡、睡眠感受、精力、疲劳、疼痛、最近训练、目标、教练策略和当前有效正式计划。",
+    "缺失值保持缺失，不得推断为正常、休息或已完成；不得冒充医疗诊断。",
+    "不得创建、修改或删除正式计划、计划调整、目标、教练策略或训练方案。",
+    "可以生成 localSuggestion，但它只是身刻本地建议，只能在当天没有有效正式计划时提供；有正式计划时必须返回 null。",
+    "localSuggestion 不得伪装成正式计划，且只能建议当天，不得安排未来日期。",
+    "重点给出综合判断和下一步可执行建议，不要复述输入中的状态、测量和训练流水。",
+    "conclusion 是首页短结论，不超过 50 个汉字；assessment 是专业综合判断，不超过 300 个汉字。",
+    "actions 为 1 至 3 条具体行动；evidence 只保留 1 至 4 条关键依据；cautions 只写真实风险，没有则为空数组。",
+    "只输出 JSON，不要 Markdown：{\"conclusion\":\"...\",\"assessment\":\"...\",\"actions\":[\"...\"],\"evidence\":[\"...\"],\"cautions\":[\"...\"],\"localSuggestion\":null}。",
+    "localSuggestion 非空时格式为：{\"date\":\"YYYY-MM-DD\",\"title\":\"...\",\"trainingType\":\"...\",\"estimatedMinutes\":30,\"reason\":\"...\"}。"
+  ].join("\n");
+  const content = await callCompatibleAi(provider, [
+    { role: "system", content: system },
+    { role: "user", content: JSON.stringify(snapshot) }
+  ], 1400, { thinkingEnabled: true });
+  const review = parseDailyReviewContent(content, snapshot.date);
+  if (snapshotHasFormalPlan(snapshot)) review.localSuggestion = null;
+  return { ok: true, review };
+}
+
+function snapshotHasFormalPlan(snapshot) {
+  return snapshot.records.some(record => {
+    if (!record || record.deletedAt) return false;
+    if (record.entity !== "daily_plan_items" && record.entity !== "plan_adjustments") return false;
+    const data = record.data && typeof record.data === "object" ? record.data : record;
+    return data.date === snapshot.date && data.status !== "cancelled" && data.status !== "deleted";
+  });
+}
+
+async function callCompatibleAi(provider, messages, maxTokens, options = {}) {
+  let response;
+  try {
+    response = await fetch(`${provider.baseUrl}/chat/completions`, {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${provider.apiKey}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        model: provider.model,
+        messages,
+        max_tokens: maxTokens,
+        temperature: 0.2,
+        thinking: { type: options.thinkingEnabled ? "enabled" : "disabled" }
+      })
+    });
+  } catch {
+    const error = new Error("ai_provider_unreachable");
+    error.status = 503;
+    throw error;
+  }
+  if (!response.ok) {
+    const error = new Error(`ai_provider_http_${response.status}`);
+    error.status = response.status === 401 || response.status === 403 ? 502 : 503;
+    throw error;
+  }
+  const payload = await response.json().catch(() => null);
+  const content = payload?.choices?.[0]?.message?.content;
+  if (typeof content !== "string" || !content.trim()) {
+    const error = new Error("ai_provider_response_invalid");
+    error.status = 502;
+    throw error;
+  }
+  return content.trim();
+}
+
+function parseDailyReviewContent(content, expectedDate) {
+  const clean = content.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "").trim();
+  const value = safeJson(clean, null);
+  if (!value || typeof value.conclusion !== "string" || !value.conclusion.trim()) {
+    const error = new Error("ai_provider_review_invalid");
+    error.status = 502;
+    throw error;
+  }
+  const actions = sanitizeReviewLines(value.actions, 4);
+  if (!actions.length) {
+    const error = new Error("ai_provider_review_actions_missing");
+    error.status = 502;
+    throw error;
+  }
+  return {
+    conclusion: value.conclusion.trim().slice(0, 120),
+    assessment: typeof value.assessment === "string" ? value.assessment.trim().slice(0, 600) : "",
+    actions,
+    evidence: sanitizeReviewLines(value.evidence, 4),
+    cautions: sanitizeReviewLines(value.cautions, 3),
+    localSuggestion: sanitizeLocalSuggestion(value.localSuggestion, expectedDate)
+  };
+}
+
+function sanitizeLocalSuggestion(value, expectedDate) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const date = typeof value.date === "string" ? value.date.trim() : "";
+  const title = typeof value.title === "string" ? value.title.trim() : "";
+  const trainingType = typeof value.trainingType === "string" ? value.trainingType.trim() : "";
+  if (!expectedDate || date !== expectedDate || !title || !trainingType) return null;
+  const minutes = Number(value.estimatedMinutes);
+  return {
+    date,
+    title: title.slice(0, 80),
+    trainingType: trainingType.slice(0, 64),
+    estimatedMinutes: Number.isFinite(minutes) ? Math.max(0, Math.min(180, Math.round(minutes))) : null,
+    reason: typeof value.reason === "string" ? value.reason.trim().slice(0, 300) : ""
+  };
+}
+
+function sanitizeReviewLines(value, limit = 8) {
+  return (Array.isArray(value) ? value : [])
+    .filter(item => typeof item === "string" && item.trim())
+    .slice(0, limit)
+    .map(item => item.trim().slice(0, 300));
 }
 
 async function readJson(request) {

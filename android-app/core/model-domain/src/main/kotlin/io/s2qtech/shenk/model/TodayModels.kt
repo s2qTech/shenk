@@ -138,6 +138,7 @@ object TodayGuidanceResolver {
     fun resolve(
         actual: TodayGuidance?,
         effectivePlan: TodayGuidance?,
+        aiSuggestion: TodayGuidance?,
         fallback: TodayGuidance,
-    ): TodayGuidance = actual ?: effectivePlan ?: fallback
+    ): TodayGuidance = actual ?: effectivePlan ?: aiSuggestion ?: fallback
 }

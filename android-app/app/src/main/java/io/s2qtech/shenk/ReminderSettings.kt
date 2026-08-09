@@ -40,6 +40,9 @@ data class ReminderSettings(
     val middayEnabled: Boolean = true,
     val middayHour: Int = 12,
     val middayMinute: Int = 30,
+    val eveningEnabled: Boolean = true,
+    val eveningHour: Int = 23,
+    val eveningMinute: Int = 15,
     val weeklyEnabled: Boolean = true,
     val weeklyDay: Int = DayOfWeek.SATURDAY.value,
     val weeklyHour: Int = 22,
@@ -55,6 +58,9 @@ class ReminderSettingsStore(private val context: Context) {
             middayEnabled = values[MIDDAY_ENABLED] ?: true,
             middayHour = values[MIDDAY_HOUR] ?: 12,
             middayMinute = values[MIDDAY_MINUTE] ?: 30,
+            eveningEnabled = values[EVENING_ENABLED] ?: true,
+            eveningHour = values[EVENING_HOUR] ?: 23,
+            eveningMinute = values[EVENING_MINUTE] ?: 15,
             weeklyEnabled = values[WEEKLY_ENABLED] ?: true,
             weeklyDay = values[WEEKLY_DAY] ?: DayOfWeek.SATURDAY.value,
             weeklyHour = values[WEEKLY_HOUR] ?: 22,
@@ -70,6 +76,9 @@ class ReminderSettingsStore(private val context: Context) {
             values[MIDDAY_ENABLED] = value.middayEnabled
             values[MIDDAY_HOUR] = value.middayHour
             values[MIDDAY_MINUTE] = value.middayMinute
+            values[EVENING_ENABLED] = value.eveningEnabled
+            values[EVENING_HOUR] = value.eveningHour
+            values[EVENING_MINUTE] = value.eveningMinute
             values[WEEKLY_ENABLED] = value.weeklyEnabled
             values[WEEKLY_DAY] = value.weeklyDay
             values[WEEKLY_HOUR] = value.weeklyHour
@@ -85,6 +94,9 @@ class ReminderSettingsStore(private val context: Context) {
         val MIDDAY_ENABLED = booleanPreferencesKey("midday_enabled")
         val MIDDAY_HOUR = intPreferencesKey("midday_hour")
         val MIDDAY_MINUTE = intPreferencesKey("midday_minute")
+        val EVENING_ENABLED = booleanPreferencesKey("evening_enabled")
+        val EVENING_HOUR = intPreferencesKey("evening_hour")
+        val EVENING_MINUTE = intPreferencesKey("evening_minute")
         val WEEKLY_ENABLED = booleanPreferencesKey("weekly_enabled")
         val WEEKLY_DAY = intPreferencesKey("weekly_day")
         val WEEKLY_HOUR = intPreferencesKey("weekly_hour")
@@ -107,6 +119,13 @@ class ReminderScheduler(private val context: Context) {
             hour = settings.middayHour,
             minute = settings.middayMinute,
             kind = "midday",
+        )
+        scheduleOne(
+            name = EVENING_WORK,
+            enabled = settings.eveningEnabled,
+            hour = settings.eveningHour,
+            minute = settings.eveningMinute,
+            kind = "evening",
         )
         scheduleWeekly(settings)
     }
@@ -152,6 +171,7 @@ class ReminderScheduler(private val context: Context) {
     private companion object {
         const val MORNING_WORK = "shenk-morning-checkin"
         const val MIDDAY_WORK = "shenk-midday-checkin"
+        const val EVENING_WORK = "shenk-evening-review"
         const val WEEKLY_WORK = "shenk-weekly-review"
     }
 }
@@ -212,11 +232,29 @@ class MissingMorningWorker(
         val app = applicationContext as ShenkApplication
         val settings = ReminderSettingsStore(applicationContext).settings.first()
         val kind = inputData.getString("kind") ?: return Result.success()
-        val enabled = if (kind == "morning") settings.morningEnabled else settings.middayEnabled
+        val enabled = when (kind) {
+            "morning" -> settings.morningEnabled
+            "midday" -> settings.middayEnabled
+            "evening" -> settings.eveningEnabled
+            else -> false
+        }
         if (!enabled) return Result.success()
 
-        val today = app.todayRepository.observe(LocalDate.now()).first()
-        if (today.morning != null) return Result.success()
+        val todayDate = LocalDate.now()
+        if (kind == "evening") {
+            val records = app.localFirstRepository.allRecords().filter { it.deletedAt == null }
+            val hasTraining = records.any {
+                it.entity == "training_logs" && it.data["date"]?.toString()?.trim('"') == todayDate.toString()
+            }
+            val hasReview = records.any {
+                it.entity == "daily_reviews" && it.data["date"]?.toString()?.trim('"') == todayDate.toString() &&
+                    it.data["status"]?.toString()?.trim('"') == "generated"
+            }
+            if (hasTraining || hasReview) return Result.success()
+        } else {
+            val today = app.todayRepository.observe(todayDate).first()
+            if (today.morning != null) return Result.success()
+        }
         showNotification(kind)
         return Result.success()
     }
@@ -229,10 +267,10 @@ class MissingMorningWorker(
         if (applicationContext.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) !=
             PackageManager.PERMISSION_GRANTED
         ) return
-        val text = if (kind == "morning") {
-            "花一分钟记录睡眠和身体状态"
-        } else {
-            "今天的晨起状态还未记录，可以留空不确定的数据"
+        val text = when (kind) {
+            "morning" -> "花一分钟记录睡眠和身体状态"
+            "midday" -> "今天的晨起状态还未记录，可以留空不确定的数据"
+            else -> "今天还没有训练、休息或跳过记录，确认后可生成每日简评"
         }
         val notification = NotificationCompat.Builder(applicationContext, CHANNEL_ID)
             .setSmallIcon(android.R.drawable.ic_popup_reminder)
@@ -249,7 +287,7 @@ class MissingMorningWorker(
             .setAutoCancel(true)
             .build()
         NotificationManagerCompat.from(applicationContext)
-            .notify(if (kind == "morning") 301 else 302, notification)
+            .notify(when (kind) { "morning" -> 301; "midday" -> 302; else -> 303 }, notification)
     }
 
     private companion object {

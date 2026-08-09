@@ -11,6 +11,8 @@ import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.Room
 import androidx.room.RoomDatabase
+import androidx.room.migration.Migration
+import androidx.sqlite.db.SupportSQLiteDatabase
 import kotlinx.coroutines.flow.Flow
 
 @Entity(
@@ -69,6 +71,24 @@ data class ConflictEntity(
 data class SyncMetadataEntity(
     @androidx.room.PrimaryKey val key: String,
     val value: String,
+)
+
+@Entity(
+    tableName = "ai_review_jobs",
+    indices = [Index(value = ["state", "next_attempt_at"]), Index(value = ["date", "input_digest"], unique = true)],
+)
+data class AiReviewJobEntity(
+    @androidx.room.PrimaryKey @ColumnInfo(name = "job_id") val jobId: String,
+    val date: String,
+    @ColumnInfo(name = "input_digest") val inputDigest: String,
+    @ColumnInfo(name = "snapshot_json") val snapshotJson: String,
+    @ColumnInfo(name = "allow_incomplete") val allowIncomplete: Boolean,
+    val state: String,
+    val attempts: Int,
+    @ColumnInfo(name = "next_attempt_at") val nextAttemptAt: Long,
+    @ColumnInfo(name = "last_error") val lastError: String?,
+    @ColumnInfo(name = "created_at") val createdAt: Long,
+    @ColumnInfo(name = "updated_at") val updatedAt: Long,
 )
 
 @Dao
@@ -140,9 +160,33 @@ interface SyncMetadataDao {
     suspend fun put(value: SyncMetadataEntity)
 }
 
+@Dao
+interface AiReviewJobDao {
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun put(job: AiReviewJobEntity)
+
+    @Query("SELECT * FROM ai_review_jobs WHERE date = :date ORDER BY updated_at DESC LIMIT 1")
+    fun observeLatest(date: String): Flow<AiReviewJobEntity?>
+
+    @Query("SELECT * FROM ai_review_jobs WHERE state IN ('PENDING', 'RETRY') AND next_attempt_at <= :now ORDER BY created_at LIMIT 1")
+    suspend fun nextDue(now: Long): AiReviewJobEntity?
+
+    @Query("SELECT MIN(next_attempt_at) FROM ai_review_jobs WHERE state IN ('PENDING', 'RETRY')")
+    suspend fun nextScheduledAt(): Long?
+
+    @Query("SELECT * FROM ai_review_jobs WHERE date = :date AND input_digest = :digest LIMIT 1")
+    suspend fun find(date: String, digest: String): AiReviewJobEntity?
+
+    @Query("UPDATE ai_review_jobs SET state = :state, attempts = :attempts, next_attempt_at = :nextAttemptAt, last_error = :lastError, updated_at = :updatedAt WHERE job_id = :jobId")
+    suspend fun updateState(jobId: String, state: String, attempts: Int, nextAttemptAt: Long, lastError: String?, updatedAt: Long)
+
+    @Query("UPDATE ai_review_jobs SET state = 'SUPERSEDED', updated_at = :updatedAt WHERE date = :date AND input_digest != :digest AND state IN ('PENDING', 'RETRY')")
+    suspend fun supersedeOtherInputs(date: String, digest: String, updatedAt: Long)
+}
+
 @Database(
-    entities = [SharedRecordEntity::class, OutboxEntity::class, ConflictEntity::class, SyncMetadataEntity::class],
-    version = 1,
+    entities = [SharedRecordEntity::class, OutboxEntity::class, ConflictEntity::class, SyncMetadataEntity::class, AiReviewJobEntity::class],
+    version = 2,
     exportSchema = true,
 )
 abstract class ShenkDatabase : RoomDatabase() {
@@ -150,6 +194,7 @@ abstract class ShenkDatabase : RoomDatabase() {
     abstract fun outbox(): OutboxDao
     abstract fun conflicts(): ConflictDao
     abstract fun metadata(): SyncMetadataDao
+    abstract fun aiReviewJobs(): AiReviewJobDao
 
     companion object {
         @Volatile private var instance: ShenkDatabase? = null
@@ -159,7 +204,17 @@ abstract class ShenkDatabase : RoomDatabase() {
                 context.applicationContext,
                 ShenkDatabase::class.java,
                 "shenk-native.db",
-            ).build().also { instance = it }
+            ).addMigrations(MIGRATION_1_2).build().also { instance = it }
+        }
+
+        val MIGRATION_1_2 = object : Migration(1, 2) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    """CREATE TABLE IF NOT EXISTS `ai_review_jobs` (`job_id` TEXT NOT NULL, `date` TEXT NOT NULL, `input_digest` TEXT NOT NULL, `snapshot_json` TEXT NOT NULL, `allow_incomplete` INTEGER NOT NULL, `state` TEXT NOT NULL, `attempts` INTEGER NOT NULL, `next_attempt_at` INTEGER NOT NULL, `last_error` TEXT, `created_at` INTEGER NOT NULL, `updated_at` INTEGER NOT NULL, PRIMARY KEY(`job_id`))""",
+                )
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_ai_review_jobs_state_next_attempt_at` ON `ai_review_jobs` (`state`, `next_attempt_at`)")
+                db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS `index_ai_review_jobs_date_input_digest` ON `ai_review_jobs` (`date`, `input_digest`)")
+            }
         }
     }
 }

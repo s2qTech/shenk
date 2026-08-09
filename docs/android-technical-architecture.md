@@ -177,22 +177,16 @@ References: [keep the screen on](https://developer.android.com/develop/backgroun
 
 ### Provider Contract
 
-Phase 1 supports OpenAI Chat Completions-compatible providers through configurable templates:
+Phase 1 uses DeepSeek V4 Flash as the single user-facing provider. The phone asks only for the API key; the canonical base URL and model ID are application defaults. Provider selection, model editing, and custom endpoint editing are not exposed in the phase-1 UI.
 
-- DeepSeek
-- Alibaba Bailian / Qwen
-- Zhipu GLM
-- SiliconFlow
-- custom compatible endpoint
-
-Phone configuration contains provider base URL, API key, and model. It can be encrypted into the existing migration profile.
+The transport boundary remains OpenAI Chat Completions-compatible internally. A later provider adapter may replace the fixed default, but it must preserve the same normalized snapshot, bounded output schema, permissions, queue, confirmation, and audit semantics. The API key remains device-local in Android Keystore and is not included in the migration profile.
 
 ### Request Path
 
 ```text
 Android device
   -> Cloudflare Worker AI proxy
-  -> configured compatible provider
+  -> DeepSeek V4 Flash
 ```
 
 - The phone sends the provider secret only over TLS for the request.

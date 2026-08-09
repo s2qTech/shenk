@@ -68,6 +68,16 @@ fun ReminderSettingsSheet(
             onEnabled = { value = value.copy(middayEnabled = it) },
             onTime = { hour, minute -> value = value.copy(middayHour = hour, middayMinute = minute) },
         )
+        Spacer(Modifier.height(22.dp))
+        ReminderRow(
+            title = "晚间未记录",
+            enabled = value.eveningEnabled,
+            hour = value.eveningHour,
+            minute = value.eveningMinute,
+            onEnabled = { value = value.copy(eveningEnabled = it) },
+            onTime = { hour, minute -> value = value.copy(eveningHour = hour, eveningMinute = minute) },
+        )
+        Text("没有训练、休息或跳过记录时提醒一次。", color = MaterialTheme.colorScheme.secondary)
         Spacer(Modifier.height(28.dp))
         Button(onClick = { onSave(value) }, modifier = Modifier.fillMaxWidth().height(56.dp)) {
             Text("保存提醒")

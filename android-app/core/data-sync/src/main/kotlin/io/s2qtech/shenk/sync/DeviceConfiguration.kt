@@ -24,6 +24,18 @@ data class SyncEndpointSettings(
     val deviceId: String,
 )
 
+data class AiProviderSettings(
+    val provider: String = DEFAULT_AI_PROVIDER,
+    val baseUrl: String = DEFAULT_AI_BASE_URL,
+    val model: String = DEFAULT_AI_MODEL,
+) {
+    val configured: Boolean get() = baseUrl.isNotBlank() && model.isNotBlank()
+}
+
+const val DEFAULT_AI_PROVIDER = "deepseek"
+const val DEFAULT_AI_BASE_URL = "https://api.deepseek.com"
+const val DEFAULT_AI_MODEL = "deepseek-v4-flash"
+
 class DevicePreferencesStore(private val context: Context) {
     private object Keys {
         val apiBase = stringPreferencesKey("sync_api_base")
@@ -61,6 +73,12 @@ class DevicePreferencesStore(private val context: Context) {
         context.shenkPreferences.edit { preferences ->
             if (normalized.isEmpty()) preferences.remove(Keys.apiBase) else preferences[Keys.apiBase] = normalized
         }
+    }
+
+    suspend fun aiProviderSettings(): AiProviderSettings = AiProviderSettings()
+
+    suspend fun setAiProviderSettings(value: AiProviderSettings) {
+        require(value == AiProviderSettings()) { "phase 1 only supports the canonical DeepSeek V4 Flash provider" }
     }
 
     internal val dataStore get() = context.shenkPreferences
