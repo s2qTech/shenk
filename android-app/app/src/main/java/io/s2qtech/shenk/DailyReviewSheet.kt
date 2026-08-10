@@ -158,7 +158,7 @@ fun DailyReviewSheet(
             Spacer(Modifier.height(14.dp))
         }
 
-        if (generating) {
+        if (state.review == null && generating) {
             Surface(
                 color = MaterialTheme.colorScheme.surfaceVariant,
                 shape = RoundedCornerShape(20.dp),
@@ -176,7 +176,7 @@ fun DailyReviewSheet(
                     }
                 }
             }
-        } else if (state.jobState == "RETRY") {
+        } else if (state.review == null && state.jobState == "RETRY") {
             Surface(
                 color = MaterialTheme.colorScheme.surfaceVariant,
                 shape = RoundedCornerShape(20.dp),
@@ -211,11 +211,11 @@ fun DailyReviewSheet(
                     }
                 }
             }
-        } else if (!providerReady) {
+        } else if (state.review == null && !providerReady) {
             OutlinedButton(onClick = onOpenAiSettings, modifier = Modifier.fillMaxWidth().height(54.dp)) {
                 Text("配置 AI 服务")
             }
-        } else {
+        } else if (state.review == null) {
             Button(
                 onClick = {
                     generationRequested = true

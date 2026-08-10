@@ -14,8 +14,8 @@ test("Package 8 centralizes release versioning and keeps private signing externa
   const ignore = read(".gitignore");
   const example = read("android-app/release-signing.properties.example");
 
-  assert.match(properties, /SHENK_VERSION_CODE=9/);
-  assert.match(properties, /SHENK_VERSION_NAME=0\.8\.1-package8-dev/);
+  assert.match(properties, /SHENK_VERSION_CODE=10/);
+  assert.match(properties, /SHENK_VERSION_NAME=0\.8\.2-package8-dev/);
   assert.match(appBuild, /SHENK_REQUIRE_RELEASE_SIGNING/);
   assert.match(appBuild, /Release keystore must be stored outside the repository/);
   assert.match(appBuild, /isDebuggable = false/);

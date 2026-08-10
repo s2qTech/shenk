@@ -43,6 +43,15 @@ test('daily review sheet is date aware and supports returning to date details', 
   assert.match(sheet, /复盘当天执行，指出问题并给出后续修正/);
 });
 
+test('a completed daily review hides stale generation and retry state', () => {
+  const sheet = read('android-app/app/src/main/java/io/s2qtech/shenk/DailyReviewSheet.kt');
+
+  assert.match(sheet, /if \(state\.review == null && generating\)/);
+  assert.match(sheet, /else if \(state\.review == null && state\.jobState == "RETRY"\)/);
+  assert.match(sheet, /else if \(state\.review == null && !providerReady\)/);
+  assert.match(sheet, /else if \(state\.review == null\)/);
+});
+
 test('package 7 contract documents historical review behavior', () => {
   const packageDoc = read('docs/android-package7-daily-review.md');
 
