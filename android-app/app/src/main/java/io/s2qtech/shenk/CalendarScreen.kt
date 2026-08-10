@@ -29,11 +29,15 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
@@ -41,6 +45,7 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -70,6 +75,7 @@ import androidx.compose.material.icons.rounded.ArrowUpward
 import androidx.compose.material.icons.rounded.Bedtime
 import androidx.compose.material.icons.rounded.CalendarToday
 import androidx.compose.material.icons.rounded.FitnessCenter
+import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.Remove
 import androidx.compose.material.icons.rounded.SelfImprovement
 import io.s2qtech.shenk.model.CalendarDay
@@ -82,6 +88,7 @@ import io.s2qtech.shenk.model.TodayGuidance
 import io.s2qtech.shenk.model.TrainingLog
 import io.s2qtech.shenk.sync.CalendarDayDetails
 import io.s2qtech.shenk.sync.CalendarRecordRepository
+import io.s2qtech.shenk.sync.DailyReviewState
 import io.s2qtech.shenk.sync.SyncScheduler
 import java.time.LocalDate
 import java.time.YearMonth
@@ -103,9 +110,14 @@ fun CalendarScreen(
     var selectedDate by remember { mutableStateOf<LocalDate?>(null) }
     var editing by remember { mutableStateOf<TrainingLog?>(null) }
     var creating by remember { mutableStateOf(false) }
+    var reviewing by remember { mutableStateOf(false) }
+    var configuringAi by remember { mutableStateOf(false) }
     val snackbar = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     val context = androidx.compose.ui.platform.LocalContext.current
+    val dailyReviewRepository = remember(context) {
+        (context.applicationContext as ShenkApplication).dailyReviewRepository
+    }
     val listState = rememberLazyListState()
     val visibleDate by remember(days) {
         derivedStateOf { days.getOrNull(listState.firstVisibleItemIndex)?.date ?: today }
@@ -216,14 +228,44 @@ fun CalendarScreen(
 
     selectedDate?.let { date ->
         val details by repository.observeDay(date).collectAsState(initial = null)
+        val reviewState by dailyReviewRepository.observe(date).collectAsState(initial = DailyReviewState())
         ModalBottomSheet(
             onDismissRequest = {
                 selectedDate = null
                 editing = null
                 creating = false
+                reviewing = false
+                configuringAi = false
             },
         ) {
             when {
+                configuringAi -> Column {
+                    TextButton(
+                        onClick = {
+                            configuringAi = false
+                            reviewing = true
+                        },
+                        modifier = Modifier.padding(horizontal = 14.dp),
+                    ) {
+                        Text("返回当日简评")
+                    }
+                    AiProviderSettingsSheet(
+                        repository = dailyReviewRepository,
+                        onMessage = { message -> scope.launch { snackbar.showSnackbar(message) } },
+                    )
+                }
+                reviewing -> DailyReviewSheet(
+                    date = date,
+                    repository = dailyReviewRepository,
+                    state = reviewState,
+                    onQueued = { DailyReviewScheduler.enqueue(context) },
+                    onOpenAiSettings = {
+                        reviewing = false
+                        configuringAi = true
+                    },
+                    onMessage = { message -> scope.launch { snackbar.showSnackbar(message) } },
+                    onBack = { reviewing = false },
+                )
                 editing != null -> TrainingLogEditorSheet(
                     date = date,
                     existing = editing,
@@ -274,9 +316,12 @@ fun CalendarScreen(
                 )
                 else -> DayDetails(
                     details = details,
+                    reviewState = reviewState,
                     canEdit = RecordEditPolicy.canEdit(date, today),
+                    canReview = !date.isAfter(today),
                     onEdit = { editing = it },
                     onCreate = { creating = true },
+                    onOpenReview = { reviewing = true },
                 )
             }
         }
@@ -535,9 +580,12 @@ private fun DateRail(
 @Composable
 private fun DayDetails(
     details: CalendarDayDetails?,
+    reviewState: DailyReviewState,
     canEdit: Boolean,
+    canReview: Boolean,
     onEdit: (TrainingLog) -> Unit,
     onCreate: () -> Unit,
+    onOpenReview: () -> Unit,
 ) {
     Column(Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 22.dp, vertical = 8.dp)) {
         if (details == null) {
@@ -550,54 +598,157 @@ private fun DayDetails(
             fontWeight = FontWeight.SemiBold,
         )
         Spacer(Modifier.height(18.dp))
-        GuidanceSummary(details.guidance)
-        if (details.actualLogs.isNotEmpty()) {
-            Spacer(Modifier.height(22.dp))
-            Text("当天记录", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-            details.actualLogs.forEach { log ->
-                Surface(
-                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp).clickable { onEdit(log) },
-                    shape = RoundedCornerShape(16.dp),
-                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f),
-                ) {
-                    Row(
-                        Modifier.padding(16.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically,
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(24.dp),
+            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.52f),
+        ) {
+            Column(Modifier.fillMaxWidth().padding(18.dp)) {
+                GuidanceSummary(
+                    guidance = details.guidance,
+                    onEdit = details.actualLogs.firstOrNull()?.takeIf { canEdit }?.let { log ->
+                        { onEdit(log) }
+                    },
+                )
+                if (details.bodyMetrics.isNotEmpty()) {
+                    Spacer(Modifier.height(16.dp))
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                    Spacer(Modifier.height(14.dp))
+                    Text(
+                        "身体数据",
+                        color = MaterialTheme.colorScheme.primary,
+                        style = MaterialTheme.typography.labelLarge,
+                    )
+                    FlowRow(
+                        modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                        horizontalArrangement = Arrangement.spacedBy(18.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp),
                     ) {
-                        Column(Modifier.weight(1f)) {
-                            Text(log.displayTitle, fontWeight = FontWeight.Medium)
-                            Text(logSummary(log), color = MaterialTheme.colorScheme.secondary)
-                        }
-                        Text(if (canEdit) "修正" else "查看", color = MaterialTheme.colorScheme.primary)
+                        details.bodyMetrics.forEach { metric -> DailyMetricValue(metric) }
                     }
+                }
+                if (canReview || reviewState.review != null) {
+                    Spacer(Modifier.height(16.dp))
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                    Spacer(Modifier.height(16.dp))
+                    CalendarReviewSummary(
+                        state = reviewState,
+                        onOpenReview = onOpenReview,
+                    )
                 }
             }
         }
-        if (canEdit) {
-            Spacer(Modifier.height(20.dp))
-            Button(onClick = onCreate, modifier = Modifier.fillMaxWidth()) { Text("补一条训练记录") }
-        } else {
-            Spacer(Modifier.height(16.dp))
-            Text("历史日期仅供查看。", color = MaterialTheme.colorScheme.outline)
+        if (canEdit && details.actualLogs.isEmpty()) {
+            Spacer(Modifier.height(18.dp))
+            OutlinedButton(onClick = onCreate, modifier = Modifier.fillMaxWidth()) {
+                Text("补一条训练记录")
+            }
+        } else if (!canEdit && details.actualLogs.isEmpty()) {
+            Spacer(Modifier.height(14.dp))
+            Text("训练记录已超过可修正范围。", color = MaterialTheme.colorScheme.outline)
         }
         Spacer(Modifier.height(20.dp))
     }
 }
 
 @Composable
-private fun GuidanceSummary(guidance: TodayGuidance) {
+private fun CalendarReviewSummary(
+    state: DailyReviewState,
+    onOpenReview: () -> Unit,
+) {
+    val generating = state.jobState in setOf("PENDING", "RUNNING")
+    val review = state.review
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.Top,
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text("当日简评", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelLarge)
+            when {
+                review != null -> {
+                    Spacer(Modifier.height(5.dp))
+                    Text(
+                        review.conclusion,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                    if (generating) {
+                        Row(
+                            modifier = Modifier.padding(top = 10.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                            Text("正在根据最新记录更新", color = MaterialTheme.colorScheme.secondary)
+                        }
+                    }
+                }
+                generating -> {
+                    Row(
+                        modifier = Modifier.padding(top = 8.dp),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                        Text("正在生成，完成后会自动更新", color = MaterialTheme.colorScheme.secondary)
+                    }
+                }
+                state.jobState in setOf("RETRY", "FAILED") -> {
+                    Spacer(Modifier.height(5.dp))
+                    Text("简评暂未完成，可以重新生成。", color = MaterialTheme.colorScheme.error)
+                }
+                else -> {
+                    Spacer(Modifier.height(5.dp))
+                    Text("还没有这一天的教练简评。", color = MaterialTheme.colorScheme.secondary)
+                }
+            }
+        }
+        TextButton(onClick = onOpenReview) {
+            Text(
+                when {
+                    review != null -> "查看"
+                    state.jobState in setOf("RETRY", "FAILED") -> "重试"
+                    else -> "生成"
+                },
+            )
+        }
+    }
+}
+
+@Composable
+private fun GuidanceSummary(
+    guidance: TodayGuidance,
+    onEdit: (() -> Unit)? = null,
+) {
     val label = when (guidance.source) {
         GuidanceSource.ACTUAL -> "实际完成"
         GuidanceSource.FORMAL_PLAN -> "正式计划"
         GuidanceSource.LOCAL_SUGGESTION -> "兜底建议"
     }
-    Text(label, color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelLarge)
-    Text(guidance.title, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.SemiBold)
-    guidance.estimatedMinutes?.let { Text("约 $it 分钟", color = MaterialTheme.colorScheme.secondary) }
-    guidance.note?.takeIf(String::isNotBlank)?.let {
-        Spacer(Modifier.height(8.dp))
-        Text(it, color = MaterialTheme.colorScheme.secondary)
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.Top,
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text(label, color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelLarge)
+            Text(guidance.title, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.SemiBold)
+            guidance.estimatedMinutes?.let { Text("约 $it 分钟", color = MaterialTheme.colorScheme.secondary) }
+            guidance.note?.takeIf(String::isNotBlank)?.let {
+                Spacer(Modifier.height(8.dp))
+                Text(it, color = MaterialTheme.colorScheme.secondary, maxLines = 3, overflow = TextOverflow.Ellipsis)
+            }
+        }
+        onEdit?.let {
+            IconButton(onClick = it) {
+                Icon(
+                    imageVector = Icons.Rounded.Edit,
+                    contentDescription = "修正训练记录",
+                    tint = MaterialTheme.colorScheme.primary,
+                )
+            }
+        }
     }
 }
 

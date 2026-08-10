@@ -7,9 +7,9 @@ plugins {
     alias(libs.plugins.ksp) apply false
 }
 
-tasks.register("package5Check") {
+tasks.register("nativeCheck") {
     group = "verification"
-    description = "Runs the Package 5 native Android routine library and timer quality gate."
+    description = "Runs the current native Android source, test, lint, and debug APK quality gate."
     dependsOn(
         ":app:testDebugUnitTest",
         ":app:lintDebug",
@@ -18,6 +18,23 @@ tasks.register("package5Check") {
         ":core:data-sync:testDebugUnitTest",
         ":feature:timer-engine:test",
     )
+}
+
+tasks.register("package8FoundationCheck") {
+    group = "verification"
+    description = "Runs the Package 8 release-foundation gate without requiring a private signing key."
+    dependsOn(
+        "nativeCheck",
+        ":app:verifyReleaseConfiguration",
+        ":app:lintRelease",
+        ":app:assembleRelease",
+    )
+}
+
+tasks.register("package5Check") {
+    group = "verification"
+    description = "Compatibility alias for the current native Android quality gate."
+    dependsOn("nativeCheck")
 }
 
 tasks.register("package4Check") {

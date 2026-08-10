@@ -48,6 +48,7 @@ class DailyReviewWorker(
 ) : CoroutineWorker(appContext, params) {
     override suspend fun doWork(): Result {
         val repository = (applicationContext as ShenkApplication).dailyReviewRepository
+        repository.recoverInterruptedJobs()
         var completedAny = false
         repeat(4) {
             when (repository.processNext()) {

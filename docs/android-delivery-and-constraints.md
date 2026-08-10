@@ -1,7 +1,7 @@
 # Android Delivery Plan and Constraints
 
 Updated: 2026-08-09
-Status: confirmed planning baseline; Packages 0-7 accepted, Package 8 not started, progress `8 / 9`
+Status: confirmed planning baseline; Packages 0-7 accepted, Package 8 in progress, progress `8 / 9`
 
 ## 1. Delivery Model
 
@@ -77,6 +77,8 @@ Exit: an AI patch cannot partially apply, clear unrelated arrays, infer scenes, 
 Exit: daily review works online and after offline recovery, and cannot mutate a formal plan.
 
 ### Package 8: Hardening and Private Release
+
+Package 8 is implemented in the ordered stages documented in `android-package8-hardening-release.md`. Phase 1 update checks are foreground-only, authenticated, integrity-verified, user-initiated, and completed through Android's system installer. No always-running update service or remote push is introduced.
 
 - Performance, accessibility, light/dark theme, reduced motion, font scaling.
 - Backup/restore and migration rehearsal.

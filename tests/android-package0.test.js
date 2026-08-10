@@ -130,12 +130,12 @@ test("Package 6 keeps advanced AI exchange provider-neutral and clipboard-only",
   assert.ok(guardrails.requiredInvariants.some((item) => item.id === "G-AI-003"));
 });
 
-test("native CI gates emulator tests behind Package 5 verification", () => {
+test("native CI gates emulator tests behind Package 8 foundation verification", () => {
   const workflow = read(".github/workflows/android-native.yml");
   const instrumentationScript = read("android-app/ci/run-instrumentation.sh");
 
   assert.match(workflow, /needs: verify/);
-  assert.match(workflow, /package5Check/);
+  assert.match(workflow, /package8FoundationCheck/);
   assert.match(workflow, /timeout-minutes: 30/);
   assert.match(workflow, /java-version: "25"/);
   assert.match(workflow, /api-level: 36/);

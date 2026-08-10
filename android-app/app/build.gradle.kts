@@ -3,6 +3,53 @@ plugins {
     alias(libs.plugins.kotlin.compose)
 }
 
+val shenkVersionCode = providers.gradleProperty("SHENK_VERSION_CODE").get().toInt()
+val shenkVersionName = providers.gradleProperty("SHENK_VERSION_NAME").get()
+
+fun releaseSetting(name: String): String = providers.gradleProperty(name)
+    .orElse(providers.environmentVariable(name))
+    .orNull
+    ?.trim()
+    .orEmpty()
+
+val releaseStorePath = releaseSetting("SHENK_RELEASE_STORE_FILE")
+val releaseStorePassword = releaseSetting("SHENK_RELEASE_STORE_PASSWORD")
+val releaseKeyAlias = releaseSetting("SHENK_RELEASE_KEY_ALIAS")
+val releaseKeyPassword = releaseSetting("SHENK_RELEASE_KEY_PASSWORD")
+val requireReleaseSigning = releaseSetting("SHENK_REQUIRE_RELEASE_SIGNING").toBoolean()
+val releaseSigningValues = listOf(
+    releaseStorePath,
+    releaseStorePassword,
+    releaseKeyAlias,
+    releaseKeyPassword,
+)
+val releaseSigningConfigured = releaseSigningValues.any(String::isNotBlank)
+val releaseSigningComplete = releaseSigningValues.all(String::isNotBlank)
+
+if (releaseSigningConfigured && !releaseSigningComplete) {
+    throw GradleException("Release signing is partially configured. Supply all SHENK_RELEASE_* values or none.")
+}
+
+if (shenkVersionCode < 8) {
+    throw GradleException("Package 8 requires SHENK_VERSION_CODE >= 8.")
+}
+if (Regex("package[0-7]", RegexOption.IGNORE_CASE).containsMatchIn(shenkVersionName)) {
+    throw GradleException("SHENK_VERSION_NAME still identifies an accepted earlier package.")
+}
+if (requireReleaseSigning && !releaseSigningComplete) {
+    throw GradleException("SHENK_REQUIRE_RELEASE_SIGNING is true but release signing is incomplete.")
+}
+if (releaseSigningComplete) {
+    val store = file(releaseStorePath).canonicalFile
+    val repository = rootProject.projectDir.parentFile.canonicalFile.toPath()
+    if (!store.exists()) {
+        throw GradleException("Release keystore does not exist: $store")
+    }
+    if (store.toPath().startsWith(repository)) {
+        throw GradleException("Release keystore must be stored outside the repository.")
+    }
+}
+
 android {
     namespace = "io.s2qtech.shenk"
     compileSdk = 36
@@ -11,9 +58,34 @@ android {
         applicationId = "io.s2qtech.shenk"
         minSdk = 36
         targetSdk = 36
-        versionCode = 3
-        versionName = "0.6.0-package6"
+        versionCode = shenkVersionCode
+        versionName = shenkVersionName
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+    }
+
+    signingConfigs {
+        if (releaseSigningComplete) {
+            create("release") {
+                storeFile = file(releaseStorePath)
+                storePassword = releaseStorePassword
+                keyAlias = releaseKeyAlias
+                keyPassword = releaseKeyPassword
+            }
+        }
+    }
+
+    buildTypes {
+        getByName("debug") {
+            isDebuggable = true
+        }
+        getByName("release") {
+            isDebuggable = false
+            isMinifyEnabled = false
+            isShrinkResources = false
+            if (releaseSigningComplete) {
+                signingConfig = signingConfigs.getByName("release")
+            }
+        }
     }
 
     buildFeatures {
@@ -29,6 +101,11 @@ android {
     packaging {
         resources.excludes += "/META-INF/{AL2.0,LGPL2.1}"
     }
+}
+
+tasks.register("verifyReleaseConfiguration") {
+    group = "verification"
+    description = "Validates Package 8 versioning and optional private release signing inputs."
 }
 
 kotlin {

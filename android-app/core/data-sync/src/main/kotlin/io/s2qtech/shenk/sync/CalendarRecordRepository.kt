@@ -4,6 +4,7 @@ import io.s2qtech.shenk.model.BodyMetric
 import io.s2qtech.shenk.model.BodyTrends
 import io.s2qtech.shenk.model.CalendarDay
 import io.s2qtech.shenk.model.CalendarMonth
+import io.s2qtech.shenk.model.DailyMetric
 import io.s2qtech.shenk.model.DailyMetricResolver
 import io.s2qtech.shenk.model.MetricTrendResolver
 import io.s2qtech.shenk.model.SharedEntityOwner
@@ -27,6 +28,7 @@ data class CalendarDayDetails(
     val date: LocalDate,
     val guidance: TodayGuidance,
     val actualLogs: List<TrainingLog>,
+    val bodyMetrics: List<DailyMetric>,
 )
 
 class CalendarRecordRepository(
@@ -71,10 +73,12 @@ class CalendarRecordRepository(
         records.observeActive("training_logs"),
         records.observeActive("daily_plan_items"),
         records.observeActive("plan_adjustments"),
+        records.observeActive("body_metrics"),
         records.observeActive("daily_reviews"),
-    ) { logs, plans, adjustments, reviews ->
+    ) { logs, plans, adjustments, metricRecords, reviews ->
+        val bodyMetrics = DailyMetricResolver.resolve(metricRecords.mapNotNull(::decodeBodyMetric))[date].orEmpty()
         GuidanceResolution.resolve(date, logs, plans, adjustments, reviews).let {
-            CalendarDayDetails(date, it.guidance, it.actualLogs)
+            CalendarDayDetails(date, it.guidance, it.actualLogs, bodyMetrics)
         }
     }
 

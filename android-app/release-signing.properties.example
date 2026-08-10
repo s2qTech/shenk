@@ -1,0 +1,7 @@
+# Copy these values to your user-level ~/.gradle/gradle.properties or inject
+# them as environment variables. Never create a real signing file in this repo.
+SHENK_RELEASE_STORE_FILE=C:/private/shenk-release.jks
+SHENK_RELEASE_STORE_PASSWORD=replace-outside-git
+SHENK_RELEASE_KEY_ALIAS=shenk
+SHENK_RELEASE_KEY_PASSWORD=replace-outside-git
+SHENK_REQUIRE_RELEASE_SIGNING=true

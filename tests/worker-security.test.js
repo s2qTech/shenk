@@ -139,6 +139,8 @@ async function run() {
     { SHENK_TOKEN: "valid" }
   );
   const body = await response.json();
+  const upstreamBody = JSON.parse(upstreamRequest.options.body);
+  const systemPrompt = upstreamBody.messages.find((message) => message.role === "system")?.content || "";
     assert.equal(response.status, 200);
     assert.equal(body.review.conclusion, "Synthetic review.");
     assert.equal(body.review.assessment, "Recovery is appropriate today.");
@@ -146,7 +148,11 @@ async function run() {
     assert.deepEqual(body.review.actions, ["Keep the planned easy session."]);
   assert.equal(upstreamRequest.url, "https://provider.example/v1/chat/completions");
   assert.equal(upstreamRequest.options.headers.Authorization, "Bearer fixture-secret");
-    assert.deepEqual(JSON.parse(upstreamRequest.options.body).thinking, { type: "enabled" });
+    assert.deepEqual(upstreamBody.thinking, { type: "enabled" });
+    assert.match(systemPrompt, /已经发生的执行结果/);
+    assert.match(systemPrompt, /当天完成得怎么样/);
+    assert.match(systemPrompt, /后续修正措施/);
+    assert.doesNotMatch(systemPrompt, /今天怎么做/);
     assert.doesNotMatch(JSON.stringify(body), /fixture-secret/);
   }
 

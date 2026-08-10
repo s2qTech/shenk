@@ -410,7 +410,7 @@ private fun GuidanceBlock(
                         Text("查看完整简评")
                     }
                 }
-                dailyReviewState.jobState in setOf("PENDING", "RUNNING", "RETRY") -> {
+                dailyReviewState.jobState in setOf("PENDING", "RUNNING") -> {
                     Spacer(Modifier.height(22.dp))
                     HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f))
                     Spacer(Modifier.height(16.dp))
@@ -419,6 +419,18 @@ private fun GuidanceBlock(
                         Column {
                             Text("正在生成今日简评", fontWeight = FontWeight.SemiBold)
                             Text("完成后会自动出现在这里", color = MaterialTheme.colorScheme.secondary)
+                        }
+                    }
+                }
+                dailyReviewState.jobState == "RETRY" -> {
+                    Spacer(Modifier.height(22.dp))
+                    HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f))
+                    Spacer(Modifier.height(16.dp))
+                    Column {
+                        Text("简评暂未完成", fontWeight = FontWeight.SemiBold)
+                        Text("网络或 AI 服务暂时不可用，可以稍后重试。", color = MaterialTheme.colorScheme.secondary)
+                        TextButton(onClick = onDailyReview, modifier = Modifier.align(Alignment.End)) {
+                            Text("查看并重试")
                         }
                     }
                 }

@@ -14,10 +14,12 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -29,9 +31,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import io.s2qtech.shenk.sync.DailyReviewRepository
 import io.s2qtech.shenk.sync.DailyReviewState
 import java.time.LocalDate
+import java.time.format.DateTimeFormatter
+import java.util.Locale
 import kotlinx.coroutines.launch
 
 @Composable
@@ -42,25 +48,22 @@ fun DailyReviewSheet(
     onQueued: () -> Unit,
     onOpenAiSettings: () -> Unit,
     onMessage: (String) -> Unit,
+    onBack: (() -> Unit)? = null,
 ) {
     val scope = rememberCoroutineScope()
     var missing by remember { mutableStateOf<List<String>>(emptyList()) }
     var providerReady by remember { mutableStateOf(false) }
     var generationRequested by remember { mutableStateOf(false) }
-    val queued = state.jobState in setOf("PENDING", "RUNNING", "RETRY")
-    val generating = generationRequested || queued
+    val processing = state.jobState in setOf("PENDING", "RUNNING")
+    val generating = generationRequested || processing
+    val isToday = date == LocalDate.now()
+    val reviewLabel = if (isToday) "今日简评" else "当日简评"
 
     LaunchedEffect(date) {
+        repository.recoverInterruptedJobs()
         providerReady = repository.providerSettings().configured && repository.hasProviderKey()
         missing = repository.prepare(date).missingCriticalFields
     }
-    LaunchedEffect(state.jobState) {
-        when (state.jobState) {
-            "PENDING", "RUNNING", "RETRY" -> generationRequested = true
-            "COMPLETED", "FAILED" -> generationRequested = false
-        }
-    }
-
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -68,20 +71,33 @@ fun DailyReviewSheet(
             .verticalScroll(rememberScrollState())
             .padding(horizontal = 22.dp, vertical = 8.dp),
     ) {
-        Text("今日简评", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.SemiBold)
-        Text("专业判断与下一步行动，不会修改正式计划。", color = MaterialTheme.colorScheme.secondary)
+        onBack?.let { goBack ->
+            TextButton(onClick = goBack) {
+                Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = null)
+                Text("返回日期详情")
+            }
+            Spacer(Modifier.height(4.dp))
+        }
+        Text(reviewLabel, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.SemiBold)
+        if (!isToday) {
+            Text(
+                date.format(DateTimeFormatter.ofPattern("M月d日 EEEE", Locale.CHINA)),
+                color = MaterialTheme.colorScheme.secondary,
+            )
+        }
+        Text("复盘当天执行，指出问题并给出后续修正；不会修改正式计划。", color = MaterialTheme.colorScheme.secondary)
         Spacer(Modifier.height(20.dp))
 
         state.review?.let { review ->
             Surface(color = MaterialTheme.colorScheme.primaryContainer, shape = RoundedCornerShape(24.dp)) {
                 Column(Modifier.fillMaxWidth().padding(20.dp)) {
-                    Text("教练结论", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.secondary)
+                    Text("今日评价", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.secondary)
                     Spacer(Modifier.height(6.dp))
                     Text(review.conclusion, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
 
                     if (review.assessment.isNotBlank()) {
                         Spacer(Modifier.height(20.dp))
-                        Text("专业判断", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                        Text("复盘分析", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                         Spacer(Modifier.height(8.dp))
                         Text(review.assessment, style = MaterialTheme.typography.bodyLarge)
                     }
@@ -108,7 +124,7 @@ fun DailyReviewSheet(
 
                     if (review.actions.isNotEmpty()) {
                         Spacer(Modifier.height(20.dp))
-                        Text("今天怎么做", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                        Text("后续修正", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                         review.actions.forEach { ReviewLine(it) }
                     }
                     if (review.cautions.isNotEmpty()) {
@@ -155,8 +171,43 @@ fun DailyReviewSheet(
                 ) {
                     CircularProgressIndicator(modifier = Modifier.height(24.dp), strokeWidth = 2.dp)
                     Column {
-                        Text("正在生成今日简评", fontWeight = FontWeight.SemiBold)
-                        Text("通常需要十几秒，可以先返回今天。", color = MaterialTheme.colorScheme.secondary)
+                        Text("正在生成$reviewLabel", fontWeight = FontWeight.SemiBold)
+                        Text("通常需要十几秒，可以先返回日期详情。", color = MaterialTheme.colorScheme.secondary)
+                    }
+                }
+            }
+        } else if (state.jobState == "RETRY") {
+            Surface(
+                color = MaterialTheme.colorScheme.surfaceVariant,
+                shape = RoundedCornerShape(20.dp),
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Column(Modifier.padding(18.dp)) {
+                    Text("简评暂未完成", fontWeight = FontWeight.SemiBold)
+                    Text("网络或 AI 服务暂时不可用，稍后会自动重试。", color = MaterialTheme.colorScheme.secondary)
+                    Spacer(Modifier.height(12.dp))
+                    OutlinedButton(
+                        onClick = {
+                            generationRequested = true
+                            scope.launch {
+                                try {
+                                    val result = repository.enqueue(date, allowIncomplete = missing.isNotEmpty())
+                                    if (result.queued) {
+                                        onQueued()
+                                        onMessage("已重新开始生成$reviewLabel")
+                                    } else {
+                                        onMessage("这一天的相同版本已经生成")
+                                    }
+                                } catch (_: Throwable) {
+                                    onMessage("无法重试，请检查网络或 AI 服务")
+                                } finally {
+                                    generationRequested = false
+                                }
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text("立即重试")
                     }
                 }
             }
@@ -169,32 +220,26 @@ fun DailyReviewSheet(
                 onClick = {
                     generationRequested = true
                     scope.launch {
-                        runCatching { repository.enqueue(date, allowIncomplete = missing.isNotEmpty()) }
-                            .onSuccess { result ->
-                                when {
-                                    result.queued -> {
-                                        onQueued()
-                                        onMessage("正在生成今日简评")
-                                    }
-                                    result.configurationMissing -> {
-                                        generationRequested = false
-                                        onMessage("请先完成 AI 服务配置")
-                                    }
-                                    else -> {
-                                        generationRequested = false
-                                        onMessage("今天的相同版本已经生成")
-                                    }
+                        try {
+                            val result = repository.enqueue(date, allowIncomplete = missing.isNotEmpty())
+                            when {
+                                result.queued -> {
+                                    onQueued()
+                                    onMessage("正在生成$reviewLabel")
                                 }
+                                result.configurationMissing -> onMessage("请先完成 AI 服务配置")
+                                else -> onMessage("这一天的相同版本已经生成")
                             }
-                            .onFailure {
-                                generationRequested = false
-                                onMessage("无法生成，请检查 AI 服务配置")
-                            }
+                        } catch (_: Throwable) {
+                            onMessage("无法生成，请检查 AI 服务配置")
+                        } finally {
+                            generationRequested = false
+                        }
                     }
                 },
                 modifier = Modifier.fillMaxWidth().height(54.dp),
             ) {
-                Text(if (state.review == null) "生成今日简评" else "根据最新记录重新生成")
+                Text(if (state.review == null) "生成$reviewLabel" else "根据最新记录重新生成")
             }
         }
         Spacer(Modifier.height(24.dp))

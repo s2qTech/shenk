@@ -62,6 +62,8 @@ data class DailyReviewState(
     val review: DailyReview? = null,
     val jobState: String? = null,
     val jobError: String? = null,
+    val jobAttempts: Int = 0,
+    val jobNextAttemptAt: Long? = null,
 )
 
 data class DailyReviewPreparation(
@@ -186,7 +188,14 @@ class DailyReviewRepository(
                 .maxByOrNull { it.version },
             jobState = job?.state,
             jobError = job?.lastError,
+            jobAttempts = job?.attempts ?: 0,
+            jobNextAttemptAt = job?.nextAttemptAt,
         )
+    }
+
+    suspend fun recoverInterruptedJobs(): Int {
+        val now = nowMillis()
+        return database.aiReviewJobs().recoverStaleRunning(now - STALE_RUNNING_MILLIS, now)
     }
 
     suspend fun prepare(date: LocalDate): DailyReviewPreparation {
@@ -213,6 +222,7 @@ class DailyReviewRepository(
         }
         val snapshot = buildJsonObject {
             put("schema", JsonPrimitive("daily_review_snapshot"))
+            put("reviewPolicyVersion", JsonPrimitive(2))
             put("contractVersion", JsonPrimitive(ContractVersion.PLANNED))
             put("date", JsonPrimitive(date.toString()))
             put("missingCriticalFields", buildJsonArray { missing.forEach { add(JsonPrimitive(it)) } })
@@ -235,6 +245,7 @@ class DailyReviewRepository(
     }
 
     suspend fun enqueue(date: LocalDate, allowIncomplete: Boolean = false): DailyReviewEnqueueResult {
+        recoverInterruptedJobs()
         val preparation = prepare(date)
         if (preparation.missingCriticalFields.isNotEmpty() && !allowIncomplete) {
             return DailyReviewEnqueueResult(false, preparation.missingCriticalFields)
@@ -248,8 +259,17 @@ class DailyReviewRepository(
             )
         }
         val existing = database.aiReviewJobs().find(date.toString(), preparation.inputDigest)
-        if (existing?.state in setOf("PENDING", "RUNNING", "RETRY", "COMPLETED")) {
-            return DailyReviewEnqueueResult(existing?.state != "COMPLETED", preparation.missingCriticalFields)
+        when (existing?.state) {
+            "COMPLETED" -> return DailyReviewEnqueueResult(false, preparation.missingCriticalFields)
+            "PENDING", "RUNNING" -> return DailyReviewEnqueueResult(true, preparation.missingCriticalFields)
+            "RETRY", "FAILED" -> {
+                database.aiReviewJobs().activate(
+                    jobId = existing.jobId,
+                    attempts = if (existing.state == "FAILED") 0 else existing.attempts,
+                    now = nowMillis(),
+                )
+                return DailyReviewEnqueueResult(true, preparation.missingCriticalFields)
+            }
         }
         val now = nowMillis()
         database.withTransaction {
@@ -394,6 +414,7 @@ class DailyReviewRepository(
 }
 
 private const val MAX_REVIEW_ATTEMPTS = 6
+private const val STALE_RUNNING_MILLIS = 2 * 60 * 1000L
 private val PERMANENT_REVIEW_ERRORS = setOf(
     "cloud_not_configured",
     "ai_key_missing",

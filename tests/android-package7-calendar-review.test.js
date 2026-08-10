@@ -1,0 +1,60 @@
+const fs = require('node:fs');
+const path = require('node:path');
+const test = require('node:test');
+const assert = require('node:assert/strict');
+
+const root = path.resolve(__dirname, '..');
+const read = (file) => fs.readFileSync(path.join(root, file), 'utf8');
+
+test('calendar observes and opens the review for the selected date', () => {
+  const calendar = read('android-app/app/src/main/java/io/s2qtech/shenk/CalendarScreen.kt');
+
+  assert.match(calendar, /dailyReviewRepository\.observe\(date\)/);
+  assert.match(calendar, /DailyReviewSheet\(\s*date = date,/);
+  assert.match(calendar, /canReview = !date\.isAfter\(today\)/);
+});
+
+test('calendar day overview combines guidance, body metrics, and a compact daily review', () => {
+  const calendar = read('android-app/app/src/main/java/io/s2qtech/shenk/CalendarScreen.kt');
+  const repository = read('android-app/core/data-sync/src/main/kotlin/io/s2qtech/shenk/sync/CalendarRecordRepository.kt');
+
+  assert.match(calendar, /GuidanceSummary\(/);
+  assert.match(calendar, /details\.bodyMetrics\.forEach \{ metric -> DailyMetricValue\(metric\) \}/);
+  assert.match(repository, /records\.observeActive\("body_metrics"\)/);
+  assert.match(repository, /val bodyMetrics: List<DailyMetric>/);
+  assert.doesNotMatch(calendar, /details\.actualLogs\.forEachIndexed/);
+  assert.match(calendar, /if \(canEdit && details\.actualLogs\.isEmpty\(\)\)/);
+  assert.match(calendar, /CalendarReviewSummary\(/);
+  assert.match(calendar, /Text\(\s*review\.conclusion,/);
+  assert.doesNotMatch(calendar, /review\.actions\.take\(1\)/);
+  assert.doesNotMatch(calendar, /review\.conclusion,[\s\S]{0,200}maxLines/);
+});
+
+test('daily review sheet is date aware and supports returning to date details', () => {
+  const sheet = read('android-app/app/src/main/java/io/s2qtech/shenk/DailyReviewSheet.kt');
+
+  assert.match(sheet, /val isToday = date == LocalDate\.now\(\)/);
+  assert.match(sheet, /val reviewLabel = if \(isToday\) "今日简评" else "当日简评"/);
+  assert.match(sheet, /onBack: \(\(\) -> Unit\)\? = null/);
+  assert.match(sheet, /Text\("返回日期详情"\)/);
+  assert.match(sheet, /Text\("今日评价"/);
+  assert.match(sheet, /Text\("复盘分析"/);
+  assert.match(sheet, /Text\("后续修正"/);
+  assert.match(sheet, /复盘当天执行，指出问题并给出后续修正/);
+});
+
+test('package 7 contract documents historical review behavior', () => {
+  const packageDoc = read('docs/android-package7-daily-review.md');
+
+  assert.match(packageDoc, /Historical generation always uses the normalized 14-day snapshot ending on the selected date/);
+  assert.match(packageDoc, /future dates cannot generate reviews/);
+  assert.match(packageDoc, /independent of the training-log correction window/);
+  assert.match(packageDoc, /complete conclusion/);
+  assert.match(packageDoc, /must not phrase an already completed day as pre-training guidance/);
+});
+
+test('daily review snapshots version retrospective review policy', () => {
+  const repository = read('android-app/core/data-sync/src/main/kotlin/io/s2qtech/shenk/sync/DailyReviewRepository.kt');
+
+  assert.match(repository, /put\("reviewPolicyVersion", JsonPrimitive\(2\)\)/);
+});

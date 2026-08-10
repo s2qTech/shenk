@@ -104,6 +104,66 @@ class DailyReviewRepositoryInstrumentedTest {
     }
 
     @Test
+    fun interruptedRunningJobIsRecoveredForImmediateRetry() {
+        runBlocking {
+            database.aiReviewJobs().put(
+                AiReviewJobEntity(
+                    jobId = "interrupted-job",
+                    date = TEST_DATE.toString(),
+                    inputDigest = "digest-interrupted",
+                    snapshotJson = "{}",
+                    allowIncomplete = false,
+                    state = "RUNNING",
+                    attempts = 1,
+                    nextAttemptAt = NOW,
+                    lastError = null,
+                    createdAt = NOW - 300_000,
+                    updatedAt = NOW - 300_000,
+                ),
+            )
+
+            assertEquals(1, reviews.recoverInterruptedJobs())
+
+            val recovered = database.aiReviewJobs().nextDue(NOW)
+            assertEquals("interrupted-job", recovered?.jobId)
+            assertEquals("RETRY", recovered?.state)
+            assertEquals("generation_interrupted", recovered?.lastError)
+        }
+    }
+
+    @Test
+    fun explicitRetryReactivatesDelayedJobImmediately() {
+        runBlocking {
+            secrets.put(SecretName.AI_PROVIDER_KEY, "synthetic-key")
+            records.persistAndEnqueue(morningCheckin("morning-retry", fatigue = 2), SharedEntityOwner.RECORD)
+            val prepared = reviews.prepare(TEST_DATE)
+            database.aiReviewJobs().put(
+                AiReviewJobEntity(
+                    jobId = "delayed-retry-job",
+                    date = TEST_DATE.toString(),
+                    inputDigest = prepared.inputDigest,
+                    snapshotJson = prepared.snapshot.toString(),
+                    allowIncomplete = false,
+                    state = "RETRY",
+                    attempts = 2,
+                    nextAttemptAt = NOW + 3_600_000,
+                    lastError = "network_unavailable",
+                    createdAt = NOW - 60_000,
+                    updatedAt = NOW - 60_000,
+                ),
+            )
+
+            val result = reviews.enqueue(TEST_DATE)
+
+            assertTrue(result.queued)
+            val reactivated = database.aiReviewJobs().nextDue(NOW)
+            assertEquals("delayed-retry-job", reactivated?.jobId)
+            assertEquals("PENDING", reactivated?.state)
+            assertEquals(null, reactivated?.lastError)
+        }
+    }
+
+    @Test
     fun correctedStatusSupersedesOldQueuedInput() {
         runBlocking {
             secrets.put(SecretName.AI_PROVIDER_KEY, "synthetic-key")
@@ -187,6 +247,7 @@ class DailyReviewRepositoryInstrumentedTest {
     }
 
     private companion object {
+        const val NOW = 4_102_444_800_000L
         val TEST_DATE: LocalDate = LocalDate.parse("2100-01-01")
     }
 }
