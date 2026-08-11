@@ -1,6 +1,6 @@
 # Android Package 8: Hardening and Private Release
 
-Updated: 2026-08-10
+Updated: 2026-08-12
 Status: In progress
 Overall delivery progress: `8 / 9`
 
@@ -21,12 +21,20 @@ Package 8 turns the accepted Packages 0-7 product into a reliable private releas
 - Reject partial signing configuration and repository-local keystores.
 - Add the `package8FoundationCheck` automated gate.
 
-### P8.2 Authenticated foreground updater
+### P8.2 Authenticated foreground updater - implementation complete, device gate pending
 
 - Check after first frame, at most once per 24 hours.
 - Read authenticated metadata and stream the private APK through the Worker.
 - Verify application ID, increasing version, SHA-256, and signing certificate.
 - Require explicit user download and Android installation confirmation.
+
+Implementation notes:
+
+- `MainActivity` schedules the check only after the first rendered frame. A device-local DataStore timestamp limits attempts to once per 24 hours; offline, unauthorized, malformed, and no-release results stay silent.
+- The Worker exposes authenticated `shenk`/`admin` metadata and APK routes. The timer role is forbidden, metadata omits the private object key, and an absent release returns a successful empty result.
+- The app accepts only `io.s2qtech.shenk` with a strictly increasing `versionCode`. After an explicit download it verifies byte count, SHA-256, archive package/version, and an exact match with the installed signing certificate before enabling the system installer action.
+- The user confirms download in-app and confirms installation again in Android's system UI. APKs live only in the app cache and are removed on dismissal or failed verification.
+- Production R2 binding and signed release metadata remain intentionally absent until the P8.8 signed RC. The deployed route therefore reports no release without affecting normal use. Operational publication steps are documented in `android-private-update-operations.md`.
 
 ### P8.3 Local reminders and HyperOS guidance
 
@@ -59,6 +67,6 @@ Package 8 turns the accepted Packages 0-7 product into a reliable private releas
 
 `android-app/gradlew.bat package8FoundationCheck` runs the native automated suite, release configuration validation, release lint, and an unsigned release assembly. A distributable RC is deferred to P8.8 and requires external signing material.
 
-P8.0 and P8.1 passed on 2026-08-10. The gate completed 194 Gradle tasks, including native unit tests, debug and release lint, release configuration validation, debug assembly, and unsigned release assembly. P8.2 is the next stage; updater code has not started.
+P8.0 and P8.1 passed on 2026-08-10. P8.2 implementation and automated gates passed on 2026-08-12, and the authenticated no-release Worker route is deployed. Xiaomi 14 acceptance remains pending because the device disconnected before the no-release foreground and installed-APK signature checks could run. P8.3 must not start until that device gate passes.
 
 Package 8 remains in progress and the project remains at `8 / 9` until every stage above passes its gate.

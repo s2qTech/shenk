@@ -130,6 +130,7 @@ dependencies {
     implementation(libs.androidx.compose.foundation)
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.kotlinx.serialization.json)
+    implementation(libs.okhttp.core)
     implementation(libs.androidx.work.runtime)
     implementation(libs.androidx.datastore.preferences)
 

@@ -65,6 +65,10 @@ class ShenkApplication : Application() {
         NativeTimerCoordinator(this, timerSessionRepository, applicationScope)
     }
 
+    val appUpdateManager: AppUpdateManager by lazy {
+        AppUpdateManager(this)
+    }
+
     override fun onCreate() {
         super.onCreate()
         applicationScope.launch {

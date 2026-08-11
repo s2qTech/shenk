@@ -51,3 +51,23 @@ test("Package 8 private release and rollback decisions are documented", () => {
   assert.match(adr, /SHA-256/i);
   assert.match(adr, /no silent install/i);
 });
+
+test("P8.2 updater is foreground-only, authenticated, verified, and user-confirmed", () => {
+  const manager = read("android-app/app/src/main/java/io/s2qtech/shenk/AppUpdateManager.kt");
+  const activity = read("android-app/app/src/main/java/io/s2qtech/shenk/MainActivity.kt");
+  const manifest = read("android-app/app/src/main/AndroidManifest.xml");
+  const worker = read("cloudflare/worker.js");
+
+  assert.match(activity, /postFrameCallback/);
+  assert.match(manager, /TimeUnit\.HOURS\.toMillis\(24\)/);
+  assert.match(manager, /header\("Authorization", "Bearer \$token"\)/);
+  assert.match(manager, /update_sha256_mismatch/);
+  assert.match(manager, /update_application_id_mismatch/);
+  assert.match(manager, /update_version_mismatch/);
+  assert.match(manager, /update_signing_certificate_mismatch/);
+  assert.match(manager, /Intent\.ACTION_VIEW/);
+  assert.match(manifest, /REQUEST_INSTALL_PACKAGES/);
+  assert.match(worker, /\/api\/android\/update\/metadata/);
+  assert.match(worker, /\/api\/android\/update\/apk/);
+  assert.match(worker, /forbidden_android_update_role/);
+});

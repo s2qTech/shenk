@@ -167,6 +167,16 @@ export default {
 
       const client = requireAuth(request, env);
 
+      if (url.pathname === "/api/android/update/metadata" && request.method === "GET") {
+        assertAndroidUpdateRole(client);
+        return json({ ok: true, release: readAndroidReleaseMetadata(env) }, 200, request, env);
+      }
+
+      if (url.pathname === "/api/android/update/apk" && request.method === "GET") {
+        assertAndroidUpdateRole(client);
+        return await streamAndroidRelease(env);
+      }
+
       if (url.pathname === "/api/mcp/pairing-code" && request.method === "POST") {
         if (!["admin", "shenk"].includes(client.role)) {
           const error = new Error("forbidden_mcp_pairing_role");
@@ -1593,6 +1603,66 @@ function assertAiReviewRole(client) {
   const error = new Error("forbidden_ai_review_role");
   error.status = 403;
   throw error;
+}
+
+function assertAndroidUpdateRole(client) {
+  if (["admin", "shenk"].includes(client.role)) return;
+  const error = new Error("forbidden_android_update_role");
+  error.status = 403;
+  throw error;
+}
+
+function readAndroidReleaseMetadata(env) {
+  const raw = String(env.ANDROID_RELEASE_METADATA || "").trim();
+  if (!raw) return null;
+  let parsed;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    throw serviceError("android_release_metadata_invalid", 503);
+  }
+  const appId = String(parsed?.applicationId || "");
+  const versionCode = Number(parsed?.versionCode);
+  const versionName = String(parsed?.versionName || "");
+  const sha256 = String(parsed?.sha256 || "").toLowerCase();
+  const sizeBytes = Number(parsed?.sizeBytes);
+  const objectKey = String(parsed?.objectKey || "");
+  const publishedAt = String(parsed?.publishedAt || "");
+  const valid = appId === "io.s2qtech.shenk" &&
+    Number.isSafeInteger(versionCode) && versionCode > 0 &&
+    versionName.length >= 1 && versionName.length <= 80 &&
+    /^[a-f0-9]{64}$/.test(sha256) &&
+    Number.isSafeInteger(sizeBytes) && sizeBytes > 0 && sizeBytes <= 250 * 1024 * 1024 &&
+    objectKey.startsWith("android/") && !objectKey.includes("..") && objectKey.length <= 240 &&
+    !Number.isNaN(Date.parse(publishedAt));
+  if (!valid) throw serviceError("android_release_metadata_invalid", 503);
+  return { applicationId: appId, versionCode, versionName, sha256, sizeBytes, publishedAt };
+}
+
+async function streamAndroidRelease(env) {
+  const metadata = readAndroidReleaseMetadata(env);
+  if (!metadata) throw serviceError("android_release_not_found", 404);
+  if (!env.ANDROID_RELEASES?.get) throw serviceError("android_release_storage_unavailable", 503);
+  const objectKey = JSON.parse(String(env.ANDROID_RELEASE_METADATA)).objectKey;
+  const object = await env.ANDROID_RELEASES.get(objectKey);
+  if (!object) throw serviceError("android_release_not_found", 404);
+  if (Number(object.size) !== metadata.sizeBytes) throw serviceError("android_release_size_mismatch", 503);
+  return new Response(object.body, {
+    status: 200,
+    headers: {
+      "Content-Type": "application/vnd.android.package-archive",
+      "Content-Length": String(metadata.sizeBytes),
+      "Content-Disposition": `attachment; filename="shenk-${metadata.versionCode}.apk"`,
+      "Cache-Control": "private, no-store",
+      "X-Content-Type-Options": "nosniff"
+    }
+  });
+}
+
+function serviceError(message, status) {
+  const error = new Error(message);
+  error.status = status;
+  return error;
 }
 
 function validateAiProvider(value) {

@@ -1,9 +1,9 @@
 {
   "schema": "shenk_project_guardrails/v1",
-  "updatedAt": "2026-08-08",
+  "updatedAt": "2026-08-12",
   "activeDelivery": {
-    "phase": "android_package_7_ready",
-    "progress": "7/9",
+    "phase": "android_package_8_in_progress",
+    "progress": "8/9",
     "productionContract": "1.0",
     "plannedContract": "2.0",
     "workerSupportedContracts": [

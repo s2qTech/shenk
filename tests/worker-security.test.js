@@ -634,6 +634,84 @@ async function run() {
   assert.equal(body.conflicts[0].reason, "missing_v2_field:routineVersion");
 }
 
+{
+  const worker = loadWorker();
+  const response = await worker.fetch(
+    request("https://worker.example/api/android/update/metadata"),
+    { SHENK_TOKEN: "valid" }
+  );
+  assert.equal(response.status, 401);
+}
+
+{
+  const worker = loadWorker();
+  const response = await worker.fetch(
+    request("https://worker.example/api/android/update/metadata", {
+      headers: { Authorization: "Bearer timer" }
+    }),
+    { TIMER_TOKEN: "timer" }
+  );
+  assert.equal(response.status, 403);
+  assert.equal((await response.json()).error, "forbidden_android_update_role");
+}
+
+{
+  const worker = loadWorker();
+  const response = await worker.fetch(
+    request("https://worker.example/api/android/update/metadata", {
+      headers: { Authorization: "Bearer valid" }
+    }),
+    { SHENK_TOKEN: "valid" }
+  );
+  assert.equal(response.status, 200);
+  assert.equal((await response.json()).release, null);
+}
+
+{
+  const apkBytes = new TextEncoder().encode("synthetic private apk");
+  const release = {
+    applicationId: "io.s2qtech.shenk",
+    versionCode: 11,
+    versionName: "0.8.2-package8-p8.2",
+    sha256: "a".repeat(64),
+    sizeBytes: apkBytes.byteLength,
+    objectKey: "android/shenk-11.apk",
+    publishedAt: "2099-01-01T00:00:00.000Z"
+  };
+  const env = {
+    SHENK_TOKEN: "valid",
+    ANDROID_RELEASE_METADATA: JSON.stringify(release),
+    ANDROID_RELEASES: {
+      async get(key) {
+        assert.equal(key, release.objectKey);
+        return { body: apkBytes, size: apkBytes.byteLength };
+      }
+    }
+  };
+  const worker = loadWorker();
+  const metadataResponse = await worker.fetch(
+    request("https://worker.example/api/android/update/metadata", {
+      headers: { Authorization: "Bearer valid" }
+    }),
+    env
+  );
+  const metadataBody = await metadataResponse.json();
+  assert.equal(metadataResponse.status, 200);
+  assert.equal(metadataBody.release.versionCode, 11);
+  assert.equal(metadataBody.release.objectKey, undefined);
+
+  const apkResponse = await worker.fetch(
+    request("https://worker.example/api/android/update/apk", {
+      headers: { Authorization: "Bearer valid" }
+    }),
+    env
+  );
+  assert.equal(apkResponse.status, 200);
+  assert.equal(apkResponse.headers.get("Content-Type"), "application/vnd.android.package-archive");
+  assert.equal(apkResponse.headers.get("Cache-Control"), "private, no-store");
+  assert.deepEqual(new Uint8Array(await apkResponse.arrayBuffer()), apkBytes);
+}
+
 console.log("worker security tests passed");
 }
 
