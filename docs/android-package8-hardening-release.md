@@ -21,7 +21,7 @@ Package 8 turns the accepted Packages 0-7 product into a reliable private releas
 - Reject partial signing configuration and repository-local keystores.
 - Add the `package8FoundationCheck` automated gate.
 
-### P8.2 Authenticated foreground updater - implementation complete, device gate pending
+### P8.2 Authenticated foreground updater - complete
 
 - Check after first frame, at most once per 24 hours.
 - Read authenticated metadata and stream the private APK through the Worker.
@@ -67,6 +67,6 @@ Implementation notes:
 
 `android-app/gradlew.bat package8FoundationCheck` runs the native automated suite, release configuration validation, release lint, and an unsigned release assembly. A distributable RC is deferred to P8.8 and requires external signing material.
 
-P8.0 and P8.1 passed on 2026-08-10. P8.2 implementation and automated gates passed on 2026-08-12, and the authenticated no-release Worker route is deployed. Xiaomi 14 acceptance remains pending because the device disconnected before the no-release foreground and installed-APK signature checks could run. P8.3 must not start until that device gate passes.
+P8.0 and P8.1 passed on 2026-08-10. P8.2 passed on 2026-08-12: the authenticated no-release Worker route is deployed; all Node and Package 8 foundation gates passed; Xiaomi 14 accepted a data-preserving same-package/same-signature update; the focused on-device test verified APK package, version, SHA-256, and signing-certificate inspection; and a six-second cold-start check showed Today with zero update prompts while no release metadata was configured. The temporary instrumentation APK was removed after the test. P8.3 local reminders and HyperOS guidance is next and has not started.
 
 Package 8 remains in progress and the project remains at `8 / 9` until every stage above passes its gate.
