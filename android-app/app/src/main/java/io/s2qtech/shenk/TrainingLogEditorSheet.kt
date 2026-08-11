@@ -44,8 +44,12 @@ fun TrainingLogEditorSheet(
     readOnly: Boolean,
     onSave: (TrainingLog) -> Unit,
     onDelete: ((TrainingLog) -> Unit)? = null,
+    initialType: String? = null,
+    createTitle: String = "补训练",
 ) {
-    var type by remember(existing?.id, date) { mutableStateOf(existing?.type ?: "easy_walk") }
+    var type by remember(existing?.id, date, initialType) {
+        mutableStateOf(existing?.type ?: initialType?.takeIf { it in trainingTypes } ?: "easy_walk")
+    }
     var typeMenu by remember { mutableStateOf(false) }
     var duration by remember(existing?.id) { mutableStateOf(existing?.durationMinutes?.toString().orEmpty()) }
     var distance by remember(existing?.id) { mutableStateOf(existing?.distanceKm?.toString().orEmpty()) }
@@ -60,7 +64,7 @@ fun TrainingLogEditorSheet(
             .padding(horizontal = 22.dp, vertical = 12.dp),
     ) {
         Text(
-            text = if (readOnly) "训练记录" else if (existing == null) "补训练" else "修正训练",
+            text = if (readOnly) "训练记录" else if (existing == null) createTitle else "修正训练",
             style = MaterialTheme.typography.headlineSmall,
             fontWeight = FontWeight.SemiBold,
         )
@@ -116,7 +120,7 @@ fun TrainingLogEditorSheet(
                             id = existing?.id ?: "android-${UUID.randomUUID()}",
                             date = date.toString(),
                             type = type,
-                            status = existing?.status ?: "completed",
+                            status = existing?.status ?: if (type == "rest") "rested" else "completed",
                             source = existing?.source ?: "manual",
                             title = existing?.title,
                             durationSec = duration.toIntOrNull()?.times(60),

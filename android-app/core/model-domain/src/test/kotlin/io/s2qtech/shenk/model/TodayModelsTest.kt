@@ -51,6 +51,43 @@ class TodayModelsTest {
     }
 
     @Test
+    fun onlyRunnableFormalPlanOpensTimer() {
+        val strength = TodayGuidance(
+            source = GuidanceSource.FORMAL_PLAN,
+            title = "力量训练",
+            trainingType = "strength",
+            routineId = "routine-strength",
+        )
+        val strengthWithoutRoutine = strength.copy(routineId = null)
+        val suggestionWithRoutine = strength.copy(source = GuidanceSource.LOCAL_SUGGESTION)
+
+        assertEquals(TodayPrimaryAction.OPEN_TIMER, TodayPrimaryActionResolver.resolve(strength))
+        assertEquals(TodayPrimaryAction.RECORD_DAY, TodayPrimaryActionResolver.resolve(strengthWithoutRoutine))
+        assertEquals(TodayPrimaryAction.RECORD_DAY, TodayPrimaryActionResolver.resolve(suggestionWithRoutine))
+    }
+
+    @Test
+    fun restAndWalkingPlansRecordDayEvenWhenTheyContainRoutineReference() {
+        listOf("rest", "easy_walk", "quality_walk").forEach { type ->
+            val guidance = TodayGuidance(
+                source = GuidanceSource.FORMAL_PLAN,
+                title = type,
+                trainingType = type,
+                routineId = "unexpected-routine-reference",
+            )
+
+            assertEquals(TodayPrimaryAction.RECORD_DAY, TodayPrimaryActionResolver.resolve(guidance))
+        }
+    }
+
+    @Test
+    fun completedDayHasNoPrimaryAction() {
+        val actual = TodayGuidance(GuidanceSource.ACTUAL, "今日已记录", "rest")
+
+        assertEquals(TodayPrimaryAction.NONE, TodayPrimaryActionResolver.resolve(actual))
+    }
+
+    @Test
     fun deepSleepCannotExceedTotalSleep() {
         assertThrows(IllegalArgumentException::class.java) {
             checkin(

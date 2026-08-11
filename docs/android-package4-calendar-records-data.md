@@ -1,6 +1,6 @@
 # Android Package 4: Calendar, Records, and Data
 
-Updated: 2026-07-18
+Updated: 2026-08-11
 Status: accepted; native Android progress `5 / 9`
 
 ## Delivered
@@ -40,3 +40,8 @@ Status: accepted; native Android progress `5 / 9`
 
 - Package 5 owns native routine execution and `timer_sessions`; Package 4 must not absorb timer controls or write timer facts.
 - The private APK still requires final Package 8 signing and release hardening before it is treated as a durable daily release.
+
+## 2026-08-11 Corrective Gate
+
+- Today reuses the Package 4 editable formal-record flow for rest, walking, local suggestions, and formal guidance without a timer-eligible routine. The guidance type is preselected, the user still confirms the draft, and saving remains a local-first `training_logs` write plus outbox operation.
+- A newly confirmed rest draft uses the existing Contract v2 `rested` completion status. No existing record is rewritten and no schema or ownership rule changes.

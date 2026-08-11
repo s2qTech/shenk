@@ -52,7 +52,10 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import io.s2qtech.shenk.model.GuidanceSource
+import io.s2qtech.shenk.model.TodayPrimaryAction
+import io.s2qtech.shenk.model.TodayPrimaryActionResolver
 import io.s2qtech.shenk.model.TodayGuidance
+import io.s2qtech.shenk.sync.CalendarRecordRepository
 import io.s2qtech.shenk.sync.TodayRecordRepository
 import io.s2qtech.shenk.sync.TodayRecords
 import io.s2qtech.shenk.sync.CloudConnectionException
@@ -67,12 +70,13 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
-private enum class TodaySheet { MORNING, PRE_WORKOUT, REMINDERS, CONNECTION, DAILY_REVIEW, SETTINGS, AI_SETTINGS }
+private enum class TodaySheet { MORNING, PRE_WORKOUT, RECORD_DAY, REMINDERS, CONNECTION, DAILY_REVIEW, SETTINGS, AI_SETTINGS }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TodayRoute(
     repository: TodayRecordRepository,
+    recordRepository: CalendarRecordRepository,
     reminderStore: ReminderSettingsStore,
     cloudConnectionManager: CloudConnectionManager,
     onData: () -> Unit = {},
@@ -125,6 +129,7 @@ fun TodayRoute(
             dailyReviewState = dailyReviewState,
             onDailyReview = { sheet = TodaySheet.DAILY_REVIEW },
             onTraining = { onTraining(records?.guidance) },
+            onRecordDay = { sheet = TodaySheet.RECORD_DAY },
         )
     }
 
@@ -187,6 +192,28 @@ fun TodayRoute(
                             permissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
                         }
                         snackbar.showSnackbar("提醒设置已更新")
+                    }
+                },
+            )
+        }
+        TodaySheet.RECORD_DAY -> ModalBottomSheet(onDismissRequest = { sheet = null }) {
+            TrainingLogEditorSheet(
+                date = date,
+                existing = null,
+                readOnly = false,
+                initialType = records?.guidance?.trainingType,
+                createTitle = "记录今日情况",
+                onSave = { log ->
+                    scope.launch {
+                        runCatching { recordRepository.saveTrainingLog(log) }
+                            .onSuccess {
+                                val review = dailyReviewRepository.enqueue(date, allowIncomplete = false)
+                                if (review.queued) DailyReviewScheduler.enqueue(context)
+                                SyncScheduler(context).enqueue()
+                                sheet = null
+                                snackbar.showSnackbar("今日情况已保存在本机")
+                            }
+                            .onFailure { snackbar.showSnackbar(it.message ?: "保存失败") }
                     }
                 },
             )
@@ -271,6 +298,7 @@ private fun TodayScreen(
     dailyReviewState: io.s2qtech.shenk.sync.DailyReviewState,
     onDailyReview: () -> Unit,
     onTraining: () -> Unit,
+    onRecordDay: () -> Unit,
 ) {
     Column(
         modifier = modifier
@@ -308,6 +336,7 @@ private fun TodayScreen(
                     guidance = guidance,
                     dailyReviewState = dailyReviewState,
                     onTraining = onTraining,
+                    onRecordDay = onRecordDay,
                     onDailyReview = onDailyReview,
                 )
             }
@@ -361,6 +390,7 @@ private fun GuidanceBlock(
     guidance: io.s2qtech.shenk.model.TodayGuidance,
     dailyReviewState: io.s2qtech.shenk.sync.DailyReviewState,
     onTraining: () -> Unit,
+    onRecordDay: () -> Unit,
     onDailyReview: () -> Unit,
 ) {
     val source = when (guidance.source) {
@@ -389,12 +419,22 @@ private fun GuidanceBlock(
                 Spacer(Modifier.height(14.dp))
                 Text(it, style = MaterialTheme.typography.bodyLarge)
             }
-            if (guidance.source != GuidanceSource.ACTUAL && !guidance.routineId.isNullOrBlank()) {
-                Spacer(Modifier.height(20.dp))
-                Button(
-                    onClick = onTraining,
-                    modifier = Modifier.fillMaxWidth().height(52.dp).testTag("today-open-training"),
-                ) { Text("进入训练") }
+            when (TodayPrimaryActionResolver.resolve(guidance)) {
+                TodayPrimaryAction.NONE -> Unit
+                TodayPrimaryAction.OPEN_TIMER -> {
+                    Spacer(Modifier.height(20.dp))
+                    Button(
+                        onClick = onTraining,
+                        modifier = Modifier.fillMaxWidth().height(52.dp).testTag("today-open-training"),
+                    ) { Text("进入训练") }
+                }
+                TodayPrimaryAction.RECORD_DAY -> {
+                    Spacer(Modifier.height(20.dp))
+                    Button(
+                        onClick = onRecordDay,
+                        modifier = Modifier.fillMaxWidth().height(52.dp).testTag("today-record-day"),
+                    ) { Text("填写今日情况") }
+                }
             }
 
             when {

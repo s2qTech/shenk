@@ -95,6 +95,7 @@ fun ShenkApp(
                         0 -> CalendarScreen(repository = calendarRepository)
                         1 -> TodayRoute(
                             repository = todayRepository,
+                            recordRepository = calendarRepository,
                             reminderStore = reminderStore,
                             cloudConnectionManager = cloudConnectionManager,
                             onData = { secondary = SecondarySpace.DATA },

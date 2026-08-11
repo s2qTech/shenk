@@ -2,7 +2,7 @@
 
 Status: accepted on Xiaomi 14 on 2026-08-09; progress advanced to `8 / 9`.
 
-Updated: 2026-08-10
+Updated: 2026-08-11
 
 ## Scope
 
@@ -36,6 +36,7 @@ Package 7 generates one factual daily review after a formal workout, confirmed r
 - Any past or current date can open the same review detail and generation flow. Historical generation always uses the normalized 14-day snapshot ending on the selected date; future dates cannot generate reviews.
 - Review generation is independent of the training-log correction window. An old day may receive a review even when its formal training record is already read-only.
 - Pending generation is visible immediately on that card and in the detail sheet. The UI never leaves a tapped generate action without feedback while the network request is running.
+- Opening a missing review is the generation action when the provider and critical inputs are ready: it queues once and immediately shows the durable pending state. Missing critical inputs still require an explicit "按现有事实生成" confirmation, and existing, pending, retrying, or completed jobs are never auto-duplicated.
 - The detail sheet contains the professional assessment, bounded action list, cautions, optional local suggestion, and secondary evidence. Raw status facts are supporting evidence and must not dominate the review.
 - The Worker prompt requires a concise retrospective conclusion and professional synthesis that adds interpretation beyond the already visible morning-status and training summaries. It evaluates what was completed, whether execution matched the plan, what problems or causes appeared, and how to correct the next session or following days. It must not phrase an already completed day as pre-training guidance.
 

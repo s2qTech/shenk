@@ -46,9 +46,11 @@ class MainActivityTest {
     }
 
     @Test
-    fun fallbackSuggestionWithoutRoutineDoesNotExposeTimerAction() {
+    fun fallbackSuggestionWithoutRoutineOpensDirectRecordInsteadOfTimer() {
         composeRule.onNodeWithTag("today-screen").assertIsDisplayed()
         assertTrue(composeRule.onAllNodesWithTag("today-open-training").fetchSemanticsNodes().isEmpty())
+        composeRule.onNodeWithTag("today-record-day").assertIsDisplayed().performClick()
+        composeRule.onNodeWithText("记录今日情况").assertIsDisplayed()
     }
 
     @Test

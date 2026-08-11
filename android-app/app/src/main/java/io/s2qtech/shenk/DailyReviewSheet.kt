@@ -38,6 +38,7 @@ import io.s2qtech.shenk.sync.DailyReviewState
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.util.Locale
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 
 @Composable
@@ -53,16 +54,64 @@ fun DailyReviewSheet(
     val scope = rememberCoroutineScope()
     var missing by remember { mutableStateOf<List<String>>(emptyList()) }
     var providerReady by remember { mutableStateOf(false) }
-    var generationRequested by remember { mutableStateOf(false) }
+    var preparationLoaded by remember(date) { mutableStateOf(false) }
+    var autoGenerationAttempted by remember(date) { mutableStateOf(false) }
+    var generationRequested by remember(date) { mutableStateOf(false) }
     val processing = state.jobState in setOf("PENDING", "RUNNING")
     val generating = generationRequested || processing
     val isToday = date == LocalDate.now()
     val reviewLabel = if (isToday) "今日简评" else "当日简评"
 
+    fun requestGeneration(startedMessage: String, failedMessage: String) {
+        if (generationRequested || processing) return
+        generationRequested = true
+        scope.launch {
+            var queued = false
+            try {
+                val result = repository.enqueue(date, allowIncomplete = missing.isNotEmpty())
+                queued = result.queued
+                when {
+                    result.queued -> {
+                        onQueued()
+                        onMessage(startedMessage)
+                    }
+                    result.configurationMissing -> onMessage("请先完成 AI 服务配置")
+                    else -> onMessage("这一天的相同版本已经生成")
+                }
+            } catch (error: CancellationException) {
+                throw error
+            } catch (_: Throwable) {
+                onMessage(failedMessage)
+            } finally {
+                if (!queued) generationRequested = false
+            }
+        }
+    }
+
     LaunchedEffect(date) {
         repository.recoverInterruptedJobs()
-        providerReady = repository.providerSettings().configured && repository.hasProviderKey()
-        missing = repository.prepare(date).missingCriticalFields
+        val ready = repository.providerSettings().configured && repository.hasProviderKey()
+        val prepared = repository.prepare(date)
+        providerReady = ready
+        missing = prepared.missingCriticalFields
+        preparationLoaded = true
+    }
+    LaunchedEffect(state.jobState, state.review) {
+        if (state.jobState != null || state.review != null) generationRequested = false
+    }
+    LaunchedEffect(preparationLoaded, providerReady, missing, state.review, state.jobState) {
+        if (shouldAutoStartDailyReview(
+                preparationLoaded = preparationLoaded,
+                providerReady = providerReady,
+                missing = missing,
+                reviewPresent = state.review != null,
+                jobState = state.jobState,
+                attempted = autoGenerationAttempted,
+            )
+        ) {
+            autoGenerationAttempted = true
+            requestGeneration("正在生成$reviewLabel", "无法生成，请检查 AI 服务配置")
+        }
     }
     Column(
         modifier = Modifier
@@ -158,7 +207,16 @@ fun DailyReviewSheet(
             Spacer(Modifier.height(14.dp))
         }
 
-        if (state.review == null && generating) {
+        if (state.review == null && !preparationLoaded) {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                CircularProgressIndicator(modifier = Modifier.height(22.dp), strokeWidth = 2.dp)
+                Text("正在检查简评条件", color = MaterialTheme.colorScheme.secondary)
+            }
+        } else if (state.review == null && generating) {
             Surface(
                 color = MaterialTheme.colorScheme.surfaceVariant,
                 shape = RoundedCornerShape(20.dp),
@@ -188,22 +246,7 @@ fun DailyReviewSheet(
                     Spacer(Modifier.height(12.dp))
                     OutlinedButton(
                         onClick = {
-                            generationRequested = true
-                            scope.launch {
-                                try {
-                                    val result = repository.enqueue(date, allowIncomplete = missing.isNotEmpty())
-                                    if (result.queued) {
-                                        onQueued()
-                                        onMessage("已重新开始生成$reviewLabel")
-                                    } else {
-                                        onMessage("这一天的相同版本已经生成")
-                                    }
-                                } catch (_: Throwable) {
-                                    onMessage("无法重试，请检查网络或 AI 服务")
-                                } finally {
-                                    generationRequested = false
-                                }
-                            }
+                            requestGeneration("已重新开始生成$reviewLabel", "无法重试，请检查网络或 AI 服务")
                         },
                         modifier = Modifier.fillMaxWidth(),
                     ) {
@@ -217,34 +260,24 @@ fun DailyReviewSheet(
             }
         } else if (state.review == null) {
             Button(
-                onClick = {
-                    generationRequested = true
-                    scope.launch {
-                        try {
-                            val result = repository.enqueue(date, allowIncomplete = missing.isNotEmpty())
-                            when {
-                                result.queued -> {
-                                    onQueued()
-                                    onMessage("正在生成$reviewLabel")
-                                }
-                                result.configurationMissing -> onMessage("请先完成 AI 服务配置")
-                                else -> onMessage("这一天的相同版本已经生成")
-                            }
-                        } catch (_: Throwable) {
-                            onMessage("无法生成，请检查 AI 服务配置")
-                        } finally {
-                            generationRequested = false
-                        }
-                    }
-                },
+                onClick = { requestGeneration("正在生成$reviewLabel", "无法生成，请检查 AI 服务配置") },
                 modifier = Modifier.fillMaxWidth().height(54.dp),
             ) {
-                Text(if (state.review == null) "生成$reviewLabel" else "根据最新记录重新生成")
+                Text(if (missing.isEmpty()) "生成$reviewLabel" else "按现有事实生成$reviewLabel")
             }
         }
         Spacer(Modifier.height(24.dp))
     }
 }
+
+internal fun shouldAutoStartDailyReview(
+    preparationLoaded: Boolean,
+    providerReady: Boolean,
+    missing: List<String>,
+    reviewPresent: Boolean,
+    jobState: String?,
+    attempted: Boolean,
+): Boolean = preparationLoaded && providerReady && missing.isEmpty() && !reviewPresent && jobState == null && !attempted
 
 @Composable
 private fun ReviewLine(text: String, error: Boolean = false, subdued: Boolean = false) {
