@@ -8,6 +8,7 @@ import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -24,6 +25,7 @@ import io.s2qtech.shenk.sync.TodayRecordRepository
 import io.s2qtech.shenk.model.TodayGuidance
 import java.time.LocalDate
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
 
 private enum class SecondarySpace { DATA, PLANNING }
 
@@ -38,7 +40,7 @@ fun ShenkApp(
     calendarRepository: CalendarRecordRepository,
     routineLibraryRepository: RoutineLibraryRepository,
     timerSessionRepository: NativeTimerSessionRepository,
-    timerCoordinator: NativeTimerCoordinator,
+    timerCoordinator: () -> NativeTimerCoordinator,
     planCollaborationRepository: PlanCollaborationRepository,
     reminderStore: ReminderSettingsStore,
     cloudConnectionManager: CloudConnectionManager,
@@ -50,8 +52,21 @@ fun ShenkApp(
     var secondary by remember { mutableStateOf<SecondarySpace?>(null) }
     var trainingLaunch by remember { mutableStateOf<TrainingLaunchRequest?>(null) }
     var pendingFeedback by remember { mutableStateOf(false) }
+    var precomposeAdjacentPages by remember { mutableStateOf(false) }
 
-    androidx.compose.runtime.LaunchedEffect(requestedSpace) {
+    LaunchedEffect(pager.settledPage, precomposeAdjacentPages) {
+        if (!precomposeAdjacentPages && pager.settledPage != 1) {
+            delay(ADJACENT_PRECOMPOSE_DELAY_MILLIS)
+            precomposeAdjacentPages = true
+        }
+    }
+    LaunchedEffect(precomposeAdjacentPages) {
+        if (!precomposeAdjacentPages) {
+            delay(ADJACENT_IDLE_PRECOMPOSE_DELAY_MILLIS)
+            precomposeAdjacentPages = true
+        }
+    }
+    LaunchedEffect(requestedSpace) {
         if (requestedSpace in setOf("plan", "feedback")) {
             pendingFeedback = requestedSpace == "feedback"
             secondary = SecondarySpace.PLANNING
@@ -84,7 +99,7 @@ fun ShenkApp(
             )
             null -> HorizontalPager(
                 state = pager,
-                beyondViewportPageCount = 1,
+                beyondViewportPageCount = if (precomposeAdjacentPages) 1 else 0,
                 modifier = Modifier
                     .fillMaxSize()
                     .background(MaterialTheme.colorScheme.background)
@@ -109,7 +124,7 @@ fun ShenkApp(
                             routineRepository = routineLibraryRepository,
                             sessionRepository = timerSessionRepository,
                             recordRepository = calendarRepository,
-                            coordinator = timerCoordinator,
+                            coordinator = timerCoordinator(),
                             launchRequest = trainingLaunch,
                             onLaunchConsumed = { trainingLaunch = null },
                         )
@@ -119,6 +134,9 @@ fun ShenkApp(
         }
     }
 }
+
+private const val ADJACENT_PRECOMPOSE_DELAY_MILLIS = 200L
+private const val ADJACENT_IDLE_PRECOMPOSE_DELAY_MILLIS = 2_000L
 
 private suspend fun androidx.compose.foundation.pager.PagerState.animatePrimaryPage(page: Int) {
     animateScrollToPage(page = page)

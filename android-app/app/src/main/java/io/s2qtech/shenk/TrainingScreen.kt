@@ -118,10 +118,13 @@ fun TrainingRoute(
     val activity = context as Activity
     val scope = rememberCoroutineScope()
     var voiceNotice by remember { mutableStateOf<String?>(null) }
-    val cuePlayer = remember {
-        TimerCuePlayer(context) { message -> voiceNotice = message }
+    val timerPlatformActive = snapshot.state != TimerEngineState.IDLE
+    val cuePlayer = remember(timerPlatformActive) {
+        if (timerPlatformActive) TimerCuePlayer(context) { message -> voiceNotice = message } else null
     }
-    val callMonitor = remember { TimerCallMonitor(context, coordinator::pauseForPhoneCall) }
+    val callMonitor = remember(timerPlatformActive) {
+        if (timerPlatformActive) TimerCallMonitor(context, coordinator::pauseForPhoneCall) else null
+    }
     var completion by remember { mutableStateOf<TimerSessionFact?>(null) }
     var preferredScene by remember { mutableStateOf<RoutineScene?>(null) }
     var launchNotice by remember { mutableStateOf<String?>(null) }
@@ -129,7 +132,7 @@ fun TrainingRoute(
 
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions(),
-    ) { callMonitor.registerIfPermitted() }
+    ) { callMonitor?.registerIfPermitted() }
 
     LaunchedEffect(library?.routines) {
         library?.let { coordinator.restoreIfPossible(it.routines) }
@@ -157,17 +160,19 @@ fun TrainingRoute(
         }
         onLaunchConsumed()
     }
-    LaunchedEffect(coordinator) { coordinator.cues.collect(cuePlayer::speak) }
+    LaunchedEffect(coordinator, cuePlayer) {
+        cuePlayer?.let { player -> coordinator.cues.collect(player::speak) }
+    }
     LaunchedEffect(snapshot.state, snapshot.request?.sessionId) {
         if (snapshot.state in setOf(TimerEngineState.COMPLETED, TimerEngineState.STOPPED)) {
             completion = coordinator.terminalFact()
         }
     }
-    DisposableEffect(Unit) {
-        callMonitor.registerIfPermitted()
+    DisposableEffect(cuePlayer, callMonitor) {
+        callMonitor?.registerIfPermitted()
         onDispose {
-            callMonitor.close()
-            cuePlayer.close()
+            callMonitor?.close()
+            cuePlayer?.close()
         }
     }
     DisposableEffect(snapshot.state) {

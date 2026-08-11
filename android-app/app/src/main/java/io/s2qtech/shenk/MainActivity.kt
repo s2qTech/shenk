@@ -26,9 +26,9 @@ class MainActivity : ComponentActivity() {
                     calendarRepository = app.calendarRepository,
                     routineLibraryRepository = app.routineLibraryRepository,
                     timerSessionRepository = app.timerSessionRepository,
-                    timerCoordinator = app.nativeTimerCoordinator,
+                    timerCoordinator = { app.nativeTimerCoordinator },
                     planCollaborationRepository = app.planCollaborationRepository,
-                    reminderStore = ReminderSettingsStore(this),
+                    reminderStore = app.reminderSettingsStore,
                     cloudConnectionManager = app.cloudConnectionManager,
                     requestedSpace = requestedSpace.value,
                     onExternalRequestConsumed = {

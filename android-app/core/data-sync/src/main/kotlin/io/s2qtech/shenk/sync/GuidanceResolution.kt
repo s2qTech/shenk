@@ -24,18 +24,48 @@ internal data class ResolvedDay(
 )
 
 internal object GuidanceResolution {
+    fun index(
+        logs: List<SharedRecord>,
+        plans: List<SharedRecord>,
+        adjustments: List<SharedRecord>,
+        reviews: List<SharedRecord> = emptyList(),
+    ): GuidanceResolutionIndex = GuidanceResolutionIndex(logs, plans, adjustments, reviews)
+
     fun resolve(
         date: LocalDate,
         logs: List<SharedRecord>,
         plans: List<SharedRecord>,
         adjustments: List<SharedRecord>,
         reviews: List<SharedRecord> = emptyList(),
-    ): ResolvedDay {
+    ): ResolvedDay = index(logs, plans, adjustments, reviews).resolve(date)
+}
+
+internal class GuidanceResolutionIndex(
+    logs: List<SharedRecord>,
+    plans: List<SharedRecord>,
+    adjustments: List<SharedRecord>,
+    reviews: List<SharedRecord>,
+) {
+    private val logsByDate = logs
+        .asSequence()
+        .mapNotNull(::decodeTrainingLog)
+        .filter(TrainingLog::calendarVisible)
+        .groupBy(TrainingLog::date)
+        .mapValues { (_, values) ->
+            values.sortedWith(compareByDescending<TrainingLog> { it.updatedAt.orEmpty() }.thenBy { it.id })
+        }
+    private val plansByDate = plans.latestByDate { it.updatedAt.orEmpty() }
+    private val adjustmentsByDate = adjustments.latestByDate {
+        it.data.fieldString("adjustedAt") ?: it.updatedAt.orEmpty()
+    }
+    private val reviewsByDate = reviews
+        .asSequence()
+        .filter { it.data.fieldString("status") == "generated" }
+        .latestByDate { it.data.fieldInt("version") ?: 0 }
+
+    fun resolve(date: LocalDate): ResolvedDay {
         val dateText = date.toString()
-        val actualLogs = logs
-            .filter { it.data.fieldString("date") == dateText && it.data.fieldBoolean("calendarVisible") != false }
-            .mapNotNull(::decodeTrainingLog)
-            .sortedWith(compareByDescending<TrainingLog> { it.updatedAt.orEmpty() }.thenBy { it.id })
+        val actualLogs = logsByDate[dateText].orEmpty()
         val actual = actualLogs.firstOrNull()?.let { log ->
             TodayGuidance(
                 source = GuidanceSource.ACTUAL,
@@ -46,12 +76,8 @@ internal object GuidanceResolution {
             )
         }
 
-        val planRecord = plans
-            .filter { it.data.fieldString("date") == dateText }
-            .maxByOrNull { it.updatedAt.orEmpty() }
-        val latestAdjustment = adjustments
-            .filter { it.data.fieldString("date") == dateText }
-            .maxByOrNull { it.data.fieldString("adjustedAt") ?: it.updatedAt.orEmpty() }
+        val planRecord = plansByDate[dateText]
+        val latestAdjustment = adjustmentsByDate[dateText]
         val effectiveData = latestAdjustment?.data?.let { adjustment ->
             adjustment["toSnapshot"]
                 ?.takeUnless { it is JsonNull }
@@ -74,9 +100,7 @@ internal object GuidanceResolution {
             )
         }
 
-        val aiSuggestion = reviews
-            .filter { it.data.fieldString("date") == dateText && it.data.fieldString("status") == "generated" }
-            .maxByOrNull { it.data.fieldInt("version") ?: 0 }
+        val aiSuggestion = reviewsByDate[dateText]
             ?.data
             ?.get("localSuggestion")
             ?.takeUnless { it is JsonNull }
@@ -99,6 +123,16 @@ internal object GuidanceResolution {
         )
     }
 }
+
+private fun <T : Comparable<T>> List<SharedRecord>.latestByDate(
+    selector: (SharedRecord) -> T,
+): Map<String, SharedRecord> = asSequence().latestByDate(selector)
+
+private fun <T : Comparable<T>> Sequence<SharedRecord>.latestByDate(
+    selector: (SharedRecord) -> T,
+): Map<String, SharedRecord> = groupBy { it.data.fieldString("date") }
+    .mapNotNull { (date, values) -> date?.let { it to values.maxByOrNull(selector)!! } }
+    .toMap()
 
 internal fun decodeTrainingLog(record: SharedRecord): TrainingLog? = runCatching {
     val data = record.data

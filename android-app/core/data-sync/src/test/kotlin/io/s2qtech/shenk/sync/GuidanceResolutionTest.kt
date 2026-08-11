@@ -8,9 +8,46 @@ import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class GuidanceResolutionTest {
+    @Test
+    fun indexedThirteenMonthProjectionPreservesDayPriority() {
+        val start = LocalDate.of(2099, 1, 1)
+        val plans = (0 until 400).map { offset ->
+            val date = start.plusDays(offset.toLong())
+            SharedRecord.create(
+                entity = "daily_plan_items",
+                id = "plan-$offset",
+                data = buildJsonObject {
+                    put("date", JsonPrimitive(date.toString()))
+                    put("title", JsonPrimitive("计划 $offset"))
+                    put("trainingType", JsonPrimitive("strength"))
+                },
+            )
+        }
+        val actualDate = start.plusDays(200)
+        val actual = SharedRecord.create(
+            entity = "training_logs",
+            id = "actual-200",
+            data = buildJsonObject {
+                put("date", JsonPrimitive(actualDate.toString()))
+                put("type", JsonPrimitive("easy_walk"))
+                put("status", JsonPrimitive("completed"))
+                put("source", JsonPrimitive("manual"))
+            },
+        )
+
+        val index = GuidanceResolution.index(listOf(actual), plans, emptyList())
+        val projected = (0 until 400).map { offset -> index.resolve(start.plusDays(offset.toLong())) }
+
+        assertEquals(400, projected.size)
+        assertEquals(GuidanceSource.ACTUAL, projected[200].guidance.source)
+        assertEquals(GuidanceSource.FORMAL_PLAN, projected[199].guidance.source)
+        assertTrue(projected.all { it.guidance.title.isNotBlank() })
+    }
+
     @Test
     fun generatedReviewSuggestionIsUsedOnlyWithoutFormalPlan() {
         val date = LocalDate.of(2099, 1, 2)

@@ -11,8 +11,27 @@ import kotlinx.serialization.json.buildJsonObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import kotlin.system.measureTimeMillis
 
 class TimerRuntimeTest {
+    @Test
+    fun oneHourQuarterSecondTickStressStaysWithinCpuBudget() {
+        val steps = (0 until 60).map { index ->
+            simpleStep(60).copy(stepId = "step-$index", name = "动作 $index")
+        }
+        val engine = NativeTimerEngine()
+        engine.preview(TimerPreviewRequest(routine(*steps.toTypedArray()), "stress", "stress", "2100-01-01"))
+        engine.start(0)
+
+        val elapsed = measureTimeMillis {
+            repeat(14_400) { tick -> engine.tick((tick + 1L) * 250L) }
+        }
+
+        assertEquals(TimerEngineState.COMPLETED, engine.snapshot.state)
+        assertEquals(3_600_000L, engine.snapshot.activeMillis)
+        assertTrue("timer CPU loop took ${elapsed}ms", elapsed < 2_000)
+    }
+
     @Test
     fun bilateralActionRemainsOneLogicalActionButExpandsRuntimeTime() {
         val routine = routine(

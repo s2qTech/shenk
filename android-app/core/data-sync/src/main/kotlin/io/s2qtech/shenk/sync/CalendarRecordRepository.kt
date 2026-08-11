@@ -44,10 +44,11 @@ class CalendarRecordRepository(
             records.observeActive("daily_reviews"),
         ) { logs, plans, adjustments, metricRecords, reviews ->
             val metricsByDate = DailyMetricResolver.resolve(metricRecords.mapNotNull(::decodeBodyMetric))
+            val guidanceIndex = GuidanceResolution.index(logs, plans, adjustments, reviews)
             generateSequence(start) { current ->
                 current.plusDays(1).takeIf { it <= endInclusive }
             }.map { date ->
-                val resolved = GuidanceResolution.resolve(date, logs, plans, adjustments, reviews)
+                val resolved = guidanceIndex.resolve(date)
                 CalendarDay(
                     date = date,
                     guidance = resolved.guidance,
@@ -132,13 +133,14 @@ private fun buildMonth(
     reviews: List<SharedRecord>,
 ): CalendarMonth {
     val metricsByDate = DailyMetricResolver.resolve(metricRecords.mapNotNull(::decodeBodyMetric))
+    val guidanceIndex = GuidanceResolution.index(logs, plans, adjustments, reviews)
     val first = month.atDay(1)
     val last = month.atEndOfMonth()
     val start = first.minusDays(((first.dayOfWeek.value - DayOfWeek.MONDAY.value + 7) % 7).toLong())
     val end = last.plusDays(((DayOfWeek.SUNDAY.value - last.dayOfWeek.value + 7) % 7).toLong())
     val days = generateSequence(start) { current -> current.plusDays(1).takeIf { it <= end } }
         .map { date ->
-            val resolved = GuidanceResolution.resolve(date, logs, plans, adjustments, reviews)
+            val resolved = guidanceIndex.resolve(date)
             CalendarDay(
                 date = date,
                 guidance = resolved.guidance,

@@ -11,6 +11,7 @@ import io.s2qtech.shenk.sync.NativeTimerSessionRepository
 import io.s2qtech.shenk.sync.PlanCollaborationRepository
 import io.s2qtech.shenk.sync.RoutineLibraryRepository
 import io.s2qtech.shenk.sync.ShenkDatabase
+import io.s2qtech.shenk.sync.SyncScheduler
 import io.s2qtech.shenk.sync.TodayRecordRepository
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -69,17 +70,17 @@ class ShenkApplication : Application() {
         AppUpdateManager(this)
     }
 
+    val reminderSettingsStore: ReminderSettingsStore by lazy {
+        ReminderSettingsStore(this)
+    }
+
     override fun onCreate() {
         super.onCreate()
         applicationScope.launch {
             ReminderScheduler(this@ShenkApplication).schedule(
-                ReminderSettingsStore(this@ShenkApplication).settings.first(),
+                reminderSettingsStore.settings.first(),
             )
-            runCatching {
-                if (cloudConnectionManager.state().configured) {
-                    cloudConnectionManager.synchronizeNow()
-                }
-            }
+            SyncScheduler(this@ShenkApplication).enqueue()
             DailyReviewScheduler.enqueue(this@ShenkApplication)
         }
     }
