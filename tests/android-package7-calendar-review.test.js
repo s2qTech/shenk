@@ -47,7 +47,7 @@ test('a completed daily review hides stale generation and retry state', () => {
   const sheet = read('android-app/app/src/main/java/io/s2qtech/shenk/DailyReviewSheet.kt');
 
   assert.match(sheet, /if \(state\.review == null && generating\)/);
-  assert.match(sheet, /else if \(state\.review == null && state\.jobState == "RETRY"\)/);
+  assert.match(sheet, /else if \(state\.review == null && state\.jobState in setOf\("RETRY", "FAILED"\)\)/);
   assert.match(sheet, /else if \(state\.review == null && !providerReady\)/);
   assert.match(sheet, /else if \(state\.review == null\)/);
 });

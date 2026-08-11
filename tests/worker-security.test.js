@@ -149,6 +149,8 @@ async function run() {
   assert.equal(upstreamRequest.url, "https://provider.example/v1/chat/completions");
   assert.equal(upstreamRequest.options.headers.Authorization, "Bearer fixture-secret");
     assert.deepEqual(upstreamBody.thinking, { type: "enabled" });
+    assert.equal(upstreamBody.max_tokens, 4096);
+    assert.deepEqual(upstreamBody.response_format, { type: "json_object" });
     assert.match(systemPrompt, /已经发生的执行结果/);
     assert.match(systemPrompt, /当天完成得怎么样/);
     assert.match(systemPrompt, /后续修正措施/);

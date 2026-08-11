@@ -1661,7 +1661,7 @@ async function generateDailyReview(body) {
   const content = await callCompatibleAi(provider, [
     { role: "system", content: system },
     { role: "user", content: JSON.stringify(snapshot) }
-  ], 1400, { thinkingEnabled: true });
+  ], 4096, { thinkingEnabled: true, jsonOutput: true });
   const review = parseDailyReviewContent(content, snapshot.date);
   if (snapshotHasFormalPlan(snapshot)) review.localSuggestion = null;
   return { ok: true, review };
@@ -1679,19 +1679,21 @@ function snapshotHasFormalPlan(snapshot) {
 async function callCompatibleAi(provider, messages, maxTokens, options = {}) {
   let response;
   try {
+    const requestBody = {
+      model: provider.model,
+      messages,
+      max_tokens: maxTokens,
+      temperature: 0.2,
+      thinking: { type: options.thinkingEnabled ? "enabled" : "disabled" }
+    };
+    if (options.jsonOutput) requestBody.response_format = { type: "json_object" };
     response = await fetch(`${provider.baseUrl}/chat/completions`, {
       method: "POST",
       headers: {
         "Authorization": `Bearer ${provider.apiKey}`,
         "Content-Type": "application/json"
       },
-      body: JSON.stringify({
-        model: provider.model,
-        messages,
-        max_tokens: maxTokens,
-        temperature: 0.2,
-        thinking: { type: options.thinkingEnabled ? "enabled" : "disabled" }
-      })
+      body: JSON.stringify(requestBody)
     });
   } catch {
     const error = new Error("ai_provider_unreachable");

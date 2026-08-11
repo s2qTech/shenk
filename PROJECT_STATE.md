@@ -1,6 +1,6 @@
 # Project State
 
-Updated: 2026-08-11
+Updated: 2026-08-12
 
 ## Android Platform Baseline
 
@@ -154,6 +154,8 @@ Package 7 uses DeepSeek V4 Flash as its single phase-1 user-facing daily-review 
 The 2026-08-10 Package 7 corrective pass also exposes daily review from every non-future calendar date. Calendar details now combine the selected day's effective guidance, confirmed training facts, and concise review in one overview surface; a missing historical review can be generated from the 14-day snapshot ending on that date, independently of the training-edit window. No entity, ownership, priority, or Contract semantics changed.
 
 The 2026-08-11 Packages 4/5/7 corrective pass aligns Today actions with the effective guidance. Only a timer-eligible formal plan with an explicit routine opens the native timer; rest, walking, local suggestions, and formal guidance without a timer-eligible routine open an editable same-day `training_logs` draft with the guidance type preselected. Rest saves use the existing `rested` completion status. Opening a missing daily review now immediately queues generation when provider configuration and critical inputs are ready, while incomplete inputs still require an explicit partial-generation confirmation. Queue writes remain idempotent and visibly pending through Room; no schema, Worker, ownership, or Package 8 scope changed.
+
+The 2026-08-12 Package 7 reliability correction keeps reasoning enabled but gives the provider sufficient completion budget and requests JSON output explicitly. Android preserves the Worker's bounded error code instead of collapsing every proxy failure to HTTP 502, so retryable provider, quota, model, and malformed-response failures receive distinct user-facing guidance. Failed jobs remain manually retryable. No business entity, ownership, Contract, or AI permission changed.
 
 The 2026-07-27 Package 5 corrective pass makes timer completion eligibility fail closed: a session is offered as a formal-record draft only when its immutable snapshot explicitly has `countsTowardTraining: true`; missing legacy visibility fields no longer default to true. Pending completions can be acknowledged as ignored without modifying `timer_sessions`. Formal logs inherit the timer snapshot's `calendarVisible` and `countsTowardTraining`. Today exposes a timer action only when the effective formal plan explicitly references a cached `routineId`; the later 2026-08-11 correction routes non-timer guidance into the confirmed same-day record flow. Dark theme surfaces now define explicit foreground/container colors.
 

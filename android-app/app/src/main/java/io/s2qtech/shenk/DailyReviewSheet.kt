@@ -234,7 +234,7 @@ fun DailyReviewSheet(
                     }
                 }
             }
-        } else if (state.review == null && state.jobState == "RETRY") {
+        } else if (state.review == null && state.jobState in setOf("RETRY", "FAILED")) {
             Surface(
                 color = MaterialTheme.colorScheme.surfaceVariant,
                 shape = RoundedCornerShape(20.dp),
@@ -242,7 +242,10 @@ fun DailyReviewSheet(
             ) {
                 Column(Modifier.padding(18.dp)) {
                     Text("简评暂未完成", fontWeight = FontWeight.SemiBold)
-                    Text("网络或 AI 服务暂时不可用，稍后会自动重试。", color = MaterialTheme.colorScheme.secondary)
+                    Text(
+                        dailyReviewFailureMessage(state.jobError, state.jobState == "RETRY"),
+                        color = MaterialTheme.colorScheme.secondary,
+                    )
                     Spacer(Modifier.height(12.dp))
                     OutlinedButton(
                         onClick = {
@@ -278,6 +281,17 @@ internal fun shouldAutoStartDailyReview(
     jobState: String?,
     attempted: Boolean,
 ): Boolean = preparationLoaded && providerReady && missing.isEmpty() && !reviewPresent && jobState == null && !attempted
+
+internal fun dailyReviewFailureMessage(error: String?, retrying: Boolean): String = when (error) {
+    "ai_provider_http_401", "ai_provider_http_403" -> "DeepSeek 拒绝了当前 API Key，请到设置中重新测试或更换。"
+    "ai_provider_http_402" -> "DeepSeek 账户余额或调用额度不足，请充值后重试。"
+    "ai_provider_http_400", "ai_provider_http_404" -> "DeepSeek V4 Flash 当前不可用或账户无权使用。"
+    "ai_provider_http_429" -> "DeepSeek 当前请求过多，稍后会自动重试。"
+    "ai_provider_response_invalid", "ai_provider_review_invalid", "ai_provider_review_actions_missing" ->
+        "DeepSeek 返回的简评不完整，稍后会自动重试。"
+    "ai_provider_unreachable" -> "云端暂时无法连接 DeepSeek，稍后会自动重试。"
+    else -> if (retrying) "网络或 AI 服务暂时不可用，稍后会自动重试。" else "生成失败，请检查 AI 服务后重试。"
+}
 
 @Composable
 private fun ReviewLine(text: String, error: Boolean = false, subdued: Boolean = false) {

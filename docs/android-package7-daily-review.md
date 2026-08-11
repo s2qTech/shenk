@@ -2,7 +2,7 @@
 
 Status: accepted on Xiaomi 14 on 2026-08-09; progress advanced to `8 / 9`.
 
-Updated: 2026-08-11
+Updated: 2026-08-12
 
 ## Scope
 
@@ -25,6 +25,7 @@ Package 7 generates one factual daily review after a formal workout, confirmed r
 - The provider key is stored only through Android Keystore.
 - Android sends the provider key to the Shenk Worker over TLS for the current request only.
 - The Worker validates the endpoint, rejects local/private/credential-bearing URLs, does not log or store the key, calls the provider, validates bounded JSON output, and returns only normalized review fields.
+- Daily-review calls keep reasoning enabled, reserve a completion budget that includes reasoning output, and request JSON output explicitly. The connection test remains a lightweight non-reasoning probe.
 - Secrets are excluded from Room business rows, DataStore, contracts, logs, fixtures, backups, URLs, and cloud records.
 - Provider setup belongs to the app settings surface. The review sheet never exposes routine credential controls; after a successful test it shows only connection status and an explicit replace-key action.
 - A replacement key is tested before it replaces the current Keystore value. A failed replacement leaves the last working key intact.
@@ -47,6 +48,7 @@ Package 7 generates one factual daily review after a formal workout, confirmed r
 - The user may explicitly generate a partial review after seeing the missing-field list.
 - Offline jobs remain queued and WorkManager retries after connectivity returns.
 - Permanent validation/configuration errors become visible failures; transient errors use bounded retry.
+- Android preserves only the Worker's bounded machine-readable error code. It never displays or persists provider response bodies, but it distinguishes rejected keys, exhausted balance, unavailable models, rate limits, upstream availability, and malformed review output. Both transient and terminal jobs can be retried explicitly.
 
 ## Notifications
 
@@ -59,6 +61,7 @@ Package 7 generates one factual daily review after a formal workout, confirmed r
 - Contract and Worker regression tests: `45 / 45` passing.
 - Android unit tests, Lint, and debug APK assembly: passing.
 - Repository tests cover missing-data gating, missing-key behavior, deterministic digesting, queue creation, corrected-input superseding, failed-key replacement rollback, Worker role authorization, private-endpoint blocking, provider authorization forwarding, and secret non-echo.
+- Reliability regression tests also cover the reasoning completion budget, explicit JSON response mode, safe Worker error-code parsing, and retry UI for both transient and terminal jobs.
 
 ## Xiaomi 14 acceptance
 
@@ -72,3 +75,5 @@ Package 7 generates one factual daily review after a formal workout, confirmed r
 8. Verify the 23:15 prompt does not create a rest record.
 
 Device acceptance passed on 2026-08-09. Package 8 remains a separate work package and has not started.
+
+The 2026-08-12 reliability correction was deployed to the existing Worker and installed over the Xiaomi 14 build with application data preserved. The previously retrying August 11 job completed automatically after restart, and the device exposed the generated conclusion, assessment, and follow-up sections without another manual tap.

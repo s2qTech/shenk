@@ -323,7 +323,10 @@ class DailyReviewRepository(
             DailyReviewProcessResult.COMPLETED
         } catch (error: Throwable) {
             val attempts = job.attempts + 1
-            val code = error.safeCode()
+            val code = when (error) {
+                is HttpException -> workerErrorCode(error)
+                else -> error.safeCode()
+            }
             if (attempts >= MAX_REVIEW_ATTEMPTS || code in PERMANENT_REVIEW_ERRORS) {
                 updateJob(job, "FAILED", attempts, Long.MAX_VALUE, code)
                 DailyReviewProcessResult.FAILED
@@ -388,6 +391,11 @@ class DailyReviewRepository(
         database.aiReviewJobs().updateState(job.jobId, state, attempts, next, error, nowMillis())
     }
 
+    private fun workerErrorCode(error: HttpException): String {
+        val raw = runCatching { error.response()?.errorBody()?.string().orEmpty() }.getOrDefault("")
+        return parseWorkerErrorCode(raw) ?: "http_${error.code()}"
+    }
+
     private data class ConfiguredClient(val api: WorkerAiApi, val settings: AiProviderSettings, val key: String)
 
     private fun mapConnectionFailure(error: HttpException): AiProviderConnectionException {
@@ -420,6 +428,11 @@ private val PERMANENT_REVIEW_ERRORS = setOf(
     "ai_key_missing",
     "ai_provider_missing",
     "provider_response_invalid",
+    "ai_provider_http_400",
+    "ai_provider_http_401",
+    "ai_provider_http_402",
+    "ai_provider_http_403",
+    "ai_provider_http_404",
 )
 
 private fun providerRequest(settings: AiProviderSettings, key: String): JsonObject = buildJsonObject {
@@ -489,6 +502,12 @@ private fun String.sha256(): String = MessageDigest.getInstance("SHA-256")
 private fun retryDelay(attempts: Int): Long = (30_000L * (1L shl attempts.coerceIn(0, 8))).coerceAtMost(6 * 60 * 60 * 1000L)
 private fun Throwable.safeCode(): String = (message ?: javaClass.simpleName)
     .lowercase().replace(Regex("[^a-z0-9_ -]"), "_").take(80)
+
+internal fun parseWorkerErrorCode(raw: String): String? = runCatching {
+    Json.parseToJsonElement(raw).jsonObject["error"]?.jsonPrimitive?.contentOrNull
+        ?.lowercase()
+        ?.takeIf { it.matches(Regex("[a-z0-9_]{1,80}")) }
+}.getOrNull()
 
 private val REVIEW_INPUT_ENTITIES = setOf(
     "status_checkins", "body_metrics", "training_logs", "daily_plan_items", "plan_adjustments", "goal_sets", "coach_strategies",
