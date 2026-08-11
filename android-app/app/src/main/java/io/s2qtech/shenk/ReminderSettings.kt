@@ -25,6 +25,7 @@ import io.s2qtech.shenk.sync.SyncScheduler
 import java.time.Duration
 import java.time.DayOfWeek
 import java.time.LocalDate
+import java.time.LocalDateTime
 import java.time.ZonedDateTime
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.flow.Flow
@@ -84,7 +85,7 @@ class ReminderSettingsStore(private val context: Context) {
             values[WEEKLY_HOUR] = value.weeklyHour
             values[WEEKLY_MINUTE] = value.weeklyMinute
         }
-        ReminderScheduler(context).schedule(value)
+        ReminderScheduler(context).schedule(value, replaceExisting = true)
     }
 
     private companion object {
@@ -105,13 +106,15 @@ class ReminderSettingsStore(private val context: Context) {
 }
 
 class ReminderScheduler(private val context: Context) {
-    fun schedule(settings: ReminderSettings) {
+    fun schedule(settings: ReminderSettings, replaceExisting: Boolean = false) {
+        migrateLegacyWork()
         scheduleOne(
             name = MORNING_WORK,
             enabled = settings.morningEnabled,
             hour = settings.morningHour,
             minute = settings.morningMinute,
             kind = "morning",
+            replaceExisting = replaceExisting,
         )
         scheduleOne(
             name = MIDDAY_WORK,
@@ -119,6 +122,7 @@ class ReminderScheduler(private val context: Context) {
             hour = settings.middayHour,
             minute = settings.middayMinute,
             kind = "midday",
+            replaceExisting = replaceExisting,
         )
         scheduleOne(
             name = EVENING_WORK,
@@ -126,11 +130,17 @@ class ReminderScheduler(private val context: Context) {
             hour = settings.eveningHour,
             minute = settings.eveningMinute,
             kind = "evening",
+            replaceExisting = replaceExisting,
         )
-        scheduleWeekly(settings)
+        scheduleWeekly(settings, replaceExisting)
     }
 
-    private fun scheduleWeekly(settings: ReminderSettings) {
+    private fun migrateLegacyWork() {
+        val workManager = WorkManager.getInstance(context)
+        LEGACY_WORK_NAMES.forEach(workManager::cancelUniqueWork)
+    }
+
+    private fun scheduleWeekly(settings: ReminderSettings, replaceExisting: Boolean) {
         val workManager = WorkManager.getInstance(context)
         if (!settings.weeklyEnabled) {
             workManager.cancelUniqueWork(WEEKLY_WORK)
@@ -148,10 +158,17 @@ class ReminderScheduler(private val context: Context) {
             .setInitialDelay(Duration.between(now, next))
             .setConstraints(Constraints.NONE)
             .build()
-        workManager.enqueueUniquePeriodicWork(WEEKLY_WORK, ExistingPeriodicWorkPolicy.UPDATE, request)
+        workManager.enqueueUniquePeriodicWork(WEEKLY_WORK, periodicPolicy(replaceExisting), request)
     }
 
-    private fun scheduleOne(name: String, enabled: Boolean, hour: Int, minute: Int, kind: String) {
+    private fun scheduleOne(
+        name: String,
+        enabled: Boolean,
+        hour: Int,
+        minute: Int,
+        kind: String,
+        replaceExisting: Boolean,
+    ) {
         val workManager = WorkManager.getInstance(context)
         if (!enabled) {
             workManager.cancelUniqueWork(name)
@@ -165,14 +182,23 @@ class ReminderScheduler(private val context: Context) {
             .setConstraints(Constraints.NONE)
             .setInputData(Data.Builder().putString("kind", kind).build())
             .build()
-        workManager.enqueueUniquePeriodicWork(name, ExistingPeriodicWorkPolicy.UPDATE, request)
+        workManager.enqueueUniquePeriodicWork(name, periodicPolicy(replaceExisting), request)
     }
 
+    private fun periodicPolicy(replaceExisting: Boolean): ExistingPeriodicWorkPolicy =
+        if (replaceExisting) ExistingPeriodicWorkPolicy.CANCEL_AND_REENQUEUE else ExistingPeriodicWorkPolicy.KEEP
+
     private companion object {
-        const val MORNING_WORK = "shenk-morning-checkin"
-        const val MIDDAY_WORK = "shenk-midday-checkin"
-        const val EVENING_WORK = "shenk-evening-review"
-        const val WEEKLY_WORK = "shenk-weekly-review"
+        const val MORNING_WORK = "shenk-morning-checkin-v2"
+        const val MIDDAY_WORK = "shenk-midday-checkin-v2"
+        const val EVENING_WORK = "shenk-evening-review-v2"
+        const val WEEKLY_WORK = "shenk-weekly-review-v2"
+        val LEGACY_WORK_NAMES = listOf(
+            "shenk-morning-checkin",
+            "shenk-midday-checkin",
+            "shenk-evening-review",
+            "shenk-weekly-review",
+        )
     }
 }
 
@@ -239,6 +265,7 @@ class MissingMorningWorker(
             else -> false
         }
         if (!enabled) return Result.success()
+        if (!isDailyReminderInDeliveryWindow(kind, LocalDateTime.now(), settings)) return Result.success()
 
         val todayDate = LocalDate.now()
         if (kind == "evening") {
@@ -293,4 +320,20 @@ class MissingMorningWorker(
     private companion object {
         const val CHANNEL_ID = "daily_checkin"
     }
+}
+
+internal fun isDailyReminderInDeliveryWindow(
+    kind: String,
+    now: LocalDateTime,
+    settings: ReminderSettings,
+): Boolean {
+    val scheduledTime = when (kind) {
+        "morning" -> settings.morningHour to settings.morningMinute
+        "midday" -> settings.middayHour to settings.middayMinute
+        "evening" -> settings.eveningHour to settings.eveningMinute
+        else -> return false
+    }
+    val start = now.toLocalDate().atTime(scheduledTime.first, scheduledTime.second)
+    val end = minOf(start.plusHours(3), now.toLocalDate().plusDays(1).atStartOfDay())
+    return !now.isBefore(start) && now.isBefore(end)
 }

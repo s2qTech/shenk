@@ -220,6 +220,8 @@ Defaults:
 
 Each reminder is independently adjustable and disableable. Notification content should deep-link to the relevant native state.
 
+Daily reminders are not catch-up notifications. A worker may notify only after its configured local time and within the same calendar day's bounded delivery window; an overdue worker from an earlier schedule or date exits silently. Routine application startup keeps the existing future schedule, while an explicit reminder-setting change replaces it.
+
 ## 10. Security and Configuration Migration
 
 Reuse the established profile algorithm for interoperability:
