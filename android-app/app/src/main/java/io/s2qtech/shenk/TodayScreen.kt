@@ -1,6 +1,7 @@
 package io.s2qtech.shenk
 
 import android.Manifest
+import android.content.ActivityNotFoundException
 import android.content.pm.PackageManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -38,10 +39,12 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
@@ -66,6 +69,9 @@ import io.s2qtech.shenk.sync.SyncScheduler
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.util.Locale
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -99,13 +105,22 @@ fun TodayRoute(
     var connection by remember { mutableStateOf(CloudConnectionState(false, "")) }
     var connectionBusy by remember { mutableStateOf(false) }
     var connectionError by remember { mutableStateOf<String?>(null) }
+    var reminderSystemRefresh by remember { mutableIntStateOf(0) }
     LaunchedEffect(Unit) {
         reminders = reminderStore.settings.first()
         connection = cloudConnectionManager.state()
     }
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission(),
-    ) { }
+    ) { reminderSystemRefresh += 1 }
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) reminderSystemRefresh += 1
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
 
     Scaffold(
         snackbarHost = { SnackbarHost(snackbar) },
@@ -178,8 +193,26 @@ fun TodayRoute(
             )
         }
         TodaySheet.REMINDERS -> ModalBottomSheet(onDismissRequest = { sheet = null }) {
+            val reminderSystemStatus = remember(reminderSystemRefresh) {
+                readReminderSystemStatus(context)
+            }
             ReminderSettingsSheet(
                 settings = reminders,
+                systemStatus = reminderSystemStatus,
+                onRequestNotificationPermission = {
+                    permissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                },
+                onOpenNotificationSettings = {
+                    runCatching { context.startActivity(notificationSettingsIntent(context)) }
+                        .onFailure { context.startActivity(applicationDetailsIntent(context)) }
+                },
+                onOpenApplicationSettings = {
+                    try {
+                        context.startActivity(applicationDetailsIntent(context))
+                    } catch (_: ActivityNotFoundException) {
+                        scope.launch { snackbar.showSnackbar("无法打开系统应用设置") }
+                    }
+                },
                 onSave = { value ->
                     scope.launch {
                         reminderStore.save(value)

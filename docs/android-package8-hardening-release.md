@@ -36,11 +36,18 @@ Implementation notes:
 - The user confirms download in-app and confirms installation again in Android's system UI. APKs live only in the app cache and are removed on dismissal or failed verification.
 - Production R2 binding and signed release metadata remain intentionally absent until the P8.8 signed RC. The deployed route therefore reports no release without affecting normal use. Operational publication steps are documented in `android-private-update-operations.md`.
 
-### P8.3 Local reminders and HyperOS guidance
+### P8.3 Local reminders and HyperOS guidance - complete
 
 - Implement local reminder scheduling without an always-running service.
 - Handle notification permission and Xiaomi/HyperOS restrictions honestly.
 - Keep remote push outside phase 1.
+
+Implementation notes:
+
+- The accepted morning, midday, evening, and weekly reminders remain unique WorkManager jobs. Daily reminders are discarded outside their configured same-day delivery window, so opening the app after midnight cannot replay a stale check-in prompt.
+- The reminder sheet now reports runtime notification permission, the system-wide notification switch, and battery-optimization state separately. Missing permission can be requested explicitly; public Android notification and application-detail settings are reachable without private vendor intents.
+- Xiaomi, Redmi, and Poco devices receive an honest HyperOS note explaining that background work may still be delayed and that battery/background policy labels vary by system version. The app neither claims exact delivery nor requests an unrestricted battery exemption.
+- No always-running reminder service or remote push transport was added. Reminder settings remain device-local and this stage changes no training, health, plan, AI, or synchronization entity.
 
 ### P8.4 Performance and stability
 
@@ -67,6 +74,6 @@ Implementation notes:
 
 `android-app/gradlew.bat package8FoundationCheck` runs the native automated suite, release configuration validation, release lint, and an unsigned release assembly. A distributable RC is deferred to P8.8 and requires external signing material.
 
-P8.0 and P8.1 passed on 2026-08-10. P8.2 passed on 2026-08-12: the authenticated no-release Worker route is deployed; all Node and Package 8 foundation gates passed; Xiaomi 14 accepted a data-preserving same-package/same-signature update; the focused on-device test verified APK package, version, SHA-256, and signing-certificate inspection; and a six-second cold-start check showed Today with zero update prompts while no release metadata was configured. The temporary instrumentation APK was removed after the test. P8.3 local reminders and HyperOS guidance is next and has not started.
+P8.0 and P8.1 passed on 2026-08-10. P8.2 passed on 2026-08-12: the authenticated no-release Worker route is deployed; all Node and Package 8 foundation gates passed; Xiaomi 14 accepted a data-preserving same-package/same-signature update; the focused on-device test verified APK package, version, SHA-256, and signing-certificate inspection; and a six-second cold-start check showed Today with zero update prompts while no release metadata was configured. The temporary instrumentation APK was removed after the test. P8.3 passed on 2026-08-12: JVM coverage verifies delivery-status composition and Xiaomi-family detection; the Package 8 foundation gate passed; Xiaomi 14 accepted the data-preserving install and the focused device test verified real notification state plus public system-setting targets. Device diagnostics found notifications currently disabled by HyperOS (`importance=NONE` / AppOps `ignore`), which the app now exposes instead of silently implying delivery. No permission or reminder setting was changed, and the temporary instrumentation APK was removed. P8.4 performance and stability is next and has not started.
 
 Package 8 remains in progress and the project remains at `8 / 9` until every stage above passes its gate.
