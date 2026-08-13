@@ -18,9 +18,11 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import java.util.concurrent.atomic.AtomicBoolean
 
 class ShenkApplication : Application() {
     private val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    private val timerRestoreStarted = AtomicBoolean(false)
     val localFirstRepository: LocalFirstRepository by lazy {
         LocalFirstRepository(
             database = ShenkDatabase.get(this),
@@ -72,6 +74,15 @@ class ShenkApplication : Application() {
 
     val reminderSettingsStore: ReminderSettingsStore by lazy {
         ReminderSettingsStore(this)
+    }
+
+    fun restoreTimerAfterFirstFrame() {
+        if (!timerRestoreStarted.compareAndSet(false, true)) return
+        applicationScope.launch {
+            if (!NativeTimerCoordinator.hasRecoverableCheckpoint(this@ShenkApplication)) return@launch
+            val library = routineLibraryRepository.observeLibrary().first()
+            nativeTimerCoordinator.restoreIfPossible(library.routines)
+        }
     }
 
     override fun onCreate() {

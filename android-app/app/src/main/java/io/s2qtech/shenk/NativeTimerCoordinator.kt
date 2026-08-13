@@ -78,6 +78,7 @@ class NativeTimerCoordinator(
         val restored = restoreTimerSnapshot(routine, checkpoint, System.currentTimeMillis())
         engine = NativeTimerEngine(restored)
         publish(restored, announce = false)
+        if (restored.state in ACTIVE_STATES) ensureTicker()
     }
 
     fun start() {
@@ -245,6 +246,9 @@ class NativeTimerCoordinator(
         private const val CHECKPOINT_INTERVAL_MILLIS = 5_000L
         private val ACTIVE_STATES = setOf(TimerEngineState.RUNNING, TimerEngineState.PAUSED)
         private val TERMINAL_STATES = setOf(TimerEngineState.COMPLETED, TimerEngineState.STOPPED)
+
+        fun hasRecoverableCheckpoint(context: Context): Boolean =
+            context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).contains("sessionId")
     }
 }
 

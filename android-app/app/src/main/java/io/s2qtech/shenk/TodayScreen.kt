@@ -5,7 +5,6 @@ import android.content.ActivityNotFoundException
 import android.content.pm.PackageManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.animation.AnimatedContent
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ShowChart
 import androidx.compose.material.icons.rounded.AutoAwesome
@@ -85,6 +84,7 @@ fun TodayRoute(
     recordRepository: CalendarRecordRepository,
     reminderStore: ReminderSettingsStore,
     cloudConnectionManager: CloudConnectionManager,
+    onReady: () -> Unit = {},
     onData: () -> Unit = {},
     onPlanning: () -> Unit = {},
     onTraining: (TodayGuidance?) -> Unit = {},
@@ -109,6 +109,9 @@ fun TodayRoute(
     LaunchedEffect(Unit) {
         reminders = reminderStore.settings.first()
         connection = cloudConnectionManager.state()
+    }
+    LaunchedEffect(records) {
+        if (records != null) onReady()
     }
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission(),
@@ -359,20 +362,19 @@ private fun TodayScreen(
             Spacer(Modifier.height(18.dp))
         }
 
-        AnimatedContent(records?.guidance, label = "today-guidance") { guidance ->
-            if (guidance == null) {
-                Box(Modifier.fillMaxWidth().height(180.dp), contentAlignment = Alignment.Center) {
-                    Text("正在读取今天…", color = MaterialTheme.colorScheme.secondary)
-                }
-            } else {
-                GuidanceBlock(
-                    guidance = guidance,
-                    dailyReviewState = dailyReviewState,
-                    onTraining = onTraining,
-                    onRecordDay = onRecordDay,
-                    onDailyReview = onDailyReview,
-                )
+        val guidance = records?.guidance
+        if (guidance == null) {
+            Box(Modifier.fillMaxWidth().height(180.dp), contentAlignment = Alignment.Center) {
+                Text("正在读取今天…", color = MaterialTheme.colorScheme.secondary)
             }
+        } else {
+            GuidanceBlock(
+                guidance = guidance,
+                dailyReviewState = dailyReviewState,
+                onTraining = onTraining,
+                onRecordDay = onRecordDay,
+                onDailyReview = onDailyReview,
+            )
         }
         Spacer(Modifier.height(30.dp))
         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)

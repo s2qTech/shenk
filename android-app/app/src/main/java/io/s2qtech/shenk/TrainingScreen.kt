@@ -110,6 +110,7 @@ fun TrainingRoute(
     coordinator: NativeTimerCoordinator,
     launchRequest: TrainingLaunchRequest?,
     onLaunchConsumed: () -> Unit,
+    onReady: () -> Unit = {},
 ) {
     val library by routineRepository.observeLibrary().collectAsState(initial = null)
     val pending by sessionRepository.observePendingCompletion().collectAsState(initial = emptyList())
@@ -129,6 +130,10 @@ fun TrainingRoute(
     var preferredScene by remember { mutableStateOf<RoutineScene?>(null) }
     var launchNotice by remember { mutableStateOf<String?>(null) }
     var launchContext by remember { mutableStateOf<TrainingLaunchRequest?>(null) }
+
+    LaunchedEffect(library) {
+        if (library != null) onReady()
+    }
 
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions(),

@@ -102,6 +102,7 @@ import kotlinx.coroutines.launch
 @Composable
 fun CalendarScreen(
     repository: CalendarRecordRepository,
+    onReady: () -> Unit = {},
 ) {
     val today = remember { LocalDate.now() }
     val rangeStart = remember(today) { today.minusMonths(6).withDayOfMonth(1) }
@@ -145,6 +146,7 @@ fun CalendarScreen(
         if (days.isNotEmpty()) {
             val todayIndex = days.indexOfFirst { it.date == today }.coerceAtLeast(0)
             listState.scrollToItem((todayIndex - 2).coerceAtLeast(0))
+            onReady()
         }
     }
 

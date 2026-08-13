@@ -121,6 +121,13 @@ class MainActivityTest {
     }
 
     @Test
+    fun allPrimaryPageSlotsExistWhenStartupGateOpens() {
+        assertTrue(composeRule.onAllNodesWithTag("primary-page-slot-0").fetchSemanticsNodes().isNotEmpty())
+        assertTrue(composeRule.onAllNodesWithTag("primary-page-slot-1").fetchSemanticsNodes().isNotEmpty())
+        assertTrue(composeRule.onAllNodesWithTag("primary-page-slot-2").fetchSemanticsNodes().isNotEmpty())
+    }
+
+    @Test
     fun trainingSceneSwitcherStaysInLowerThumbZone() {
         composeRule.onNodeWithTag("primary-pager").performTouchInput { swipeLeft() }
         composeRule.onNodeWithTag("training-screen").assertIsDisplayed()
