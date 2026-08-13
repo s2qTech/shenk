@@ -10,7 +10,7 @@
 
     <style name="Theme.Shenk.Starting" parent="Theme.SplashScreen">
         <item name="windowSplashScreenBackground">@color/ic_launcher_background</item>
-        <item name="windowSplashScreenAnimatedIcon">@mipmap/ic_launcher</item>
+        <item name="windowSplashScreenAnimatedIcon">@drawable/ic_shenk_splash</item>
         <item name="postSplashScreenTheme">@style/Theme.Shenk</item>
     </style>
 </resources>
