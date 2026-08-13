@@ -99,7 +99,7 @@ fun ShenkApp(
             )
             null -> HorizontalPager(
                 state = pager,
-                beyondViewportPageCount = if (precomposeAdjacentPages) 1 else 0,
+                beyondViewportPageCount = if (precomposeAdjacentPages) PRIMARY_PAGE_RETENTION_RADIUS else 0,
                 modifier = Modifier
                     .fillMaxSize()
                     .background(MaterialTheme.colorScheme.background)
@@ -137,6 +137,7 @@ fun ShenkApp(
 
 private const val ADJACENT_PRECOMPOSE_DELAY_MILLIS = 200L
 private const val ADJACENT_IDLE_PRECOMPOSE_DELAY_MILLIS = 2_000L
+private const val PRIMARY_PAGE_RETENTION_RADIUS = 2
 
 private suspend fun androidx.compose.foundation.pager.PagerState.animatePrimaryPage(page: Int) {
     animateScrollToPage(page = page)

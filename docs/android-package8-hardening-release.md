@@ -54,7 +54,7 @@ Implementation notes:
 - Measure startup, page transitions, list scrolling, timer execution, and database/sync work.
 - Remove main-thread I/O and avoid unnecessary recomposition before visual tuning.
 
-Implementation notes and Xiaomi 14 measurements are recorded in `android-package8-performance.md`. P8.4 defers adjacent primary-page composition until the first real navigation or a two-second idle recovery warm-up, lazily initializes timer platform services only outside idle state, indexes the 13-month guidance projection once per Room emission, and routes startup synchronization through the existing unique WorkManager job. Synthetic device gates cover a 400-day/560-record projection, a full 100-item outbox batch, and a one-hour virtual timer run without touching user business data.
+Implementation notes and Xiaomi 14 measurements are recorded in `android-package8-performance.md`. P8.4 defers adjacent primary-page composition until the first real navigation or a two-second idle recovery warm-up, then retains all three primary pages even at either pager edge so a return to Today does not rebuild the opposite hidden page. It also lazily initializes timer platform services only outside idle state, indexes the 13-month guidance projection once per Room emission, and routes startup synchronization through the existing unique WorkManager job. Synthetic device gates cover a 400-day/560-record projection, a full 100-item outbox batch, and a one-hour virtual timer run without touching user business data.
 
 ### P8.5 Accessibility and theme validation
 

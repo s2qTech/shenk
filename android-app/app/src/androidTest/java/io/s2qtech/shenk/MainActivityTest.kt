@@ -102,6 +102,25 @@ class MainActivityTest {
     }
 
     @Test
+    fun allPrimaryPagesStayComposedAtBothPagerEdgesAfterWarmup() {
+        composeRule.waitUntil(timeoutMillis = 5_000) {
+            composeRule.onAllNodesWithTag("calendar-screen").fetchSemanticsNodes().isNotEmpty() &&
+                composeRule.onAllNodesWithTag("training-screen").fetchSemanticsNodes().isNotEmpty()
+        }
+
+        composeRule.onNodeWithTag("primary-pager").performTouchInput { swipeLeft() }
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag("training-screen").assertIsDisplayed()
+        assertTrue(composeRule.onAllNodesWithTag("calendar-screen").fetchSemanticsNodes().isNotEmpty())
+
+        composeRule.onNodeWithTag("primary-pager").performTouchInput { swipeRight() }
+        composeRule.onNodeWithTag("primary-pager").performTouchInput { swipeRight() }
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag("calendar-screen").assertIsDisplayed()
+        assertTrue(composeRule.onAllNodesWithTag("training-screen").fetchSemanticsNodes().isNotEmpty())
+    }
+
+    @Test
     fun trainingSceneSwitcherStaysInLowerThumbZone() {
         composeRule.onNodeWithTag("primary-pager").performTouchInput { swipeLeft() }
         composeRule.onNodeWithTag("training-screen").assertIsDisplayed()
