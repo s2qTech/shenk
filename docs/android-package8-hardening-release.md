@@ -62,8 +62,8 @@ Implementation notes and Xiaomi 14 measurements are recorded in `android-package
 
 Implementation notes:
 
-- The launcher and system splash use the user-provided Shenk artwork through one adaptive-icon resource with `drawable-nodpi` light and `drawable-night-nodpi` dark variants. Android selects the variant from the system night-mode configuration; normal and round launcher declarations share the same source, and a matching new S silhouette supplies Android themed icons.
-- The supplied opaque black corner canvas is removed from the packaged launcher bitmaps before Android applies the device launcher mask. The source artwork is otherwise only resized to the 432 px adaptive-icon asset. The system splash uses a separate safe-inset copy so Android's splash icon scaling does not crop the mark.
+- The launcher uses a standard adaptive-icon structure: Android draws a full-size light/dark background color and applies the user-provided new S mark as a safe-inset foreground. This avoids double-masking the rounded source image and keeps the icon's outer size aligned with other HyperOS launcher icons. Normal and round launcher declarations share the same layers, and a matching S silhouette supplies Android themed icons.
+- The system splash reuses the safe-inset light/dark mark. Its content is scaled to two thirds of the source canvas to compensate for Android's measured 1.5x splash/foreground expansion without cropping the mark.
 - APK resource inspection verifies both `nodpi` and `night-nodpi` variants plus matching light/dark splash backgrounds. Xiaomi 14 data-preserving installs then verified both complete, uncropped splash marks; the temporary theme override was removed and the original 23:00–06:30 custom schedule restored. Full P8.5 acceptance remains pending together with contrast, dynamic text, touch-target, TalkBack, and reduced-motion validation.
 
 ### P8.6 Backup, migration, and security regression

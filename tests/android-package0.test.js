@@ -116,18 +116,14 @@ test("launcher and splash artwork follow the system light and dark theme", () =>
   const roundLauncher = read("android-app/app/src/main/res/mipmap-anydpi-v26/ic_launcher_round.xml");
   const styles = read("android-app/app/src/main/res/values/styles.xml");
   const darkColors = read("android-app/app/src/main/res/values-night/colors.xml");
-  const lightArtwork = path.join(root, "android-app/app/src/main/res/drawable-nodpi/ic_shenk_launcher.png");
-  const darkArtwork = path.join(root, "android-app/app/src/main/res/drawable-night-nodpi/ic_shenk_launcher.png");
   const lightSplash = path.join(root, "android-app/app/src/main/res/drawable-nodpi/ic_shenk_splash.png");
   const darkSplash = path.join(root, "android-app/app/src/main/res/drawable-night-nodpi/ic_shenk_splash.png");
 
   for (const adaptiveIcon of [launcher, roundLauncher]) {
-    assert.match(adaptiveIcon, /background android:drawable="@drawable\/ic_shenk_launcher"/);
-    assert.match(adaptiveIcon, /foreground android:drawable="@android:color\/transparent"/);
+    assert.match(adaptiveIcon, /background android:drawable="@color\/ic_launcher_background"/);
+    assert.match(adaptiveIcon, /foreground android:drawable="@drawable\/ic_shenk_splash"/);
     assert.match(adaptiveIcon, /monochrome android:drawable="@drawable\/ic_shenk_monochrome_bitmap"/);
   }
-  assert.ok(fs.statSync(lightArtwork).size > 0);
-  assert.ok(fs.statSync(darkArtwork).size > 0);
   assert.ok(fs.statSync(lightSplash).size > 0);
   assert.ok(fs.statSync(darkSplash).size > 0);
   assert.match(styles, /windowSplashScreenAnimatedIcon">@drawable\/ic_shenk_splash/);
