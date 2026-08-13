@@ -1,6 +1,6 @@
 # Android Package 8: Hardening and Private Release
 
-Updated: 2026-08-12
+Updated: 2026-08-14
 Status: In progress
 Overall delivery progress: `8 / 9`
 
@@ -60,6 +60,12 @@ Implementation notes and Xiaomi 14 measurements are recorded in `android-package
 
 - Validate light/dark contrast, dynamic text, touch targets, TalkBack labels, and reduced-motion behavior.
 
+Implementation notes:
+
+- The launcher and system splash use the user-provided Shenk artwork through one adaptive-icon resource with `drawable-nodpi` light and `drawable-night-nodpi` dark variants. Android selects the variant from the system night-mode configuration; normal and round launcher declarations share the same source, and a matching new S silhouette supplies Android themed icons.
+- The supplied opaque black corner canvas is removed from the packaged launcher bitmaps before Android applies the device launcher mask. The source artwork is otherwise only resized to the 432 px adaptive-icon asset.
+- APK resource inspection verifies both `nodpi` and `night-nodpi` variants plus matching light/dark splash backgrounds. Full P8.5 device acceptance remains pending together with contrast, dynamic text, touch-target, TalkBack, and reduced-motion validation.
+
 ### P8.6 Backup, migration, and security regression
 
 - Verify encrypted configuration migration, local-first recovery, outbox replay, schema compatibility, and secret redaction.
@@ -76,6 +82,6 @@ Implementation notes and Xiaomi 14 measurements are recorded in `android-package
 
 `android-app/gradlew.bat package8FoundationCheck` runs the native automated suite, release configuration validation, release lint, and an unsigned release assembly. A distributable RC is deferred to P8.8 and requires external signing material.
 
-P8.0 and P8.1 passed on 2026-08-10. P8.2 passed on 2026-08-12: the authenticated no-release Worker route is deployed; all Node and Package 8 foundation gates passed; Xiaomi 14 accepted a data-preserving same-package/same-signature update; the focused on-device test verified APK package, version, SHA-256, and signing-certificate inspection; and a six-second cold-start check showed Today with zero update prompts while no release metadata was configured. The temporary instrumentation APK was removed after the test. P8.3 passed on 2026-08-12: JVM coverage verifies delivery-status composition and Xiaomi-family detection; the Package 8 foundation gate passed; Xiaomi 14 accepted the data-preserving install and the focused device test verified real notification state plus public system-setting targets. Device diagnostics found notifications currently disabled by HyperOS (`importance=NONE` / AppOps `ignore`), which the app now exposes instead of silently implying delivery. No permission or reminder setting was changed, and the temporary instrumentation APK was removed. P8.4 passed automated and Xiaomi 14 gates on 2026-08-12. The median debug cold start improved from 579 ms to 505 ms; four primary-page transitions were 1.17% janky at p95 19 ms; 12 calendar gestures were 0.09% janky at p95 25 ms; the 400-day/560-record projection completed in 123 ms; a full 100-operation outbox batch completed in 716 ms; and one virtual timer hour completed its 14,400 ticks in 40 ms. P8.5 accessibility and theme validation is next and has not started.
+P8.0 and P8.1 passed on 2026-08-10. P8.2 passed on 2026-08-12: the authenticated no-release Worker route is deployed; all Node and Package 8 foundation gates passed; Xiaomi 14 accepted a data-preserving same-package/same-signature update; the focused on-device test verified APK package, version, SHA-256, and signing-certificate inspection; and a six-second cold-start check showed Today with zero update prompts while no release metadata was configured. The temporary instrumentation APK was removed after the test. P8.3 passed on 2026-08-12: JVM coverage verifies delivery-status composition and Xiaomi-family detection; the Package 8 foundation gate passed; Xiaomi 14 accepted the data-preserving install and the focused device test verified real notification state plus public system-setting targets. Device diagnostics found notifications currently disabled by HyperOS (`importance=NONE` / AppOps `ignore`), which the app now exposes instead of silently implying delivery. No permission or reminder setting was changed, and the temporary instrumentation APK was removed. P8.4 passed automated and Xiaomi 14 gates on 2026-08-12. The median debug cold start improved from 579 ms to 505 ms; four primary-page transitions were 1.17% janky at p95 19 ms; 12 calendar gestures were 0.09% janky at p95 25 ms; the 400-day/560-record projection completed in 123 ms; a full 100-operation outbox batch completed in 716 ms; and one virtual timer hour completed its 14,400 ticks in 40 ms. P8.5 accessibility and theme validation started on 2026-08-14 with the theme-responsive launcher and splash artwork; its full Xiaomi 14 acceptance remains pending.
 
 Package 8 remains in progress and the project remains at `8 / 9` until every stage above passes its gate.

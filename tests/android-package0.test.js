@@ -111,6 +111,26 @@ test("Package 5 keeps local-first records and adds the native routine and timer 
   assert.match(timerPlatform, /AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK/);
 });
 
+test("launcher and splash artwork follow the system light and dark theme", () => {
+  const launcher = read("android-app/app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml");
+  const roundLauncher = read("android-app/app/src/main/res/mipmap-anydpi-v26/ic_launcher_round.xml");
+  const styles = read("android-app/app/src/main/res/values/styles.xml");
+  const darkColors = read("android-app/app/src/main/res/values-night/colors.xml");
+  const lightArtwork = path.join(root, "android-app/app/src/main/res/drawable-nodpi/ic_shenk_launcher.png");
+  const darkArtwork = path.join(root, "android-app/app/src/main/res/drawable-night-nodpi/ic_shenk_launcher.png");
+
+  for (const adaptiveIcon of [launcher, roundLauncher]) {
+    assert.match(adaptiveIcon, /background android:drawable="@drawable\/ic_shenk_launcher"/);
+    assert.match(adaptiveIcon, /foreground android:drawable="@android:color\/transparent"/);
+    assert.match(adaptiveIcon, /monochrome android:drawable="@drawable\/ic_shenk_monochrome_bitmap"/);
+  }
+  assert.ok(fs.statSync(lightArtwork).size > 0);
+  assert.ok(fs.statSync(darkArtwork).size > 0);
+  assert.match(styles, /windowSplashScreenAnimatedIcon">@mipmap\/ic_launcher/);
+  assert.match(styles, /windowSplashScreenBackground">@color\/ic_launcher_background/);
+  assert.match(darkColors, /<color name="ic_launcher_background">#021227<\/color>/);
+});
+
 test("Package 6 keeps advanced AI exchange provider-neutral and clipboard-only", () => {
   const manifest = read("android-app/app/src/main/AndroidManifest.xml");
   const mainActivity = read("android-app/app/src/main/java/io/s2qtech/shenk/MainActivity.kt");
