@@ -7,12 +7,16 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
@@ -31,6 +35,19 @@ class MainActivity : ComponentActivity() {
                 .start()
         }
         super.onCreate(savedInstanceState)
+        val timerCoordinator = app.nativeTimerCoordinator
+        val timerOrientationController = TimerOrientationController(this)
+        timerOrientationController.apply(timerCoordinator.snapshot.value.state)
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                timerCoordinator.snapshot
+                    .map { snapshot -> snapshot.state }
+                    .distinctUntilChanged()
+                    .collect { state ->
+                        timerOrientationController.apply(state)
+                    }
+            }
+        }
         lifecycleScope.launch {
             delay(PRIMARY_UI_STARTUP_TIMEOUT_MILLIS)
             primaryUiReady.set(true)
@@ -45,7 +62,7 @@ class MainActivity : ComponentActivity() {
                     calendarRepository = app.calendarRepository,
                     routineLibraryRepository = app.routineLibraryRepository,
                     timerSessionRepository = app.timerSessionRepository,
-                    timerCoordinator = { app.nativeTimerCoordinator },
+                    timerCoordinator = { timerCoordinator },
                     planCollaborationRepository = app.planCollaborationRepository,
                     reminderStore = app.reminderSettingsStore,
                     cloudConnectionManager = app.cloudConnectionManager,

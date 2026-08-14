@@ -17,6 +17,7 @@ Package 5 adds the production native routine library and timer to `android-app/`
 - Preserves optional step `execution` data and expands preparation, alternating, and bilateral execution at runtime.
 - Shows logical exercises in the library and preview while the running timer uses expanded execution steps.
 - Supports preview, start, pause, resume, previous, next, stop, reset, portrait/landscape layouts, TTS cues, audio ducking, active-training screen-on behavior, and phone-call pause.
+- Locks the application to portrait outside timer execution. Only `RUNNING` and `PAUSED` timer states follow the user's system rotation preference; stopping, completing, or resetting immediately restores portrait without changing the device-wide auto-rotate setting.
 - The running surface keeps the immediate next runtime action visible in portrait and landscape, including during rest. Previous, next, and stop use fixed-size icon controls, while long cues and warnings scroll instead of being clipped.
 - TTS queues the first non-countdown cue until initialization completes, verifies Chinese voice availability, reports an actionable error in the running surface, reads all stored action cues, and announces the upcoming action five seconds before transition.
 - Checkpoints active state and rebuilds the timer engine after Activity or process recreation.
@@ -66,6 +67,8 @@ Required Xiaomi 14 acceptance:
 14. Run a long-cue action and a rest step in portrait and landscape. Confirm cues and warnings remain scrollable, the next action is always visible, and previous/next labels cannot wrap because the controls are icons.
 
 Acceptance result: passed. The primary device completed the routine, rotation, persistence, offline/sync, completion, portrait/landscape UI, Chinese TTS, upcoming-action, and music-ducking gates without a crash or duplicate record.
+
+The 2026-08-15 orientation corrective gate added the missing inverse behavior: Today, Calendar, Training library, and timer preview remain portrait; timer execution may rotate; terminal and reset transitions return to portrait. The policy is Activity-scoped so it continues to follow an active timer while the primary pager is showing Today.
 
 ## 2026-07-27 Corrective Gate
 

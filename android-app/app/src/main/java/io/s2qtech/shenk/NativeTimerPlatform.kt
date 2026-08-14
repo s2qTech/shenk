@@ -1,12 +1,14 @@
 package io.s2qtech.shenk
 
 import android.Manifest
+import android.app.Activity
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.Service
 import android.content.Context
 import android.content.Intent
+import android.content.pm.ActivityInfo
 import android.content.pm.PackageManager
 import android.media.AudioAttributes
 import android.media.AudioFocusRequest
@@ -17,8 +19,27 @@ import android.speech.tts.UtteranceProgressListener
 import android.telephony.TelephonyCallback
 import android.telephony.TelephonyManager
 import androidx.core.app.NotificationCompat
+import io.s2qtech.shenk.timer.TimerEngineState
 import java.util.Locale
 import java.util.UUID
+
+internal fun requestedOrientationForTimerState(state: TimerEngineState): Int = when (state) {
+    TimerEngineState.RUNNING,
+    TimerEngineState.PAUSED,
+    -> ActivityInfo.SCREEN_ORIENTATION_USER
+    else -> ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+}
+
+class TimerOrientationController(
+    private val activity: Activity,
+) {
+    fun apply(state: TimerEngineState) {
+        val orientation = requestedOrientationForTimerState(state)
+        if (activity.requestedOrientation != orientation) {
+            activity.requestedOrientation = orientation
+        }
+    }
+}
 
 class NativeTimerForegroundService : Service() {
     override fun onCreate() {

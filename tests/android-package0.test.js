@@ -70,6 +70,7 @@ test("Package 5 keeps local-first records and adds the native routine and timer 
   const timerRuntime = read("android-app/feature/timer-engine/src/main/kotlin/io/s2qtech/shenk/timer/TimerRuntime.kt");
   const trainingScreen = read("android-app/app/src/main/java/io/s2qtech/shenk/TrainingScreen.kt");
   const timerPlatform = read("android-app/app/src/main/java/io/s2qtech/shenk/NativeTimerPlatform.kt");
+  const mainActivity = read("android-app/app/src/main/java/io/s2qtech/shenk/MainActivity.kt");
 
   assert.match(manifest, /android\.permission\.INTERNET/);
   assert.match(manifest, /android\.permission\.ACCESS_NETWORK_STATE/);
@@ -109,6 +110,12 @@ test("Package 5 keeps local-first records and adds the native routine and timer 
   assert.match(trainingScreen, /PostWorkoutSheet/);
   assert.match(trainingScreen, /NextActionStrip/);
   assert.match(timerPlatform, /AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK/);
+  assert.match(timerPlatform, /SCREEN_ORIENTATION_USER/);
+  assert.match(timerPlatform, /SCREEN_ORIENTATION_PORTRAIT/);
+  assert.match(timerPlatform, /TimerEngineState\.RUNNING/);
+  assert.match(timerPlatform, /TimerEngineState\.PAUSED/);
+  assert.match(mainActivity, /timerCoordinator\.snapshot/);
+  assert.match(mainActivity, /timerOrientationController\.apply/);
 });
 
 test("launcher and splash artwork follow the system light and dark theme", () => {
