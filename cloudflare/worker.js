@@ -214,7 +214,14 @@ export default {
       if (url.pathname === "/api/ai/daily-review" && request.method === "POST") {
         assertAiReviewRole(client);
         const body = await readJson(request);
-        return json(await generateDailyReview(body), 200, request, env);
+        const result = await submitDailyReviewJob(env, body);
+        return json(result, result.state === "RUNNING" ? 202 : 200, request, env);
+      }
+
+      const dailyReviewJobMatch = url.pathname.match(/^\/api\/ai\/daily-review-jobs\/([^/]+)$/);
+      if (dailyReviewJobMatch && request.method === "GET") {
+        assertAiReviewRole(client);
+        return json(await getDailyReviewJob(env, decodeURIComponent(dailyReviewJobMatch[1])), 200, request, env);
       }
 
       if (url.pathname === "/api/records/query" && request.method === "POST") {
@@ -1699,11 +1706,101 @@ function validateAiProvider(value) {
 
 async function testAiProviderConnection(body) {
   const provider = validateAiProvider(body);
-  await callCompatibleAi(provider, [
+  const result = await callCompatibleAi(provider, [
     { role: "system", content: "Reply with exactly OK." },
     { role: "user", content: "connection test" }
   ], 32);
+  if (!result.content) throw providerError("ai_provider_response_invalid", 502);
   return { ok: true, provider: provider.id, model: provider.model };
+}
+
+async function submitDailyReviewJob(env, body) {
+  const jobId = String(body?.jobId || "");
+  const inputDigest = String(body?.inputDigest || "");
+  if (!/^[a-zA-Z0-9:_-]{8,160}$/.test(jobId) || !/^sha256:[a-f0-9]{64}$/.test(inputDigest)) {
+    throw providerError("invalid_daily_review_job", 400);
+  }
+  const existing = await readDailyReviewJob(env, jobId);
+  if (existing && existing.input_digest !== inputDigest) throw providerError("daily_review_job_conflict", 409);
+  if (existing?.state === "SUCCEEDED") return dailyReviewJobResponse(existing);
+  if (existing?.state === "RUNNING" && !dailyReviewJobExpired(existing)) return dailyReviewJobResponse(existing);
+  if (existing?.state === "FAILED" && body?.retry !== true) return dailyReviewJobResponse(existing);
+
+  const now = new Date().toISOString();
+  if (existing) {
+    await env.DB.prepare(
+      "UPDATE ai_daily_review_jobs SET state = 'RUNNING', review_json = NULL, usage_json = NULL, finish_reason = NULL, upstream_requests = 0, error_code = NULL, updated_at = ? WHERE job_id = ?"
+    ).bind(now, jobId).run();
+  } else {
+    const inserted = await env.DB.prepare(
+      "INSERT OR IGNORE INTO ai_daily_review_jobs (job_id, input_digest, state, created_at, updated_at) VALUES (?, ?, 'RUNNING', ?, ?)"
+    ).bind(jobId, inputDigest, now, now).run();
+    if (!inserted?.meta?.changes) return dailyReviewJobResponse(await readDailyReviewJob(env, jobId));
+  }
+
+  try {
+    const generated = await generateDailyReview(body);
+    const completedAt = new Date().toISOString();
+    await env.DB.prepare(
+      "UPDATE ai_daily_review_jobs SET state = 'SUCCEEDED', review_json = ?, usage_json = ?, finish_reason = ?, upstream_requests = ?, error_code = NULL, updated_at = ? WHERE job_id = ?"
+    ).bind(
+      JSON.stringify(generated.review),
+      JSON.stringify(generated.usage),
+      generated.finishReason || null,
+      generated.upstreamRequests,
+      completedAt,
+      jobId
+    ).run();
+  } catch (error) {
+    const failedAt = new Date().toISOString();
+    await env.DB.prepare(
+      "UPDATE ai_daily_review_jobs SET state = 'FAILED', usage_json = ?, finish_reason = ?, upstream_requests = ?, error_code = ?, updated_at = ? WHERE job_id = ?"
+    ).bind(
+      JSON.stringify(error.usage || emptyAiUsage()),
+      error.finishReason || null,
+      Number(error.upstreamRequests || 1),
+      safeAiErrorCode(error),
+      failedAt,
+      jobId
+    ).run();
+  }
+  return dailyReviewJobResponse(await readDailyReviewJob(env, jobId));
+}
+
+async function getDailyReviewJob(env, jobId) {
+  if (!/^[a-zA-Z0-9:_-]{8,160}$/.test(jobId)) throw providerError("invalid_daily_review_job", 400);
+  let row = await readDailyReviewJob(env, jobId);
+  if (!row) throw providerError("daily_review_job_not_found", 404);
+  if (row.state === "RUNNING" && dailyReviewJobExpired(row)) {
+    const now = new Date().toISOString();
+    await env.DB.prepare(
+      "UPDATE ai_daily_review_jobs SET state = 'FAILED', error_code = 'ai_provider_job_expired', updated_at = ? WHERE job_id = ? AND state = 'RUNNING'"
+    ).bind(now, jobId).run();
+    row = await readDailyReviewJob(env, jobId);
+  }
+  return dailyReviewJobResponse(row);
+}
+
+async function readDailyReviewJob(env, jobId) {
+  return await env.DB.prepare("SELECT * FROM ai_daily_review_jobs WHERE job_id = ?").bind(jobId).first();
+}
+
+function dailyReviewJobExpired(row) {
+  return Date.now() - Date.parse(row.updated_at) > 10 * 60 * 1000;
+}
+
+function dailyReviewJobResponse(row) {
+  return {
+    ok: row.state === "SUCCEEDED",
+    jobId: row.job_id,
+    state: row.state,
+    review: row.review_json ? safeJson(row.review_json, null) : null,
+    usage: row.usage_json ? safeJson(row.usage_json, emptyAiUsage()) : emptyAiUsage(),
+    finishReason: row.finish_reason || null,
+    upstreamRequests: Number(row.upstream_requests || 0),
+    error: row.error_code || null,
+    updatedAt: row.updated_at
+  };
 }
 
 async function generateDailyReview(body) {
@@ -1728,13 +1825,66 @@ async function generateDailyReview(body) {
     "只输出 JSON，不要 Markdown：{\"conclusion\":\"...\",\"assessment\":\"...\",\"actions\":[\"...\"],\"evidence\":[\"...\"],\"cautions\":[\"...\"],\"localSuggestion\":null}。",
     "localSuggestion 非空时格式为：{\"date\":\"YYYY-MM-DD\",\"title\":\"...\",\"trainingType\":\"...\",\"estimatedMinutes\":30,\"reason\":\"...\"}。"
   ].join("\n");
-  const content = await callCompatibleAi(provider, [
+  const messages = [
     { role: "system", content: system },
     { role: "user", content: JSON.stringify(snapshot) }
-  ], 4096, { thinkingEnabled: true, jsonOutput: true });
-  const review = parseDailyReviewContent(content, snapshot.date);
+  ];
+  let review;
+  let usage = emptyAiUsage();
+  let finishReason = null;
+  let upstreamRequests = 0;
+  try {
+    upstreamRequests += 1;
+    const primary = await callCompatibleAi(
+      provider,
+      messages,
+      42_066,
+      { thinkingEnabled: true, jsonOutput: true, timeoutMs: 6 * 60_000 }
+    );
+    usage = addAiUsage(usage, primary.usage);
+    finishReason = primary.finishReason;
+    if (primary.finishReason === "length") throw providerError("ai_provider_output_truncated", 502);
+    review = parseDailyReviewContent(primary.content, snapshot.date);
+  } catch (error) {
+    if (!isRepairableDailyReviewError(error)) throw error;
+    const repairMessages = [
+      {
+        role: "system",
+        content: `${system}\n上一次生成未通过 JSON 结构校验。本次不要输出思考过程，只返回完整 JSON；actions 必须是含 1 至 3 个字符串的数组。`
+      },
+      { role: "user", content: JSON.stringify(snapshot) }
+    ];
+    try {
+      upstreamRequests += 1;
+      const repaired = await callCompatibleAi(
+        provider,
+        repairMessages,
+        8192,
+        { thinkingEnabled: false, jsonOutput: true, timeoutMs: 2 * 60_000 }
+      );
+      usage = addAiUsage(usage, repaired.usage);
+      finishReason = repaired.finishReason;
+      if (repaired.finishReason === "length") throw providerError("ai_provider_output_truncated", 502);
+      review = parseDailyReviewContent(repaired.content, snapshot.date);
+    } catch (repairError) {
+      repairError.usage = usage;
+      repairError.finishReason = finishReason;
+      repairError.upstreamRequests = upstreamRequests;
+      throw repairError;
+    }
+  }
   if (snapshotHasFormalPlan(snapshot)) review.localSuggestion = null;
-  return { ok: true, review };
+  return { review, usage, finishReason, upstreamRequests };
+}
+
+function isRepairableDailyReviewError(error) {
+  return [
+    "ai_provider_timeout",
+    "ai_provider_response_invalid",
+    "ai_provider_output_truncated",
+    "ai_provider_review_invalid",
+    "ai_provider_review_actions_missing"
+  ].includes(error?.message);
 }
 
 function snapshotHasFormalPlan(snapshot) {
@@ -1748,6 +1898,9 @@ function snapshotHasFormalPlan(snapshot) {
 
 async function callCompatibleAi(provider, messages, maxTokens, options = {}) {
   let response;
+  const timeoutMs = Number.isFinite(options.timeoutMs) ? options.timeoutMs : 20_000;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const requestBody = {
       model: provider.model,
@@ -1763,12 +1916,15 @@ async function callCompatibleAi(provider, messages, maxTokens, options = {}) {
         "Authorization": `Bearer ${provider.apiKey}`,
         "Content-Type": "application/json"
       },
-      body: JSON.stringify(requestBody)
+      body: JSON.stringify(requestBody),
+      signal: controller.signal
     });
-  } catch {
-    const error = new Error("ai_provider_unreachable");
+  } catch (cause) {
+    const error = new Error(cause?.name === "AbortError" ? "ai_provider_timeout" : "ai_provider_unreachable");
     error.status = 503;
     throw error;
+  } finally {
+    clearTimeout(timeout);
   }
   if (!response.ok) {
     const error = new Error(`ai_provider_http_${response.status}`);
@@ -1776,18 +1932,63 @@ async function callCompatibleAi(provider, messages, maxTokens, options = {}) {
     throw error;
   }
   const payload = await response.json().catch(() => null);
-  const content = payload?.choices?.[0]?.message?.content;
-  if (typeof content !== "string" || !content.trim()) {
-    const error = new Error("ai_provider_response_invalid");
-    error.status = 502;
-    throw error;
-  }
-  return content.trim();
+  if (!payload || !Array.isArray(payload.choices)) throw providerError("ai_provider_response_invalid", 502);
+  return {
+    content: typeof payload.choices[0]?.message?.content === "string" ? payload.choices[0].message.content.trim() : "",
+    finishReason: typeof payload.choices[0]?.finish_reason === "string" ? payload.choices[0].finish_reason : null,
+    usage: sanitizeAiUsage(payload.usage)
+  };
+}
+
+function emptyAiUsage() {
+  return {
+    promptTokens: 0,
+    promptCacheHitTokens: 0,
+    promptCacheMissTokens: 0,
+    completionTokens: 0,
+    reasoningTokens: 0,
+    totalTokens: 0
+  };
+}
+
+function sanitizeAiUsage(value) {
+  const number = key => Math.max(0, Math.round(Number(value?.[key] || 0)));
+  return {
+    promptTokens: number("prompt_tokens"),
+    promptCacheHitTokens: number("prompt_cache_hit_tokens"),
+    promptCacheMissTokens: number("prompt_cache_miss_tokens"),
+    completionTokens: number("completion_tokens"),
+    reasoningTokens: Math.max(0, Math.round(Number(value?.completion_tokens_details?.reasoning_tokens || 0))),
+    totalTokens: number("total_tokens")
+  };
+}
+
+function addAiUsage(left, right) {
+  const result = {};
+  for (const key of Object.keys(emptyAiUsage())) result[key] = Number(left?.[key] || 0) + Number(right?.[key] || 0);
+  return result;
+}
+
+function providerError(code, status) {
+  const error = new Error(code);
+  error.status = status;
+  return error;
+}
+
+function safeAiErrorCode(error) {
+  const code = String(error?.message || "ai_provider_unknown").toLowerCase();
+  return /^[a-z0-9_]{1,80}$/.test(code) ? code : "ai_provider_unknown";
 }
 
 function parseDailyReviewContent(content, expectedDate) {
   const clean = content.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "").trim();
-  const value = safeJson(clean, null);
+  const firstBrace = clean.indexOf("{");
+  const lastBrace = clean.lastIndexOf("}");
+  const value = safeJson(clean, null) || (
+    firstBrace >= 0 && lastBrace > firstBrace
+      ? safeJson(clean.slice(firstBrace, lastBrace + 1), null)
+      : null
+  );
   if (!value || typeof value.conclusion !== "string" || !value.conclusion.trim()) {
     const error = new Error("ai_provider_review_invalid");
     error.status = 502;

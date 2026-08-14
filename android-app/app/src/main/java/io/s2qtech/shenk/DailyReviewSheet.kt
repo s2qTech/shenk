@@ -57,7 +57,7 @@ fun DailyReviewSheet(
     var preparationLoaded by remember(date) { mutableStateOf(false) }
     var autoGenerationAttempted by remember(date) { mutableStateOf(false) }
     var generationRequested by remember(date) { mutableStateOf(false) }
-    val processing = state.jobState in setOf("PENDING", "RUNNING")
+    val processing = state.jobState in setOf("PENDING", "RUNNING", "AWAITING_SERVER")
     val generating = generationRequested || processing
     val isToday = date == LocalDate.now()
     val reviewLabel = if (isToday) "今日简评" else "当日简评"
@@ -230,7 +230,7 @@ fun DailyReviewSheet(
                     CircularProgressIndicator(modifier = Modifier.height(24.dp), strokeWidth = 2.dp)
                     Column {
                         Text("正在生成$reviewLabel", fontWeight = FontWeight.SemiBold)
-                        Text("通常需要十几秒，可以先返回日期详情。", color = MaterialTheme.colorScheme.secondary)
+                        Text("推理通常需要几十秒，可以先返回日期详情。", color = MaterialTheme.colorScheme.secondary)
                     }
                 }
             }
@@ -289,6 +289,11 @@ internal fun dailyReviewFailureMessage(error: String?, retrying: Boolean): Strin
     "ai_provider_http_429" -> "DeepSeek 当前请求过多，稍后会自动重试。"
     "ai_provider_response_invalid", "ai_provider_review_invalid", "ai_provider_review_actions_missing" ->
         "DeepSeek 返回的简评不完整，稍后会自动重试。"
+    "generation_timeout", "ai_provider_timeout" -> if (retrying) {
+        "DeepSeek 本次生成时间较长，稍后会自动重试。"
+    } else {
+        "DeepSeek 多次生成超时，请稍后重试。"
+    }
     "ai_provider_unreachable" -> "云端暂时无法连接 DeepSeek，稍后会自动重试。"
     else -> if (retrying) "网络或 AI 服务暂时不可用，稍后会自动重试。" else "生成失败，请检查 AI 服务后重试。"
 }

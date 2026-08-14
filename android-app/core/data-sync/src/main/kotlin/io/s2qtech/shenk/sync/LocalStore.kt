@@ -168,10 +168,10 @@ interface AiReviewJobDao {
     @Query("SELECT * FROM ai_review_jobs WHERE date = :date ORDER BY updated_at DESC, created_at DESC, job_id DESC LIMIT 1")
     fun observeLatest(date: String): Flow<AiReviewJobEntity?>
 
-    @Query("SELECT * FROM ai_review_jobs WHERE state IN ('PENDING', 'RETRY') AND next_attempt_at <= :now ORDER BY created_at LIMIT 1")
+    @Query("SELECT * FROM ai_review_jobs WHERE state IN ('PENDING', 'RETRY', 'AWAITING_SERVER') AND next_attempt_at <= :now ORDER BY created_at LIMIT 1")
     suspend fun nextDue(now: Long): AiReviewJobEntity?
 
-    @Query("SELECT MIN(next_attempt_at) FROM ai_review_jobs WHERE state IN ('PENDING', 'RETRY')")
+    @Query("SELECT MIN(next_attempt_at) FROM ai_review_jobs WHERE state IN ('PENDING', 'RETRY', 'AWAITING_SERVER')")
     suspend fun nextScheduledAt(): Long?
 
     @Query("SELECT * FROM ai_review_jobs WHERE date = :date AND input_digest = :digest LIMIT 1")
@@ -180,7 +180,7 @@ interface AiReviewJobDao {
     @Query("UPDATE ai_review_jobs SET state = :state, attempts = :attempts, next_attempt_at = :nextAttemptAt, last_error = :lastError, updated_at = :updatedAt WHERE job_id = :jobId")
     suspend fun updateState(jobId: String, state: String, attempts: Int, nextAttemptAt: Long, lastError: String?, updatedAt: Long)
 
-    @Query("UPDATE ai_review_jobs SET state = 'RETRY', next_attempt_at = :now, last_error = 'generation_interrupted', updated_at = :now WHERE state = 'RUNNING' AND updated_at <= :cutoff")
+    @Query("UPDATE ai_review_jobs SET state = 'AWAITING_SERVER', next_attempt_at = :now, last_error = NULL, updated_at = :now WHERE state = 'RUNNING' AND updated_at <= :cutoff")
     suspend fun recoverStaleRunning(cutoff: Long, now: Long): Int
 
     @Query("UPDATE ai_review_jobs SET state = 'PENDING', attempts = :attempts, next_attempt_at = :now, last_error = NULL, updated_at = :now WHERE job_id = :jobId")

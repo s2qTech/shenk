@@ -58,6 +58,10 @@ class DailyReviewWorker(
                     return Result.success()
                 }
                 DailyReviewProcessResult.COMPLETED -> completedAny = true
+                DailyReviewProcessResult.WAITING -> {
+                    scheduleNext(repository)
+                    return Result.success()
+                }
                 DailyReviewProcessResult.RETRY -> {
                     scheduleNext(repository)
                     return Result.success()

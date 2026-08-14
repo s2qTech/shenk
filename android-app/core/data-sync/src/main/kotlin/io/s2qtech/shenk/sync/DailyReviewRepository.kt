@@ -5,6 +5,8 @@ import io.s2qtech.shenk.model.ContractVersion
 import io.s2qtech.shenk.model.SharedEntityOwner
 import io.s2qtech.shenk.model.SharedRecord
 import java.io.IOException
+import java.io.InterruptedIOException
+import java.net.SocketTimeoutException
 import java.security.MessageDigest
 import java.time.Instant
 import java.time.LocalDate
@@ -31,6 +33,8 @@ import retrofit2.Retrofit
 import retrofit2.HttpException
 import retrofit2.converter.kotlinx.serialization.asConverterFactory
 import retrofit2.http.Body
+import retrofit2.http.GET
+import retrofit2.http.Path
 import retrofit2.http.POST
 
 data class DailyReview(
@@ -78,7 +82,7 @@ data class DailyReviewEnqueueResult(
     val configurationMissing: Boolean = false,
 )
 
-enum class DailyReviewProcessResult { NONE, COMPLETED, RETRY, FAILED }
+enum class DailyReviewProcessResult { NONE, COMPLETED, WAITING, RETRY, FAILED }
 
 enum class AiProviderConnectionFailure {
     CLOUD_AUTH,
@@ -103,6 +107,9 @@ interface WorkerAiApi {
 
     @POST("ai/daily-review")
     suspend fun dailyReview(@Body request: JsonObject): JsonObject
+
+    @GET("ai/daily-review-jobs/{jobId}")
+    suspend fun dailyReviewJob(@Path("jobId") jobId: String): JsonObject
 }
 
 object WorkerAiApiFactory {
@@ -110,15 +117,19 @@ object WorkerAiApiFactory {
         require(apiBase.startsWith("https://")) { "cloud API must use HTTPS" }
         require(token.isNotBlank()) { "cloud token is required" }
         val client = OkHttpClient.Builder()
-            .connectTimeout(10, TimeUnit.SECONDS)
-            .readTimeout(25, TimeUnit.SECONDS)
-            .callTimeout(30, TimeUnit.SECONDS)
+            .connectTimeout(DAILY_REVIEW_CONNECT_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+            .readTimeout(0, TimeUnit.SECONDS)
+            .callTimeout(0, TimeUnit.SECONDS)
             .addInterceptor { chain ->
-                chain.proceed(
-                    chain.request().newBuilder()
+                val request = chain.request().newBuilder()
                         .header("Authorization", "Bearer $token")
-                        .build(),
-                )
+                        .build()
+                val readTimeout = if (request.url.encodedPath.endsWith("/ai/connection-test")) {
+                    AI_CONNECTION_TEST_READ_TIMEOUT_SECONDS
+                } else {
+                    0L
+                }
+                chain.withReadTimeout(readTimeout.toInt(), TimeUnit.SECONDS).proceed(request)
             }
             .build()
         return Retrofit.Builder()
@@ -311,21 +322,48 @@ class DailyReviewRepository(
         updateJob(job, "RUNNING", job.attempts, nowMillis(), null)
         return try {
             val client = configuredClient()
-            val snapshot = json.parseToJsonElement(job.snapshotJson).jsonObject
-            val request = providerRequest(client.settings, client.key).toMutableMap().let { fields ->
-                JsonObject(fields + ("snapshot" to snapshot))
+            val response = if (job.state == "AWAITING_SERVER") {
+                client.api.dailyReviewJob(job.jobId)
+            } else {
+                val snapshot = json.parseToJsonElement(job.snapshotJson).jsonObject
+                val request = providerRequest(client.settings, client.key).toMutableMap().let { fields ->
+                    JsonObject(fields + mapOf(
+                        "snapshot" to snapshot,
+                        "jobId" to JsonPrimitive(job.jobId),
+                        "inputDigest" to JsonPrimitive(job.inputDigest),
+                        "retry" to JsonPrimitive(true),
+                    ))
+                }
+                client.api.dailyReview(request)
             }
-            val response = client.api.dailyReview(request)
-            val review = response["review"]?.jsonObject
-                ?: throw IllegalStateException("provider_response_invalid")
-            persistGenerated(job, client.settings, review)
-            updateJob(job, "COMPLETED", job.attempts, Long.MAX_VALUE, null)
-            DailyReviewProcessResult.COMPLETED
+            when (response["state"]?.jsonPrimitive?.contentOrNull) {
+                "RUNNING" -> {
+                    updateJob(job, "AWAITING_SERVER", job.attempts, nowMillis() + SERVER_POLL_MILLIS, null)
+                    DailyReviewProcessResult.WAITING
+                }
+                "FAILED" -> {
+                    val code = response["error"]?.jsonPrimitive?.contentOrNull ?: "ai_provider_unknown"
+                    updateJob(job, "FAILED", job.attempts + 1, Long.MAX_VALUE, code)
+                    DailyReviewProcessResult.FAILED
+                }
+                "SUCCEEDED" -> {
+                    val review = response["review"]?.jsonObject
+                        ?: throw IllegalStateException("provider_response_invalid")
+                    persistGenerated(job, client.settings, review)
+                    updateJob(job, "COMPLETED", job.attempts, Long.MAX_VALUE, null)
+                    DailyReviewProcessResult.COMPLETED
+                }
+                else -> throw IllegalStateException("provider_response_invalid")
+            }
         } catch (error: Throwable) {
+            if (error is IOException) {
+                updateJob(job, "AWAITING_SERVER", job.attempts, nowMillis() + SERVER_POLL_MILLIS, null)
+                return DailyReviewProcessResult.WAITING
+            }
             val attempts = job.attempts + 1
             val code = when (error) {
                 is HttpException -> workerErrorCode(error)
-                else -> error.safeCode()
+                else -> dailyReviewTransportErrorCode(error)
             }
             if (attempts >= MAX_REVIEW_ATTEMPTS || code in PERMANENT_REVIEW_ERRORS) {
                 updateJob(job, "FAILED", attempts, Long.MAX_VALUE, code)
@@ -502,6 +540,17 @@ private fun String.sha256(): String = MessageDigest.getInstance("SHA-256")
 private fun retryDelay(attempts: Int): Long = (30_000L * (1L shl attempts.coerceIn(0, 8))).coerceAtMost(6 * 60 * 60 * 1000L)
 private fun Throwable.safeCode(): String = (message ?: javaClass.simpleName)
     .lowercase().replace(Regex("[^a-z0-9_ -]"), "_").take(80)
+
+internal fun dailyReviewTransportErrorCode(error: Throwable): String = when {
+    error is SocketTimeoutException -> "generation_timeout"
+    error is InterruptedIOException && error.message?.contains("timeout", ignoreCase = true) == true ->
+        "generation_timeout"
+    else -> error.safeCode()
+}
+
+internal const val DAILY_REVIEW_CONNECT_TIMEOUT_SECONDS = 10L
+internal const val AI_CONNECTION_TEST_READ_TIMEOUT_SECONDS = 20L
+private const val SERVER_POLL_MILLIS = 15_000L
 
 internal fun parseWorkerErrorCode(raw: String): String? = runCatching {
     Json.parseToJsonElement(raw).jsonObject["error"]?.jsonPrimitive?.contentOrNull

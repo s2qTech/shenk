@@ -1,5 +1,7 @@
 package io.s2qtech.shenk.sync
 
+import java.io.InterruptedIOException
+import java.net.SocketTimeoutException
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
@@ -13,5 +15,16 @@ class DailyReviewErrorTest {
         )
         assertNull(parseWorkerErrorCode("""{"error":"unsafe error text"}"""))
         assertNull(parseWorkerErrorCode("not-json"))
+    }
+
+    @Test
+    fun generationTimeoutsUseAStableRetryableErrorCode() {
+        assertEquals("generation_timeout", dailyReviewTransportErrorCode(SocketTimeoutException("timeout")))
+        assertEquals("generation_timeout", dailyReviewTransportErrorCode(InterruptedIOException("call timeout")))
+    }
+
+    @Test
+    fun connectionTestKeepsItsShortReadDeadline() {
+        assertEquals(20L, AI_CONNECTION_TEST_READ_TIMEOUT_SECONDS)
     }
 }

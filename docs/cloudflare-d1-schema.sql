@@ -364,8 +364,29 @@ CREATE TABLE IF NOT EXISTS mcp_oauth_tokens (
 CREATE INDEX IF NOT EXISTS idx_mcp_oauth_tokens_refresh
   ON mcp_oauth_tokens(refresh_token_hash, refresh_expires_at);
 
+-- AI execution metadata only. Provider credentials and health snapshots are
+-- never stored in this table.
+CREATE TABLE IF NOT EXISTS ai_daily_review_jobs (
+  job_id TEXT PRIMARY KEY,
+  input_digest TEXT NOT NULL,
+  state TEXT NOT NULL CHECK (state IN ('RUNNING', 'SUCCEEDED', 'FAILED')),
+  review_json TEXT,
+  usage_json TEXT,
+  finish_reason TEXT,
+  upstream_requests INTEGER NOT NULL DEFAULT 0,
+  error_code TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_ai_daily_review_jobs_state_updated
+  ON ai_daily_review_jobs(state, updated_at);
+
 INSERT OR IGNORE INTO schema_migrations(version)
 VALUES ('2026-06-19-001-initial-shared-schema');
 
 INSERT OR IGNORE INTO schema_migrations(version)
 VALUES ('2026-07-22-004-mcp-oauth');
+
+INSERT OR IGNORE INTO schema_migrations(version)
+VALUES ('2026-08-15-005-ai-daily-review-jobs');

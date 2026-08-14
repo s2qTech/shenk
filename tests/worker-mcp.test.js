@@ -17,6 +17,9 @@ function loadWorkerContext() {
     Request,
     Response,
     Headers,
+    AbortController,
+    setTimeout,
+    clearTimeout,
     TextEncoder,
     Intl,
     crypto: {

@@ -6,7 +6,7 @@ const path = require("node:path");
 const vm = require("node:vm");
 const nodeCrypto = require("node:crypto");
 
-function loadWorker(fetchImpl = fetch) {
+function loadWorker(fetchImpl = fetch, runtime = {}) {
   const workerPath = path.join(__dirname, "..", "cloudflare", "worker.js");
   const source = fs.readFileSync(workerPath, "utf8")
     .replace("export default {", "globalThis.__worker = {");
@@ -16,6 +16,9 @@ function loadWorker(fetchImpl = fetch) {
     Response,
     Headers,
     fetch: fetchImpl,
+    AbortController,
+    setTimeout: runtime.setTimeout || setTimeout,
+    clearTimeout: runtime.clearTimeout || clearTimeout,
     TextEncoder,
     crypto: { randomUUID: () => "event_test", subtle: nodeCrypto.webcrypto.subtle },
     globalThis: null
@@ -28,6 +31,42 @@ function loadWorker(fetchImpl = fetch) {
 
 function request(url, options = {}) {
   return new Request(url, options);
+}
+
+const TEST_DIGEST = `sha256:${"a".repeat(64)}`;
+const dailyJobFields = date => ({ jobId: `daily-review:${date}:fixture`, inputDigest: TEST_DIGEST });
+
+function aiJobDb() {
+  const rows = new Map();
+  return {
+    prepare(sql) {
+      return {
+        bind(...args) {
+          return {
+            async first() {
+              if (/SELECT \* FROM ai_daily_review_jobs/.test(sql)) return rows.get(args[0]) || null;
+              throw new Error(`unexpected first: ${sql}`);
+            },
+            async run() {
+              if (/INSERT OR IGNORE INTO ai_daily_review_jobs/.test(sql)) {
+                if (rows.has(args[0])) return { meta: { changes: 0 } };
+                rows.set(args[0], { job_id: args[0], input_digest: args[1], state: "RUNNING", review_json: null, usage_json: null, finish_reason: null, upstream_requests: 0, error_code: null, created_at: args[2], updated_at: args[3] });
+                return { meta: { changes: 1 } };
+              }
+              const jobId = args.at(-1);
+              const row = rows.get(jobId);
+              if (!row) return { meta: { changes: 0 } };
+              if (/state = 'RUNNING'/.test(sql)) Object.assign(row, { state: "RUNNING", review_json: null, usage_json: null, finish_reason: null, upstream_requests: 0, error_code: null, updated_at: args[0] });
+              else if (/state = 'SUCCEEDED'/.test(sql)) Object.assign(row, { state: "SUCCEEDED", review_json: args[0], usage_json: args[1], finish_reason: args[2], upstream_requests: args[3], error_code: null, updated_at: args[4] });
+              else if (/state = 'FAILED'/.test(sql)) Object.assign(row, { state: "FAILED", usage_json: args[0], finish_reason: args[1], upstream_requests: args[2], error_code: args[3], updated_at: args[4] });
+              rows.set(jobId, row);
+              return { meta: { changes: 1 } };
+            }
+          };
+        }
+      };
+    }
+  };
 }
 
 async function run() {
@@ -98,6 +137,7 @@ async function run() {
   assert.equal(upstreamRequest.url, "https://api.deepseek.com/chat/completions");
   assert.equal(upstreamBody.max_tokens, 32);
   assert.deepEqual(upstreamBody.thinking, { type: "disabled" });
+  assert.ok(upstreamRequest.options.signal);
 }
 
 {
@@ -126,6 +166,7 @@ async function run() {
       method: "POST",
       headers: { Authorization: "Bearer valid", "Content-Type": "application/json" },
       body: JSON.stringify({
+        ...dailyJobFields("2099-01-01"),
         provider: { id: "custom", baseUrl: "https://provider.example/v1", model: "fixture", apiKey: "fixture-secret" },
         snapshot: {
           schema: "daily_review_snapshot",
@@ -136,7 +177,7 @@ async function run() {
         }
       })
     }),
-    { SHENK_TOKEN: "valid" }
+    { SHENK_TOKEN: "valid", DB: aiJobDb() }
   );
   const body = await response.json();
   const upstreamBody = JSON.parse(upstreamRequest.options.body);
@@ -149,13 +190,146 @@ async function run() {
   assert.equal(upstreamRequest.url, "https://provider.example/v1/chat/completions");
   assert.equal(upstreamRequest.options.headers.Authorization, "Bearer fixture-secret");
     assert.deepEqual(upstreamBody.thinking, { type: "enabled" });
-    assert.equal(upstreamBody.max_tokens, 4096);
+    assert.equal(upstreamBody.max_tokens, 42_066);
     assert.deepEqual(upstreamBody.response_format, { type: "json_object" });
+    assert.ok(upstreamRequest.options.signal);
     assert.match(systemPrompt, /已经发生的执行结果/);
     assert.match(systemPrompt, /当天完成得怎么样/);
     assert.match(systemPrompt, /后续修正措施/);
     assert.doesNotMatch(systemPrompt, /今天怎么做/);
     assert.doesNotMatch(JSON.stringify(body), /fixture-secret/);
+  }
+
+  {
+    let upstreamCalls = 0;
+    const db = aiJobDb();
+    const worker = loadWorker(async () => {
+      upstreamCalls += 1;
+      return new Response(JSON.stringify({
+        choices: [{
+          finish_reason: "stop",
+          message: { content: JSON.stringify({
+            conclusion: "Idempotent review.",
+            assessment: "One provider call is enough.",
+            actions: ["Keep the next session easy."],
+            evidence: [],
+            cautions: [],
+            localSuggestion: null
+          }) }
+        }],
+        usage: {
+          prompt_tokens: 21033,
+          prompt_cache_hit_tokens: 18000,
+          prompt_cache_miss_tokens: 3033,
+          completion_tokens: 1980,
+          total_tokens: 23013,
+          completion_tokens_details: { reasoning_tokens: 1500 }
+        }
+      }), { status: 200, headers: { "Content-Type": "application/json" } });
+    });
+    const body = JSON.stringify({
+      ...dailyJobFields("2099-01-05"),
+      provider: { id: "custom", baseUrl: "https://provider.example/v1", model: "fixture", apiKey: "fixture-secret" },
+      snapshot: { schema: "daily_review_snapshot", contractVersion: "2.0", date: "2099-01-05", records: [] }
+    });
+    const invoke = () => worker.fetch(request("https://worker.example/api/ai/daily-review", {
+      method: "POST",
+      headers: { Authorization: "Bearer valid", "Content-Type": "application/json" },
+      body
+    }), { SHENK_TOKEN: "valid", DB: db });
+
+    const first = await invoke();
+    const firstBody = await first.json();
+    const second = await invoke();
+    const secondBody = await second.json();
+    const status = await worker.fetch(
+      request(`https://worker.example/api/ai/daily-review-jobs/${encodeURIComponent(dailyJobFields("2099-01-05").jobId)}`, {
+        headers: { Authorization: "Bearer valid" }
+      }),
+      { SHENK_TOKEN: "valid", DB: db }
+    );
+    assert.equal(firstBody.state, "SUCCEEDED");
+    assert.equal(secondBody.state, "SUCCEEDED");
+    assert.equal((await status.json()).state, "SUCCEEDED");
+    assert.equal(upstreamCalls, 1);
+    assert.equal(firstBody.usage.totalTokens, 23013);
+    assert.equal(firstBody.usage.reasoningTokens, 1500);
+    assert.equal(firstBody.finishReason, "stop");
+    assert.equal(firstBody.upstreamRequests, 1);
+  }
+
+  {
+    const upstreamBodies = [];
+    const worker = loadWorker(async (_url, options) => {
+      const requestBody = JSON.parse(options.body);
+      upstreamBodies.push(requestBody);
+      const content = upstreamBodies.length === 1
+        ? JSON.stringify({ conclusion: "First response omitted actions." })
+        : JSON.stringify({
+            conclusion: "Repaired review.",
+            assessment: "The second bounded pass repaired the structure.",
+            actions: ["Keep the next session easy."],
+            evidence: [],
+            cautions: [],
+            localSuggestion: null
+          });
+      return new Response(JSON.stringify({ choices: [{ message: { content } }] }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" }
+      });
+    });
+    const response = await worker.fetch(
+      request("https://worker.example/api/ai/daily-review", {
+        method: "POST",
+        headers: { Authorization: "Bearer valid", "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...dailyJobFields("2099-01-04"),
+          provider: { id: "custom", baseUrl: "https://provider.example/v1", model: "fixture", apiKey: "fixture-secret" },
+          snapshot: { schema: "daily_review_snapshot", contractVersion: "2.0", date: "2099-01-04", records: [] }
+        })
+      }),
+      { SHENK_TOKEN: "valid", DB: aiJobDb() }
+    );
+    const body = await response.json();
+    assert.equal(response.status, 200);
+    assert.equal(body.review.conclusion, "Repaired review.");
+    assert.equal(upstreamBodies.length, 2);
+    assert.deepEqual(upstreamBodies[0].thinking, { type: "enabled" });
+    assert.deepEqual(upstreamBodies[1].thinking, { type: "disabled" });
+    assert.equal(upstreamBodies[1].max_tokens, 8192);
+  }
+
+  {
+    let observedSignal;
+    const worker = loadWorker(async (_url, options) => {
+      observedSignal = options.signal;
+      if (observedSignal.aborted) {
+        const error = new Error("aborted");
+        error.name = "AbortError";
+        throw error;
+      }
+      throw new Error("expected the synthetic deadline to abort first");
+    }, {
+      setTimeout(callback) { callback(); return 1; },
+      clearTimeout() {}
+    });
+    const response = await worker.fetch(
+      request("https://worker.example/api/ai/daily-review", {
+        method: "POST",
+        headers: { Authorization: "Bearer valid", "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...dailyJobFields("2099-01-03"),
+          provider: { id: "custom", baseUrl: "https://provider.example/v1", model: "fixture", apiKey: "fixture-secret" },
+          snapshot: { schema: "daily_review_snapshot", contractVersion: "2.0", date: "2099-01-03", records: [] }
+        })
+      }),
+      { SHENK_TOKEN: "valid", DB: aiJobDb() }
+    );
+    assert.equal(response.status, 200);
+    const body = await response.json();
+    assert.equal(body.state, "FAILED");
+    assert.equal(body.error, "ai_provider_timeout");
+    assert.equal(observedSignal.aborted, true);
   }
 
   {
@@ -178,6 +352,7 @@ async function run() {
         method: "POST",
         headers: { Authorization: "Bearer valid", "Content-Type": "application/json" },
         body: JSON.stringify({
+          ...dailyJobFields("2099-01-02"),
           provider: { id: "custom", baseUrl: "https://provider.example/v1", model: "fixture", apiKey: "fixture-secret" },
           snapshot: {
             schema: "daily_review_snapshot",
@@ -192,7 +367,7 @@ async function run() {
           }
         })
       }),
-      { SHENK_TOKEN: "valid" }
+      { SHENK_TOKEN: "valid", DB: aiJobDb() }
     );
     const body = await response.json();
     assert.equal(response.status, 200);

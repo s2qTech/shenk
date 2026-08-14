@@ -67,15 +67,27 @@
     "/ai/daily-review": {
       "post": {
         "security": [{ "bearerAuth": [] }],
-        "description": "Generates a factual daily review only. It cannot mutate plans or routines.",
+        "description": "Submits one idempotent server-side daily-review job. A repeated RUNNING or SUCCEEDED jobId never calls the provider again.",
         "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/DailyReviewRequest" } } } },
         "responses": {
-          "200": { "description": "Strict daily review payload", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/DailyReviewResponse" } } } },
+          "200": { "description": "Terminal daily-review job state", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/DailyReviewResponse" } } } },
+          "202": { "description": "The same job is already running", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/DailyReviewResponse" } } } },
           "400": { "$ref": "#/components/responses/ContractError" },
           "401": { "$ref": "#/components/responses/Unauthorized" },
           "403": { "description": "Client role cannot use the AI review proxy" },
           "502": { "description": "Provider authentication or response failure" },
           "503": { "description": "Provider temporarily unavailable" }
+        }
+      }
+    },
+    "/ai/daily-review-jobs/{jobId}": {
+      "get": {
+        "security": [{ "bearerAuth": [] }],
+        "description": "Reads the authoritative state of a previously submitted daily-review job without resubmitting provider work.",
+        "parameters": [{ "name": "jobId", "in": "path", "required": true, "schema": { "type": "string" } }],
+        "responses": {
+          "200": { "description": "Current server job state", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/DailyReviewResponse" } } } },
+          "404": { "description": "Unknown job id" }
         }
       }
     },
@@ -161,8 +173,11 @@
       },
       "DailyReviewRequest": {
         "type": "object",
-        "required": ["provider", "snapshot"],
+        "required": ["jobId", "inputDigest", "provider", "snapshot"],
         "properties": {
+          "jobId": { "type": "string", "minLength": 8, "maxLength": 160 },
+          "inputDigest": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" },
+          "retry": { "type": "boolean", "default": false },
           "provider": { "$ref": "#/components/schemas/AiProvider" },
           "snapshot": { "$ref": "#/components/schemas/DailyReviewSnapshot" }
         },
@@ -170,11 +185,30 @@
       },
       "DailyReviewResponse": {
         "type": "object",
-        "required": ["ok", "review"],
+        "required": ["ok", "jobId", "state", "usage", "upstreamRequests"],
         "properties": {
-          "ok": { "const": true },
-          "review": {
+          "ok": { "type": "boolean" },
+          "jobId": { "type": "string" },
+          "state": { "type": "string", "enum": ["RUNNING", "SUCCEEDED", "FAILED"] },
+          "finishReason": { "type": ["string", "null"] },
+          "upstreamRequests": { "type": "integer", "minimum": 0 },
+          "error": { "type": ["string", "null"] },
+          "updatedAt": { "type": "string", "format": "date-time" },
+          "usage": {
             "type": "object",
+            "required": ["promptTokens", "promptCacheHitTokens", "promptCacheMissTokens", "completionTokens", "reasoningTokens", "totalTokens"],
+            "properties": {
+              "promptTokens": { "type": "integer", "minimum": 0 },
+              "promptCacheHitTokens": { "type": "integer", "minimum": 0 },
+              "promptCacheMissTokens": { "type": "integer", "minimum": 0 },
+              "completionTokens": { "type": "integer", "minimum": 0 },
+              "reasoningTokens": { "type": "integer", "minimum": 0 },
+              "totalTokens": { "type": "integer", "minimum": 0 }
+            },
+            "additionalProperties": false
+          },
+          "review": {
+            "type": ["object", "null"],
             "required": ["conclusion", "actions", "evidence", "cautions"],
             "properties": {
                 "conclusion": { "type": "string", "minLength": 1, "maxLength": 120 },

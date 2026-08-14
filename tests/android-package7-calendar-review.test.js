@@ -45,8 +45,13 @@ test('daily review sheet is date aware and supports returning to date details', 
 
 test('a completed daily review hides stale generation and retry state', () => {
   const sheet = read('android-app/app/src/main/java/io/s2qtech/shenk/DailyReviewSheet.kt');
+  const today = read('android-app/app/src/main/java/io/s2qtech/shenk/TodayScreen.kt');
+  const store = read('android-app/core/data-sync/src/main/kotlin/io/s2qtech/shenk/sync/LocalStore.kt');
 
   assert.match(sheet, /if \(state\.review == null && generating\)/);
+  assert.match(sheet, /"PENDING", "RUNNING", "AWAITING_SERVER"/);
+  assert.match(today, /"PENDING", "RUNNING", "AWAITING_SERVER"/);
+  assert.match(store, /state IN \('PENDING', 'RETRY', 'AWAITING_SERVER'\)/);
   assert.match(sheet, /else if \(state\.review == null && state\.jobState in setOf\("RETRY", "FAILED"\)\)/);
   assert.match(sheet, /else if \(state\.review == null && !providerReady\)/);
   assert.match(sheet, /else if \(state\.review == null\)/);
@@ -66,4 +71,21 @@ test('daily review snapshots version retrospective review policy', () => {
   const repository = read('android-app/core/data-sync/src/main/kotlin/io/s2qtech/shenk/sync/DailyReviewRepository.kt');
 
   assert.match(repository, /put\("reviewPolicyVersion", JsonPrimitive\(2\)\)/);
+});
+
+test('daily review generation has layered timeouts and honest retry messaging', () => {
+  const repository = read('android-app/core/data-sync/src/main/kotlin/io/s2qtech/shenk/sync/DailyReviewRepository.kt');
+  const worker = read('cloudflare/worker.js');
+  const sheet = read('android-app/app/src/main/java/io/s2qtech/shenk/DailyReviewSheet.kt');
+  const today = read('android-app/app/src/main/java/io/s2qtech/shenk/TodayScreen.kt');
+
+  assert.match(repository, /\.readTimeout\(0, TimeUnit\.SECONDS\)/);
+  assert.match(repository, /"AWAITING_SERVER"/);
+  assert.match(worker, /42_066/);
+  assert.match(worker, /8192/);
+  assert.match(worker, /ai_daily_review_jobs/);
+  assert.match(worker, /isRepairableDailyReviewError/);
+  assert.match(worker, /"ai_provider_timeout"/);
+  assert.match(sheet, /"generation_timeout", "ai_provider_timeout"/);
+  assert.match(today, /dailyReviewFailureMessage\(/);
 });
