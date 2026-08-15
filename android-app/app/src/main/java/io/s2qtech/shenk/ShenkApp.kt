@@ -18,6 +18,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.CustomAccessibilityAction
+import androidx.compose.ui.semantics.customActions
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import io.s2qtech.shenk.sync.CalendarRecordRepository
 import io.s2qtech.shenk.sync.CloudConnectionManager
 import io.s2qtech.shenk.sync.NativeTimerSessionRepository
@@ -107,6 +111,33 @@ fun ShenkApp(
                 modifier = Modifier
                     .fillMaxSize()
                     .background(MaterialTheme.colorScheme.background)
+                    .semantics {
+                        stateDescription = when (pager.currentPage) {
+                            CALENDAR_PAGE -> "日历，第 1 页，共 3 页"
+                            TODAY_PAGE -> "今天，第 2 页，共 3 页"
+                            else -> "训练，第 3 页，共 3 页"
+                        }
+                        customActions = buildList {
+                            if (pager.currentPage != CALENDAR_PAGE) {
+                                add(CustomAccessibilityAction("转到日历") {
+                                    scope.launch { pager.animatePrimaryPage(CALENDAR_PAGE) }
+                                    true
+                                })
+                            }
+                            if (pager.currentPage != TODAY_PAGE) {
+                                add(CustomAccessibilityAction("转到今天") {
+                                    scope.launch { pager.animatePrimaryPage(TODAY_PAGE) }
+                                    true
+                                })
+                            }
+                            if (pager.currentPage != TRAINING_PAGE) {
+                                add(CustomAccessibilityAction("转到训练") {
+                                    scope.launch { pager.animatePrimaryPage(TRAINING_PAGE) }
+                                    true
+                                })
+                            }
+                        }
+                    }
                     .testTag("primary-pager"),
             ) { page ->
                 PrimaryPageSlot(page = page) {

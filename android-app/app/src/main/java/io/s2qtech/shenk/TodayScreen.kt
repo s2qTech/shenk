@@ -12,11 +12,14 @@ import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.size
@@ -50,6 +53,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -460,14 +464,14 @@ private fun GuidanceBlock(
                     Spacer(Modifier.height(20.dp))
                     Button(
                         onClick = onTraining,
-                        modifier = Modifier.fillMaxWidth().height(52.dp).testTag("today-open-training"),
+                        modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp).testTag("today-open-training"),
                     ) { Text("进入训练") }
                 }
                 TodayPrimaryAction.RECORD_DAY -> {
                     Spacer(Modifier.height(20.dp))
                     Button(
                         onClick = onRecordDay,
-                        modifier = Modifier.fillMaxWidth().height(52.dp).testTag("today-record-day"),
+                        modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp).testTag("today-record-day"),
                     ) { Text("填写今日情况") }
                 }
             }
@@ -561,6 +565,7 @@ private fun CloudSetupPrompt(onClick: () -> Unit) {
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun MorningStatusSection(
     records: TodayRecords?,
@@ -601,22 +606,31 @@ private fun MorningStatusSection(
         }
     } else {
         val state = records.effectiveStatus
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        val largeText = LocalDensity.current.fontScale >= 1.3f
+        FlowRow(
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+            maxItemsInEachRow = if (largeText) 1 else 3,
+        ) {
             StatusValue(
                 label = "睡眠",
                 value = state.sleepDurationMinutes?.let(::formatSleep) ?: "未记录",
-                modifier = Modifier.weight(1.2f),
+                modifier = (if (largeText) Modifier.fillMaxWidth() else Modifier.weight(1.2f))
+                    .heightIn(min = 76.dp),
             )
             StatusValue(
                 label = "精力",
                 value = state.energy?.let { "$it/5" } ?: "未记录",
-                modifier = Modifier.weight(1f),
+                modifier = (if (largeText) Modifier.fillMaxWidth() else Modifier.weight(1f))
+                    .heightIn(min = 76.dp),
                 emphasis = statusColor(state.energy, higherIsBetter = true),
             )
             StatusValue(
                 label = "疲劳",
                 value = state.fatigue?.let { "$it/5" } ?: "未记录",
-                modifier = Modifier.weight(1f),
+                modifier = (if (largeText) Modifier.fillMaxWidth() else Modifier.weight(1f))
+                    .heightIn(min = 76.dp),
                 emphasis = statusColor(state.fatigue, higherIsBetter = false),
             )
         }
@@ -671,7 +685,7 @@ private fun StatusValue(
 ) {
     Surface(modifier = modifier, color = MaterialTheme.colorScheme.surfaceVariant, shape = RoundedCornerShape(18.dp)) {
         Column(Modifier.padding(horizontal = 14.dp, vertical = 13.dp)) {
-            Text(value, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold, color = emphasis, maxLines = 1)
+            Text(value, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold, color = emphasis)
             Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.outline)
         }
     }

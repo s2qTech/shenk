@@ -3,7 +3,7 @@ package io.s2qtech.shenk
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -56,7 +56,7 @@ fun ThumbActionDock(
                     onClick = action.onClick,
                     modifier = Modifier
                         .weight(1f)
-                        .height(56.dp)
+                        .heightIn(min = 56.dp)
                         .testTag(action.testTag),
                     shape = RoundedCornerShape(22.dp),
                     color = if (action.selected) {

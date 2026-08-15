@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
@@ -258,13 +259,13 @@ fun DailyReviewSheet(
                 }
             }
         } else if (state.review == null && !providerReady) {
-            OutlinedButton(onClick = onOpenAiSettings, modifier = Modifier.fillMaxWidth().height(54.dp)) {
+            OutlinedButton(onClick = onOpenAiSettings, modifier = Modifier.fillMaxWidth().heightIn(min = 54.dp)) {
                 Text("配置 AI 服务")
             }
         } else if (state.review == null) {
             Button(
                 onClick = { requestGeneration("正在生成$reviewLabel", "无法生成，请检查 AI 服务配置") },
-                modifier = Modifier.fillMaxWidth().height(54.dp),
+                modifier = Modifier.fillMaxWidth().heightIn(min = 54.dp),
             ) {
                 Text(if (missing.isEmpty()) "生成$reviewLabel" else "按现有事实生成$reviewLabel")
             }

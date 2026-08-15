@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -214,7 +215,7 @@ private fun PlanningTabs(tab: PlanningTab, onSelect: (PlanningTab) -> Unit) {
             val selected = item == tab
             Surface(
                 onClick = { onSelect(item) },
-                modifier = Modifier.weight(1f).height(48.dp),
+                modifier = Modifier.weight(1f).heightIn(min = 48.dp),
                 shape = RoundedCornerShape(18.dp),
                 color = if (selected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant,
             ) {
@@ -299,7 +300,7 @@ private fun PlanInbox(
                     }
                 }
                 item {
-                    Button(onClick = onApply, enabled = !busy, modifier = Modifier.fillMaxWidth().height(56.dp).testTag("apply-plan-patch")) {
+                    Button(onClick = onApply, enabled = !busy, modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp).testTag("apply-plan-patch")) {
                         if (busy) CircularProgressIndicator(Modifier.height(22.dp), strokeWidth = 2.dp)
                         else Text(if (result.deleted > 0) "确认变更" else "应用草案")
                     }
@@ -398,14 +399,14 @@ private fun FeedbackWorkspace(
             }
         }
         item {
-            Button(onClick = onGenerate, enabled = !busy, modifier = Modifier.fillMaxWidth().height(56.dp).testTag("generate-weekly-feedback")) {
+            Button(onClick = onGenerate, enabled = !busy, modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp).testTag("generate-weekly-feedback")) {
                 if (busy) CircularProgressIndicator(Modifier.height(22.dp), strokeWidth = 2.dp)
                 else Text(if (latest == null) "生成复盘资料" else "重新生成")
             }
         }
         if (latest != null) {
             item {
-                FilledTonalButton(onClick = onCopy, modifier = Modifier.fillMaxWidth().height(56.dp).testTag("copy-weekly-feedback")) {
+                FilledTonalButton(onClick = onCopy, modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp).testTag("copy-weekly-feedback")) {
                     Icon(Icons.Rounded.ContentCopy, contentDescription = null)
                     Spacer(Modifier.padding(4.dp))
                     Text("复制复盘资料")

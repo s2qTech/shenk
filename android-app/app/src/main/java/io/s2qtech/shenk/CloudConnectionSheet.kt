@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.text.KeyboardOptions
@@ -90,7 +91,7 @@ fun CloudConnectionSheet(
         Button(
             onClick = { onConnect(migrationCode) },
             enabled = migrationCode.length >= 20 && !busy,
-            modifier = Modifier.fillMaxWidth().height(54.dp).testTag("connect-cloud-data"),
+            modifier = Modifier.fillMaxWidth().heightIn(min = 54.dp).testTag("connect-cloud-data"),
         ) {
             if (busy) CircularProgressIndicator(strokeWidth = 2.dp, modifier = Modifier.height(22.dp))
             else Text(if (state.configured) "读取新配置并同步" else "连接并同步")

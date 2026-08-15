@@ -24,6 +24,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -77,6 +78,9 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.CustomAccessibilityAction
+import androidx.compose.ui.semantics.customActions
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
@@ -451,11 +455,11 @@ private fun SwipeRevealRoutineCard(
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .height(88.dp)
+            .heightIn(min = 88.dp)
             .clip(RoundedCornerShape(22.dp)),
     ) {
         Surface(
-            modifier = Modifier.fillMaxSize(),
+            modifier = Modifier.matchParentSize(),
             color = MaterialTheme.colorScheme.errorContainer,
         ) {
             Box(contentAlignment = Alignment.CenterEnd) {
@@ -475,8 +479,16 @@ private fun SwipeRevealRoutineCard(
         }
         Surface(
             modifier = Modifier
-                .fillMaxSize()
+                .fillMaxWidth()
                 .graphicsLayer { translationX = visibleOffset }
+                .semantics {
+                    customActions = listOf(
+                        CustomAccessibilityAction("删除${routine.title}") {
+                            onDelete()
+                            true
+                        },
+                    )
+                }
                 .pointerInput(routine.id, actionWidthPx) {
                     detectHorizontalDragGestures(
                         onDragStart = {
@@ -669,7 +681,7 @@ private fun TimerControlBar(
             }
             Button(
                 onClick = if (terminal) onFinish else onPause,
-                modifier = Modifier.weight(1f).height(54.dp),
+                modifier = Modifier.weight(1f).heightIn(min = 54.dp),
             ) {
                 when (snapshot.state) {
                     TimerEngineState.RUNNING -> {

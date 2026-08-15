@@ -2,6 +2,7 @@ package io.s2qtech.shenk
 
 import android.content.Intent
 import android.os.Bundle
+import android.animation.ValueAnimator
 import android.view.Choreographer
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -28,11 +29,15 @@ class MainActivity : ComponentActivity() {
         val splashScreen = installSplashScreen()
         splashScreen.setKeepOnScreenCondition { !primaryUiReady.get() }
         splashScreen.setOnExitAnimationListener { provider ->
-            provider.view.animate()
-                .alpha(0f)
-                .setDuration(SPLASH_EXIT_DURATION_MILLIS)
-                .withEndAction(provider::remove)
-                .start()
+            if (ValueAnimator.areAnimatorsEnabled()) {
+                provider.view.animate()
+                    .alpha(0f)
+                    .setDuration(SPLASH_EXIT_DURATION_MILLIS)
+                    .withEndAction(provider::remove)
+                    .start()
+            } else {
+                provider.remove()
+            }
         }
         super.onCreate(savedInstanceState)
         val timerCoordinator = app.nativeTimerCoordinator

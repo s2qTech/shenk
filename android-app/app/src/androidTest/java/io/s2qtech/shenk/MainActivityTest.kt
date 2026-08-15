@@ -13,6 +13,7 @@ import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipeLeft
 import androidx.compose.ui.test.swipeRight
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import io.s2qtech.shenk.model.RoutineScene
 import io.s2qtech.shenk.model.SharedEntityOwner
@@ -145,6 +146,7 @@ class MainActivityTest {
         }
         sceneHeights.forEach { height ->
             assertEquals(sceneHeights.first().value, height.value, 0.5f)
+            assertTrue(height.value >= 48f)
         }
     }
 
@@ -159,6 +161,8 @@ class MainActivityTest {
         val dataHeight = dataBounds.bottom - dataBounds.top
         val planningHeight = planningBounds.bottom - planningBounds.top
         assertEquals(dataHeight.value, planningHeight.value, 0.5f)
+        assertTrue(dataHeight.value >= 48f)
+        assertTrue(planningHeight.value >= 48f)
     }
 
     @Test
@@ -263,6 +267,10 @@ class MainActivityTest {
                 .fetchSemanticsNodes()
                 .isNotEmpty()
         }
+        val routineActions = composeRule.onNodeWithTag("routine-synthetic-native-timer")
+            .fetchSemanticsNode()
+            .config[SemanticsActions.CustomActions]
+        assertTrue(routineActions.any { it.label == "删除离线恢复流程" })
         val routine = runBlocking {
             app.routineLibraryRepository.observeLibrary().first().routines
                 .single { it.id == "synthetic-native-timer" }

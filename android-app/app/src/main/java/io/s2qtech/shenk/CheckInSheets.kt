@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
@@ -226,7 +227,7 @@ fun MorningCheckInSheet(
             enabled = sleepMinutes != null || deepSleepMinutes != null || sleepQuality != null ||
                 energy != null || fatigue != null || painRecorded || note.isNotBlank() ||
                 weight != null || bodyFat != null || muscle != null || waist != null,
-            modifier = Modifier.fillMaxWidth().height(56.dp),
+            modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp),
         ) {
             Text("保存晨起状态")
         }
@@ -379,7 +380,7 @@ fun PreWorkoutSheet(
                 )
             },
             enabled = morning != null && (energy != null || fatigue != null || painChanged || note.isNotBlank()),
-            modifier = Modifier.fillMaxWidth().height(56.dp),
+            modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp),
         ) { Text("保存变化") }
     }
 }
@@ -619,7 +620,7 @@ private fun ValueInputCell(
 ) {
     Surface(
         modifier = modifier
-            .height(92.dp)
+            .heightIn(min = 92.dp)
             .clickable(onClick = onClick)
             .semantics { contentDescription = "$label，$value" },
         shape = RoundedCornerShape(8.dp),

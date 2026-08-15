@@ -71,3 +71,27 @@ test("P8.2 updater is foreground-only, authenticated, verified, and user-confirm
   assert.match(worker, /\/api\/android\/update\/apk/);
   assert.match(worker, /forbidden_android_update_role/);
 });
+
+test("P8.5 enforces contrast, scalable controls, TalkBack alternatives, and reduced motion", () => {
+  const theme = read("android-app/app/src/main/java/io/s2qtech/shenk/ShenkTheme.kt");
+  const contrastTest = read("android-app/app/src/test/java/io/s2qtech/shenk/ShenkThemeContrastTest.kt");
+  const app = read("android-app/app/src/main/java/io/s2qtech/shenk/ShenkApp.kt");
+  const activity = read("android-app/app/src/main/java/io/s2qtech/shenk/MainActivity.kt");
+  const today = read("android-app/app/src/main/java/io/s2qtech/shenk/TodayScreen.kt");
+  const calendar = read("android-app/app/src/main/java/io/s2qtech/shenk/CalendarScreen.kt");
+  const training = read("android-app/app/src/main/java/io/s2qtech/shenk/TrainingScreen.kt");
+  const deviceTest = read("android-app/app/src/androidTest/java/io/s2qtech/shenk/AccessibilityContractInstrumentedTest.kt");
+
+  assert.match(theme, /ShenkLightColors/);
+  assert.match(theme, /ShenkDarkColors/);
+  assert.match(contrastTest, /ratio >= 4\.5/);
+  assert.match(app, /CustomAccessibilityAction\("转到日历"\)/);
+  assert.match(app, /CustomAccessibilityAction\("转到今天"\)/);
+  assert.match(app, /CustomAccessibilityAction\("转到训练"\)/);
+  assert.match(activity, /ValueAnimator\.areAnimatorsEnabled\(\)/);
+  assert.match(today, /fontScale >= 1\.3f/);
+  assert.match(today, /heightIn\(min = 52\.dp\)/);
+  assert.match(calendar, /clearAndSetSemantics/);
+  assert.match(training, /CustomAccessibilityAction\("删除\$\{routine\.title\}"\)/);
+  assert.match(deviceTest, /rootInActiveWindow/);
+});

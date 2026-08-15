@@ -52,45 +52,49 @@ class PerformanceSmokeInstrumentedTest {
     }
 
     @Test
-    fun thirteenMonthProjectionWithRealisticVolumeStaysWithinBudget() = runBlocking {
-        val start = LocalDate.of(2099, 1, 1)
-        val plans = (0 until 400).map { offset -> plan(start.plusDays(offset.toLong()), offset) }
-        val actual = (0 until 160).map { offset -> trainingLog(start.plusDays((offset * 2L)), offset) }
-        records.restoreBackup(plans + actual)
-        val repository = CalendarRecordRepository(records)
+    fun thirteenMonthProjectionWithRealisticVolumeStaysWithinBudget() {
+        runBlocking {
+            val start = LocalDate.of(2099, 1, 1)
+            val plans = (0 until 400).map { offset -> plan(start.plusDays(offset.toLong()), offset) }
+            val actual = (0 until 160).map { offset -> trainingLog(start.plusDays((offset * 2L)), offset) }
+            records.restoreBackup(plans + actual)
+            val repository = CalendarRecordRepository(records)
 
-        lateinit var days: List<io.s2qtech.shenk.model.CalendarDay>
-        val started = SystemClock.elapsedRealtime()
-        days = repository.observeRange(start, start.plusDays(399)).first()
-        val elapsed = SystemClock.elapsedRealtime() - started
-        Log.i(TAG, "calendar_projection_ms=$elapsed days=${days.size} records=${plans.size + actual.size}")
+            lateinit var days: List<io.s2qtech.shenk.model.CalendarDay>
+            val started = SystemClock.elapsedRealtime()
+            days = repository.observeRange(start, start.plusDays(399)).first()
+            val elapsed = SystemClock.elapsedRealtime() - started
+            Log.i(TAG, "calendar_projection_ms=$elapsed days=${days.size} records=${plans.size + actual.size}")
 
-        assertEquals(400, days.size)
-        assertEquals(GuidanceSource.ACTUAL, days.first().guidance.source)
-        assertTrue("calendar projection took ${elapsed}ms", elapsed < CALENDAR_BUDGET_MILLIS)
+            assertEquals(400, days.size)
+            assertEquals(GuidanceSource.ACTUAL, days.first().guidance.source)
+            assertTrue("calendar projection took ${elapsed}ms", elapsed < CALENDAR_BUDGET_MILLIS)
+        }
     }
 
     @Test
-    fun fullOutboxBatchSyncStaysWithinBudget() = runBlocking {
-        val date = LocalDate.of(2099, 1, 1)
-        val batch = (0 until SyncEngine.OUTBOX_BATCH_SIZE).map { offset -> trainingLog(date, offset) }
-        records.persistBatchAndEnqueue(batch, SharedEntityOwner.RECORD)
-        val engine = SyncEngine(
-            database = database,
-            repository = records,
-            api = AcceptingWorkerApi,
-            deviceId = "synthetic-performance-device",
-            timeSource = PerformanceClock,
-        )
+    fun fullOutboxBatchSyncStaysWithinBudget() {
+        runBlocking {
+            val date = LocalDate.of(2099, 1, 1)
+            val batch = (0 until SyncEngine.OUTBOX_BATCH_SIZE).map { offset -> trainingLog(date, offset) }
+            records.persistBatchAndEnqueue(batch, SharedEntityOwner.RECORD)
+            val engine = SyncEngine(
+                database = database,
+                repository = records,
+                api = AcceptingWorkerApi,
+                deviceId = "synthetic-performance-device",
+                timeSource = PerformanceClock,
+            )
 
-        val started = SystemClock.elapsedRealtime()
-        val result = engine.synchronize()
-        val elapsed = SystemClock.elapsedRealtime() - started
-        Log.i(TAG, "sync_batch_ms=$elapsed pushed=${result.pushed}")
+            val started = SystemClock.elapsedRealtime()
+            val result = engine.synchronize()
+            val elapsed = SystemClock.elapsedRealtime() - started
+            Log.i(TAG, "sync_batch_ms=$elapsed pushed=${result.pushed}")
 
-        assertEquals(SyncEngine.OUTBOX_BATCH_SIZE, result.pushed)
-        assertEquals(0, database.outbox().count())
-        assertTrue("sync batch took ${elapsed}ms", elapsed < SYNC_BUDGET_MILLIS)
+            assertEquals(SyncEngine.OUTBOX_BATCH_SIZE, result.pushed)
+            assertEquals(0, database.outbox().count())
+            assertTrue("sync batch took ${elapsed}ms", elapsed < SYNC_BUDGET_MILLIS)
+        }
     }
 
     private fun plan(date: LocalDate, offset: Int) = SharedRecord.create(

@@ -201,6 +201,8 @@ class DailyReviewRepositoryInstrumentedTest {
                             buildJsonObject { put("ok", JsonPrimitive(false)) }
 
                         override suspend fun dailyReview(request: JsonObject): JsonObject = JsonObject(emptyMap())
+
+                        override suspend fun dailyReviewJob(jobId: String): JsonObject = JsonObject(emptyMap())
                     }
                 },
             )

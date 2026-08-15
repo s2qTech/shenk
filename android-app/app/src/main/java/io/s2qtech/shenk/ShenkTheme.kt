@@ -7,14 +7,14 @@ import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 
-private val LightColors = lightColorScheme(
+internal val ShenkLightColors = lightColorScheme(
     primary = Color(0xFF3F6B55),
     onPrimary = Color.White,
     primaryContainer = Color(0xFFDCEBDF),
     onPrimaryContainer = Color(0xFF163728),
     secondary = Color(0xFF53665B),
     secondaryContainer = Color(0xFFE0E7E1),
-    tertiary = Color(0xFF9B7425),
+    tertiary = Color(0xFF906819),
     onTertiary = Color.White,
     tertiaryContainer = Color(0xFFFFE7AF),
     onTertiaryContainer = Color(0xFF342100),
@@ -27,7 +27,9 @@ private val LightColors = lightColorScheme(
     surfaceContainer = Color(0xFFF0F4F0),
     surfaceContainerHigh = Color(0xFFE9EEEA),
     surfaceContainerHighest = Color(0xFFE2E8E3),
-    outline = Color(0xFF78827B),
+    // This token is also used for supporting text. Keep 4.5:1 contrast even on
+    // surfaceVariant, not only the page background.
+    outline = Color(0xFF646E67),
     outlineVariant = Color(0xFFD4DDD6),
     error = Color(0xFFBA1A1A),
     onError = Color.White,
@@ -35,7 +37,7 @@ private val LightColors = lightColorScheme(
     onErrorContainer = Color(0xFF410002),
 )
 
-private val DarkColors = darkColorScheme(
+internal val ShenkDarkColors = darkColorScheme(
     primary = Color(0xFFA5D1B4),
     onPrimary = Color(0xFF123725),
     primaryContainer = Color(0xFF2A503D),
@@ -57,7 +59,7 @@ private val DarkColors = darkColorScheme(
     surfaceContainer = Color(0xFF1B221D),
     surfaceContainerHigh = Color(0xFF222A25),
     surfaceContainerHighest = Color(0xFF2A332D),
-    outline = Color(0xFF8C968F),
+    outline = Color(0xFF909A93),
     outlineVariant = Color(0xFF3A443E),
     error = Color(0xFFFFB4AB),
     onError = Color(0xFF690005),
@@ -68,7 +70,7 @@ private val DarkColors = darkColorScheme(
 @Composable
 fun ShenkTheme(content: @Composable () -> Unit) {
     MaterialTheme(
-        colorScheme = if (isSystemInDarkTheme()) DarkColors else LightColors,
+        colorScheme = if (isSystemInDarkTheme()) ShenkDarkColors else ShenkLightColors,
         content = content,
     )
 }

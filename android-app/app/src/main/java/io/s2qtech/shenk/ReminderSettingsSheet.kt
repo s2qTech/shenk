@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
@@ -95,7 +96,7 @@ fun ReminderSettingsSheet(
         )
         Text("没有训练、休息或跳过记录时提醒一次。", color = MaterialTheme.colorScheme.secondary)
         Spacer(Modifier.height(28.dp))
-        Button(onClick = { onSave(value) }, modifier = Modifier.fillMaxWidth().height(56.dp)) {
+        Button(onClick = { onSave(value) }, modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp)) {
             Text("保存提醒")
         }
         Spacer(Modifier.height(22.dp))

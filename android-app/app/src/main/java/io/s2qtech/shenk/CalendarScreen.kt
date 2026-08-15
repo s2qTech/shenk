@@ -7,6 +7,7 @@ import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -63,6 +64,11 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.semantics.role
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.material.icons.Icons
@@ -398,7 +404,27 @@ private fun AgendaDayRow(
             modifier = Modifier
                 .weight(1f)
                 .heightIn(min = if (day.bodyMetrics.isEmpty()) 104.dp else 126.dp)
-                .clickable(onClick = onClick),
+                .clickable(onClick = onClick)
+                .clearAndSetSemantics {
+                    role = Role.Button
+                    contentDescription = buildString {
+                        append(day.guidance.title)
+                        append('，')
+                        append(
+                            when (source) {
+                                GuidanceSource.ACTUAL -> "实际记录"
+                                GuidanceSource.FORMAL_PLAN -> "正式计划"
+                                GuidanceSource.LOCAL_SUGGESTION -> "本地建议"
+                            },
+                        )
+                        day.guidance.estimatedMinutes?.let { append("，$it 分钟") }
+                        if (day.bodyMetrics.isNotEmpty()) append("，有身体数据")
+                    }
+                    this.onClick(label = "查看日期详情") {
+                        onClick()
+                        true
+                    }
+                },
         ) {
             if (source == GuidanceSource.LOCAL_SUGGESTION) {
                 Canvas(Modifier.fillMaxSize()) {
@@ -440,7 +466,7 @@ private fun AgendaDayRow(
                 Spacer(Modifier.width(10.dp))
                 Icon(
                     imageVector = trainingIcon(day.guidance.trainingType),
-                    contentDescription = day.guidance.title,
+                    contentDescription = null,
                     modifier = Modifier.size(32.dp),
                     tint = if (source == GuidanceSource.LOCAL_SUGGESTION) {
                         MaterialTheme.colorScheme.outline
@@ -520,7 +546,7 @@ private fun DailyMetricValue(metric: DailyMetric) {
         metric.changeDirection != MetricChangeDirection.UNCHANGED &&
         !isImprovement
     val color = when {
-        isImprovement -> Color(0xFF3C8B60)
+        isImprovement -> MaterialTheme.colorScheme.primary
         isWorse -> MaterialTheme.colorScheme.error
         else -> MaterialTheme.colorScheme.secondary
     }
@@ -754,13 +780,20 @@ private fun GuidanceSummary(
     }
 }
 
-private fun trainingColor(type: String): Color = when (type) {
-    "strength", "travel_strength" -> Color(0xFF63A76B)
-    "quality_walk", "indoor_cardio" -> Color(0xFF6389C9)
-    "easy_walk" -> Color(0xFF62AFC2)
-    "recovery", "stretch", "warmup", "cooldown" -> Color(0xFFD6A43A)
-    "rest" -> Color(0xFF9B9385)
-    else -> Color(0xFF6D8F7A)
+@Composable
+private fun trainingColor(type: String): Color {
+    return accessibleTrainingColor(type, isSystemInDarkTheme())
+}
+
+internal fun accessibleTrainingColor(type: String, dark: Boolean): Color {
+    return when (type) {
+        "strength", "travel_strength" -> if (dark) Color(0xFF79C982) else Color(0xFF397447)
+        "quality_walk", "indoor_cardio" -> if (dark) Color(0xFF8CB2F0) else Color(0xFF3F669B)
+        "easy_walk" -> if (dark) Color(0xFF75C8DC) else Color(0xFF2B7180)
+        "recovery", "stretch", "warmup", "cooldown" -> if (dark) Color(0xFFE9BD61) else Color(0xFF805D00)
+        "rest" -> if (dark) Color(0xFFBDB4A5) else Color(0xFF665F54)
+        else -> if (dark) Color(0xFF8FB5A0) else Color(0xFF476754)
+    }
 }
 
 private fun trainingIcon(type: String): ImageVector = when (type) {
