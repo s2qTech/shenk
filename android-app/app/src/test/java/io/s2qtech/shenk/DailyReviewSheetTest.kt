@@ -47,5 +47,7 @@ class DailyReviewSheetTest {
     fun providerFailureExplainsTheActionInsteadOfShowingGeneric502() {
         assertTrue(dailyReviewFailureMessage("ai_provider_http_402", retrying = false).contains("余额"))
         assertTrue(dailyReviewFailureMessage("ai_provider_review_invalid", retrying = true).contains("不完整"))
+        assertTrue(dailyReviewFailureMessage("ai_provider_job_expired", retrying = false).contains("连接意外中断"))
+        assertTrue(dailyReviewFailureMessage("ai_provider_job_abandoned", retrying = false).contains("可以重新尝试"))
     }
 }

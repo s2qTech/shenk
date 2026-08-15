@@ -9,7 +9,10 @@ const nodeCrypto = require("node:crypto");
 
 function loadWorkerContext() {
   const workerPath = path.join(__dirname, "..", "cloudflare", "worker.js");
-  const source = fs.readFileSync(workerPath, "utf8").replace("export default {", "globalThis.__worker = {");
+  const source = fs.readFileSync(workerPath, "utf8")
+    .replace('import { WorkflowEntrypoint } from "cloudflare:workers";', 'class WorkflowEntrypoint {}')
+    .replace("export default {", "globalThis.__worker = {")
+    .replace("export class DailyReviewWorkflow", "class DailyReviewWorkflow");
   const webCrypto = nodeCrypto.webcrypto;
   const context = {
     URL,

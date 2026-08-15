@@ -10,3 +10,8 @@ binding = "DB"
 database_name = "shenk"
 database_id = "replace-with-cloudflare-d1-database-id"
 migrations_dir = "cloudflare/migrations"
+
+[[workflows]]
+name = "shenk-daily-review"
+binding = "DAILY_REVIEW_WORKFLOW"
+class_name = "DailyReviewWorkflow"

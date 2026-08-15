@@ -25,7 +25,7 @@ object DailyReviewScheduler {
     fun enqueue(
         context: Context,
         initialDelay: Duration = Duration.ZERO,
-        policy: ExistingWorkPolicy = ExistingWorkPolicy.REPLACE,
+        policy: ExistingWorkPolicy = ExistingWorkPolicy.APPEND_OR_REPLACE,
     ) {
         val request = OneTimeWorkRequestBuilder<DailyReviewWorker>()
             .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())

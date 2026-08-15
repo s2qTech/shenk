@@ -71,7 +71,7 @@
         "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/DailyReviewRequest" } } } },
         "responses": {
           "200": { "description": "Terminal daily-review job state", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/DailyReviewResponse" } } } },
-          "202": { "description": "The same job is already running", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/DailyReviewResponse" } } } },
+          "202": { "description": "The job was accepted by the durable server workflow or the same job is already running", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/DailyReviewResponse" } } } },
           "400": { "$ref": "#/components/responses/ContractError" },
           "401": { "$ref": "#/components/responses/Unauthorized" },
           "403": { "description": "Client role cannot use the AI review proxy" },

@@ -1,3 +1,5 @@
+import { WorkflowEntrypoint } from "cloudflare:workers";
+
 const SCHEMA_VERSION = "2026-06-28-cloud-records-v2";
 const ACTIVE_CONTRACT_VERSION = "1.0";
 const SUPPORTED_CONTRACT_VERSIONS = new Set(["1.0", "2.0"]);
@@ -327,6 +329,56 @@ export default {
     }
   }
 };
+
+export class DailyReviewWorkflow extends WorkflowEntrypoint {
+  async run(event, step) {
+    const { jobId, inputDigest, sealedPayload } = event.payload || {};
+    const outcome = await step.do(
+      "generate daily review",
+      {
+        retries: { limit: 1, delay: "1 second", backoff: "constant" },
+        timeout: "24 hours"
+      },
+      async () => {
+        try {
+          const body = await openDailyReviewPayload(this.env, jobId, sealedPayload);
+          if (body.jobId !== jobId || body.inputDigest !== inputDigest) {
+            throw providerError("daily_review_job_payload_mismatch", 400);
+          }
+          const row = await readDailyReviewJob(this.env, jobId);
+          if (!row || row.input_digest !== inputDigest || row.state !== "RUNNING") {
+            return { state: "IGNORED" };
+          }
+          const generated = await generateDailyReview(body);
+          return {
+            state: "SUCCEEDED",
+            review: generated.review,
+            usage: generated.usage,
+            finishReason: generated.finishReason,
+            upstreamRequests: generated.upstreamRequests
+          };
+        } catch (error) {
+          return {
+            state: "FAILED",
+            usage: error.usage || emptyAiUsage(),
+            finishReason: error.finishReason || null,
+            upstreamRequests: Number(error.upstreamRequests || 1),
+            error: safeAiErrorCode(error)
+          };
+        }
+      }
+    );
+    if (outcome.state === "IGNORED") return outcome;
+    return await step.do(
+      "persist daily review result",
+      {
+        retries: { limit: 10, delay: "2 seconds", backoff: "exponential" },
+        timeout: "10 minutes"
+      },
+      async () => persistDailyReviewOutcome(this.env, jobId, outcome)
+    );
+  }
+}
 
 function protectedResourceMetadata(url) {
   return {
@@ -1720,11 +1772,18 @@ async function submitDailyReviewJob(env, body) {
   if (!/^[a-zA-Z0-9:_-]{8,160}$/.test(jobId) || !/^sha256:[a-f0-9]{64}$/.test(inputDigest)) {
     throw providerError("invalid_daily_review_job", 400);
   }
-  const existing = await readDailyReviewJob(env, jobId);
+  let existing = await readDailyReviewJob(env, jobId);
   if (existing && existing.input_digest !== inputDigest) throw providerError("daily_review_job_conflict", 409);
   if (existing?.state === "SUCCEEDED") return dailyReviewJobResponse(existing);
-  if (existing?.state === "RUNNING" && !dailyReviewJobExpired(existing)) return dailyReviewJobResponse(existing);
+  if (existing?.state === "RUNNING") return dailyReviewJobResponse(existing);
   if (existing?.state === "FAILED" && body?.retry !== true) return dailyReviewJobResponse(existing);
+
+  validateAiProvider(body);
+  validateDailyReviewSnapshot(body?.snapshot);
+  if (!env.DAILY_REVIEW_WORKFLOW || !env.AI_JOB_ENCRYPTION_KEY) {
+    throw providerError("ai_workflow_not_configured", 503);
+  }
+  const sealedPayload = await sealDailyReviewPayload(env, jobId, body);
 
   const now = new Date().toISOString();
   if (existing) {
@@ -1739,45 +1798,26 @@ async function submitDailyReviewJob(env, body) {
   }
 
   try {
-    const generated = await generateDailyReview(body);
-    const completedAt = new Date().toISOString();
-    await env.DB.prepare(
-      "UPDATE ai_daily_review_jobs SET state = 'SUCCEEDED', review_json = ?, usage_json = ?, finish_reason = ?, upstream_requests = ?, error_code = NULL, updated_at = ? WHERE job_id = ?"
-    ).bind(
-      JSON.stringify(generated.review),
-      JSON.stringify(generated.usage),
-      generated.finishReason || null,
-      generated.upstreamRequests,
-      completedAt,
-      jobId
-    ).run();
-  } catch (error) {
-    const failedAt = new Date().toISOString();
-    await env.DB.prepare(
-      "UPDATE ai_daily_review_jobs SET state = 'FAILED', usage_json = ?, finish_reason = ?, upstream_requests = ?, error_code = ?, updated_at = ? WHERE job_id = ?"
-    ).bind(
-      JSON.stringify(error.usage || emptyAiUsage()),
-      error.finishReason || null,
-      Number(error.upstreamRequests || 1),
-      safeAiErrorCode(error),
-      failedAt,
-      jobId
-    ).run();
+    await env.DAILY_REVIEW_WORKFLOW.create({
+      id: `daily-review-${crypto.randomUUID()}`,
+      params: { jobId, inputDigest, sealedPayload }
+    });
+  } catch {
+    await persistDailyReviewOutcome(env, jobId, {
+      state: "FAILED",
+      usage: emptyAiUsage(),
+      finishReason: null,
+      upstreamRequests: 0,
+      error: "ai_workflow_submit_failed"
+    });
   }
   return dailyReviewJobResponse(await readDailyReviewJob(env, jobId));
 }
 
 async function getDailyReviewJob(env, jobId) {
   if (!/^[a-zA-Z0-9:_-]{8,160}$/.test(jobId)) throw providerError("invalid_daily_review_job", 400);
-  let row = await readDailyReviewJob(env, jobId);
+  const row = await readDailyReviewJob(env, jobId);
   if (!row) throw providerError("daily_review_job_not_found", 404);
-  if (row.state === "RUNNING" && dailyReviewJobExpired(row)) {
-    const now = new Date().toISOString();
-    await env.DB.prepare(
-      "UPDATE ai_daily_review_jobs SET state = 'FAILED', error_code = 'ai_provider_job_expired', updated_at = ? WHERE job_id = ? AND state = 'RUNNING'"
-    ).bind(now, jobId).run();
-    row = await readDailyReviewJob(env, jobId);
-  }
   return dailyReviewJobResponse(row);
 }
 
@@ -1785,8 +1825,90 @@ async function readDailyReviewJob(env, jobId) {
   return await env.DB.prepare("SELECT * FROM ai_daily_review_jobs WHERE job_id = ?").bind(jobId).first();
 }
 
-function dailyReviewJobExpired(row) {
-  return Date.now() - Date.parse(row.updated_at) > 10 * 60 * 1000;
+async function persistDailyReviewOutcome(env, jobId, outcome) {
+  const completedAt = new Date().toISOString();
+  if (outcome.state === "SUCCEEDED") {
+    await env.DB.prepare(
+      "UPDATE ai_daily_review_jobs SET state = 'SUCCEEDED', review_json = ?, usage_json = ?, finish_reason = ?, upstream_requests = ?, error_code = NULL, updated_at = ? WHERE job_id = ? AND state = 'RUNNING'"
+    ).bind(
+      JSON.stringify(outcome.review),
+      JSON.stringify(outcome.usage || emptyAiUsage()),
+      outcome.finishReason || null,
+      Number(outcome.upstreamRequests || 0),
+      completedAt,
+      jobId
+    ).run();
+  } else {
+    await env.DB.prepare(
+      "UPDATE ai_daily_review_jobs SET state = 'FAILED', usage_json = ?, finish_reason = ?, upstream_requests = ?, error_code = ?, updated_at = ? WHERE job_id = ? AND state = 'RUNNING'"
+    ).bind(
+      JSON.stringify(outcome.usage || emptyAiUsage()),
+      outcome.finishReason || null,
+      Number(outcome.upstreamRequests || 0),
+      outcome.error || "ai_provider_unknown",
+      completedAt,
+      jobId
+    ).run();
+  }
+  return dailyReviewJobResponse(await readDailyReviewJob(env, jobId));
+}
+
+async function dailyReviewPayloadKey(env) {
+  const secret = String(env.AI_JOB_ENCRYPTION_KEY || "");
+  if (secret.length < 32) throw providerError("ai_workflow_encryption_key_invalid", 503);
+  const material = await crypto.subtle.digest(
+    "SHA-256",
+    new TextEncoder().encode(`shenk-daily-review-v1\0${secret}`)
+  );
+  return await crypto.subtle.importKey("raw", material, { name: "AES-GCM" }, false, ["encrypt", "decrypt"]);
+}
+
+async function sealDailyReviewPayload(env, jobId, body) {
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const key = await dailyReviewPayloadKey(env);
+  const plaintext = new TextEncoder().encode(JSON.stringify(body));
+  const ciphertext = await crypto.subtle.encrypt(
+    { name: "AES-GCM", iv, additionalData: new TextEncoder().encode(jobId) },
+    key,
+    plaintext
+  );
+  return `${bytesToBase64(iv)}.${bytesToBase64(new Uint8Array(ciphertext))}`;
+}
+
+async function openDailyReviewPayload(env, jobId, sealedPayload) {
+  const [ivEncoded, ciphertextEncoded, extra] = String(sealedPayload || "").split(".");
+  if (!ivEncoded || !ciphertextEncoded || extra !== undefined) {
+    throw providerError("daily_review_job_payload_invalid", 400);
+  }
+  try {
+    const key = await dailyReviewPayloadKey(env);
+    const plaintext = await crypto.subtle.decrypt(
+      {
+        name: "AES-GCM",
+        iv: base64ToBytes(ivEncoded),
+        additionalData: new TextEncoder().encode(jobId)
+      },
+      key,
+      base64ToBytes(ciphertextEncoded)
+    );
+    return JSON.parse(new TextDecoder().decode(plaintext));
+  } catch (error) {
+    if (error?.message === "ai_workflow_encryption_key_invalid") throw error;
+    throw providerError("daily_review_job_payload_invalid", 400);
+  }
+}
+
+function bytesToBase64(bytes) {
+  let binary = "";
+  for (let offset = 0; offset < bytes.length; offset += 0x8000) {
+    binary += String.fromCharCode(...bytes.subarray(offset, offset + 0x8000));
+  }
+  return btoa(binary);
+}
+
+function base64ToBytes(encoded) {
+  const binary = atob(encoded);
+  return Uint8Array.from(binary, character => character.charCodeAt(0));
 }
 
 function dailyReviewJobResponse(row) {
@@ -1803,14 +1925,18 @@ function dailyReviewJobResponse(row) {
   };
 }
 
-async function generateDailyReview(body) {
-  const provider = validateAiProvider(body);
-  const snapshot = body?.snapshot;
+function validateDailyReviewSnapshot(snapshot) {
   if (!snapshot || snapshot.schema !== "daily_review_snapshot" || !snapshot.date || !Array.isArray(snapshot.records)) {
     const error = new Error("invalid_daily_review_snapshot");
     error.status = 400;
     throw error;
   }
+  return snapshot;
+}
+
+async function generateDailyReview(body) {
+  const provider = validateAiProvider(body);
+  const snapshot = validateDailyReviewSnapshot(body?.snapshot);
   const system = [
     "你是身刻的专业、克制、实事求是的每日运动复盘教练。",
     "你正在复盘 snapshot.date 这一天已经发生的执行结果，而不是在训练前指导这一天应该怎么做。即使复盘日期是今天，也必须使用事后评价语义。",
@@ -1839,7 +1965,7 @@ async function generateDailyReview(body) {
       provider,
       messages,
       42_066,
-      { thinkingEnabled: true, jsonOutput: true, timeoutMs: 6 * 60_000 }
+      { thinkingEnabled: true, jsonOutput: true, timeoutMs: 0 }
     );
     usage = addAiUsage(usage, primary.usage);
     finishReason = primary.finishReason;
@@ -1860,7 +1986,7 @@ async function generateDailyReview(body) {
         provider,
         repairMessages,
         8192,
-        { thinkingEnabled: false, jsonOutput: true, timeoutMs: 2 * 60_000 }
+        { thinkingEnabled: false, jsonOutput: true, timeoutMs: 0 }
       );
       usage = addAiUsage(usage, repaired.usage);
       finishReason = repaired.finishReason;
@@ -1899,8 +2025,8 @@ function snapshotHasFormalPlan(snapshot) {
 async function callCompatibleAi(provider, messages, maxTokens, options = {}) {
   let response;
   const timeoutMs = Number.isFinite(options.timeoutMs) ? options.timeoutMs : 20_000;
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  const controller = timeoutMs > 0 ? new AbortController() : null;
+  const timeout = controller ? setTimeout(() => controller.abort(), timeoutMs) : null;
   try {
     const requestBody = {
       model: provider.model,
@@ -1917,14 +2043,15 @@ async function callCompatibleAi(provider, messages, maxTokens, options = {}) {
         "Content-Type": "application/json"
       },
       body: JSON.stringify(requestBody),
-      signal: controller.signal
+      ...(controller ? { signal: controller.signal } : {})
     });
   } catch (cause) {
-    const error = new Error(cause?.name === "AbortError" ? "ai_provider_timeout" : "ai_provider_unreachable");
+    const timedOut = controller?.signal.aborted === true;
+    const error = new Error(timedOut ? "ai_provider_timeout" : "ai_provider_unreachable");
     error.status = 503;
     throw error;
   } finally {
-    clearTimeout(timeout);
+    if (timeout !== null) clearTimeout(timeout);
   }
   if (!response.ok) {
     const error = new Error(`ai_provider_http_${response.status}`);

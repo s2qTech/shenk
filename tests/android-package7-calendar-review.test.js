@@ -73,19 +73,31 @@ test('daily review snapshots version retrospective review policy', () => {
   assert.match(repository, /put\("reviewPolicyVersion", JsonPrimitive\(2\)\)/);
 });
 
-test('daily review generation has layered timeouts and honest retry messaging', () => {
+test('daily review generation is long-running, idempotent, and exposes retry only after terminal failure', () => {
   const repository = read('android-app/core/data-sync/src/main/kotlin/io/s2qtech/shenk/sync/DailyReviewRepository.kt');
+  const androidWorker = read('android-app/app/src/main/java/io/s2qtech/shenk/DailyReviewWork.kt');
+  const application = read('android-app/app/src/main/java/io/s2qtech/shenk/ShenkApplication.kt');
+  const wrangler = read('wrangler.toml');
   const worker = read('cloudflare/worker.js');
   const sheet = read('android-app/app/src/main/java/io/s2qtech/shenk/DailyReviewSheet.kt');
   const today = read('android-app/app/src/main/java/io/s2qtech/shenk/TodayScreen.kt');
 
   assert.match(repository, /\.readTimeout\(0, TimeUnit\.SECONDS\)/);
   assert.match(repository, /"AWAITING_SERVER"/);
+  assert.match(androidWorker, /ExistingWorkPolicy\.APPEND_OR_REPLACE/);
+  assert.match(application, /policy = ExistingWorkPolicy\.KEEP/);
   assert.match(worker, /42_066/);
   assert.match(worker, /8192/);
+  assert.match(worker, /timeoutMs: 0/);
+  assert.match(worker, /class DailyReviewWorkflow extends WorkflowEntrypoint/);
+  assert.match(worker, /sealDailyReviewPayload/);
+  assert.match(worker, /AI_JOB_ENCRYPTION_KEY/);
+  assert.match(worker, /DAILY_REVIEW_WORKFLOW\.create/);
+  assert.match(wrangler, /binding = "DAILY_REVIEW_WORKFLOW"/);
   assert.match(worker, /ai_daily_review_jobs/);
   assert.match(worker, /isRepairableDailyReviewError/);
   assert.match(worker, /"ai_provider_timeout"/);
   assert.match(sheet, /"generation_timeout", "ai_provider_timeout"/);
+  assert.match(sheet, /"ai_provider_job_expired", "ai_provider_job_abandoned"/);
   assert.match(today, /dailyReviewFailureMessage\(/);
 });

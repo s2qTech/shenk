@@ -189,8 +189,8 @@ Android device
   -> DeepSeek V4 Flash
 ```
 
-- The phone sends the provider secret only over TLS for the request.
-- The Worker must not persist or log plaintext provider keys.
+- The phone sends the provider secret only over TLS when submitting the review job.
+- The Worker must not persist or log plaintext provider keys. Before starting the durable Workflow, it AES-GCM seals the provider key and normalized snapshot with a dedicated Worker secret; only ciphertext enters Workflow state.
 - Provider metadata stored with a review excludes secrets.
 - Input is a normalized review payload, not arbitrary database dumps.
 - Output must satisfy a strict daily-review schema before it is stored.
@@ -199,9 +199,10 @@ Android device
 
 1. A confirmed day mutation invalidates the current review input digest.
 2. If required information is missing, prompt once for completion or explicit partial generation.
-3. Online: enqueue immediate generation.
+3. Online: submit once; the Worker records `RUNNING`, starts the durable server Workflow, and returns immediately.
 4. Offline: persist an AI job and retry through WorkManager.
-5. Correction creates a new version; only the latest is prominent.
+5. Android polls authoritative server state until `SUCCEEDED` or explicit `FAILED`; it cannot cancel or duplicate provider execution.
+6. Correction creates a new version; only the latest is prominent.
 
 Daily AI cannot write formal plans, plan adjustments, or routines.
 

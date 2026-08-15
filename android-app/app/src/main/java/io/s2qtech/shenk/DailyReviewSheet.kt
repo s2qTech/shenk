@@ -230,7 +230,7 @@ fun DailyReviewSheet(
                     CircularProgressIndicator(modifier = Modifier.height(24.dp), strokeWidth = 2.dp)
                     Column {
                         Text("正在生成$reviewLabel", fontWeight = FontWeight.SemiBold)
-                        Text("推理通常需要几十秒，可以先返回日期详情。", color = MaterialTheme.colorScheme.secondary)
+                        Text("服务端会继续处理，可以先返回日期详情。", color = MaterialTheme.colorScheme.secondary)
                     }
                 }
             }
@@ -289,6 +289,9 @@ internal fun dailyReviewFailureMessage(error: String?, retrying: Boolean): Strin
     "ai_provider_http_429" -> "DeepSeek 当前请求过多，稍后会自动重试。"
     "ai_provider_response_invalid", "ai_provider_review_invalid", "ai_provider_review_actions_missing" ->
         "DeepSeek 返回的简评不完整，稍后会自动重试。"
+    "ai_provider_output_truncated" -> "DeepSeek 返回内容被截断，结构修复仍未完成，请重新尝试。"
+    "ai_provider_job_expired", "ai_provider_job_abandoned" ->
+        "上一次生成连接意外中断，服务端已确认任务不再运行，可以重新尝试。"
     "generation_timeout", "ai_provider_timeout" -> if (retrying) {
         "DeepSeek 本次生成时间较长，稍后会自动重试。"
     } else {

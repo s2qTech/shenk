@@ -9,7 +9,9 @@ const nodeCrypto = require("node:crypto");
 function loadWorker(fetchImpl = fetch, runtime = {}) {
   const workerPath = path.join(__dirname, "..", "cloudflare", "worker.js");
   const source = fs.readFileSync(workerPath, "utf8")
-    .replace("export default {", "globalThis.__worker = {");
+    .replace('import { WorkflowEntrypoint } from "cloudflare:workers";', 'class WorkflowEntrypoint { constructor(_ctx, env) { this.env = env; } }')
+    .replace("export default {", "globalThis.__worker = {")
+    .replace("export class DailyReviewWorkflow", "globalThis.__DailyReviewWorkflow = class DailyReviewWorkflow");
   const context = {
     URL,
     Request,
@@ -20,12 +22,20 @@ function loadWorker(fetchImpl = fetch, runtime = {}) {
     setTimeout: runtime.setTimeout || setTimeout,
     clearTimeout: runtime.clearTimeout || clearTimeout,
     TextEncoder,
-    crypto: { randomUUID: () => "event_test", subtle: nodeCrypto.webcrypto.subtle },
+    TextDecoder,
+    btoa,
+    atob,
+    crypto: {
+      randomUUID: () => "event_test",
+      getRandomValues: value => nodeCrypto.webcrypto.getRandomValues(value),
+      subtle: nodeCrypto.webcrypto.subtle
+    },
     globalThis: null
   };
   context.globalThis = context;
   vm.createContext(context);
   vm.runInContext(source, context, { filename: workerPath });
+  context.__worker.DailyReviewWorkflow = context.__DailyReviewWorkflow;
   return context.__worker;
 }
 
@@ -56,9 +66,9 @@ function aiJobDb() {
               const jobId = args.at(-1);
               const row = rows.get(jobId);
               if (!row) return { meta: { changes: 0 } };
-              if (/state = 'RUNNING'/.test(sql)) Object.assign(row, { state: "RUNNING", review_json: null, usage_json: null, finish_reason: null, upstream_requests: 0, error_code: null, updated_at: args[0] });
-              else if (/state = 'SUCCEEDED'/.test(sql)) Object.assign(row, { state: "SUCCEEDED", review_json: args[0], usage_json: args[1], finish_reason: args[2], upstream_requests: args[3], error_code: null, updated_at: args[4] });
-              else if (/state = 'FAILED'/.test(sql)) Object.assign(row, { state: "FAILED", usage_json: args[0], finish_reason: args[1], upstream_requests: args[2], error_code: args[3], updated_at: args[4] });
+              if (/SET state = 'RUNNING'/.test(sql)) Object.assign(row, { state: "RUNNING", review_json: null, usage_json: null, finish_reason: null, upstream_requests: 0, error_code: null, updated_at: args[0] });
+              else if (/SET state = 'SUCCEEDED'/.test(sql)) Object.assign(row, { state: "SUCCEEDED", review_json: args[0], usage_json: args[1], finish_reason: args[2], upstream_requests: args[3], error_code: null, updated_at: args[4] });
+              else if (/SET state = 'FAILED'/.test(sql)) Object.assign(row, { state: "FAILED", usage_json: args[0], finish_reason: args[1], upstream_requests: args[2], error_code: args[3], updated_at: args[4] });
               rows.set(jobId, row);
               return { meta: { changes: 1 } };
             }
@@ -67,6 +77,43 @@ function aiJobDb() {
       };
     }
   };
+}
+
+function dailyReviewWorkflowEnv(worker, db) {
+  const pending = [];
+  const env = {
+    SHENK_TOKEN: "valid",
+    DB: db,
+    AI_JOB_ENCRYPTION_KEY: "fixture-encryption-key-with-at-least-32-characters",
+    DAILY_REVIEW_WORKFLOW: {
+      async create({ id, params }) {
+        env.lastWorkflowParams = params;
+        const workflow = Object.create(worker.DailyReviewWorkflow.prototype);
+        workflow.env = env;
+        const execution = Promise.resolve().then(() => workflow.run(
+          { payload: params },
+          { do: async (_name, ...args) => args.at(-1)() }
+        ));
+        pending.push(execution);
+        return { id };
+      }
+    },
+    async finishWorkflows() {
+      await Promise.all(pending);
+    }
+  };
+  return env;
+}
+
+async function readDailyReviewStatus(worker, env, jobId) {
+  await env.finishWorkflows();
+  const response = await worker.fetch(
+    request(`https://worker.example/api/ai/daily-review-jobs/${encodeURIComponent(jobId)}`, {
+      headers: { Authorization: "Bearer valid" }
+    }),
+    env
+  );
+  return { response, body: await response.json() };
 }
 
 async function run() {
@@ -161,6 +208,7 @@ async function run() {
         }) } }]
     }), { status: 200, headers: { "Content-Type": "application/json" } });
   });
+  const env = dailyReviewWorkflowEnv(worker, aiJobDb());
   const response = await worker.fetch(
     request("https://worker.example/api/ai/daily-review", {
       method: "POST",
@@ -177,12 +225,15 @@ async function run() {
         }
       })
     }),
-    { SHENK_TOKEN: "valid", DB: aiJobDb() }
+    env
   );
-  const body = await response.json();
+  const accepted = await response.json();
+  const { body } = await readDailyReviewStatus(worker, env, dailyJobFields("2099-01-01").jobId);
   const upstreamBody = JSON.parse(upstreamRequest.options.body);
   const systemPrompt = upstreamBody.messages.find((message) => message.role === "system")?.content || "";
-    assert.equal(response.status, 200);
+    assert.equal(response.status, 202);
+    assert.equal(accepted.state, "RUNNING");
+    assert.doesNotMatch(JSON.stringify(env.lastWorkflowParams), /fixture-secret|daily_review_snapshot/);
     assert.equal(body.review.conclusion, "Synthetic review.");
     assert.equal(body.review.assessment, "Recovery is appropriate today.");
     assert.equal(body.review.localSuggestion.title, "Easy walk");
@@ -192,7 +243,7 @@ async function run() {
     assert.deepEqual(upstreamBody.thinking, { type: "enabled" });
     assert.equal(upstreamBody.max_tokens, 42_066);
     assert.deepEqual(upstreamBody.response_format, { type: "json_object" });
-    assert.ok(upstreamRequest.options.signal);
+    assert.equal(upstreamRequest.options.signal, undefined);
     assert.match(systemPrompt, /已经发生的执行结果/);
     assert.match(systemPrompt, /当天完成得怎么样/);
     assert.match(systemPrompt, /后续修正措施/);
@@ -232,30 +283,34 @@ async function run() {
       provider: { id: "custom", baseUrl: "https://provider.example/v1", model: "fixture", apiKey: "fixture-secret" },
       snapshot: { schema: "daily_review_snapshot", contractVersion: "2.0", date: "2099-01-05", records: [] }
     });
+    const env = dailyReviewWorkflowEnv(worker, db);
     const invoke = () => worker.fetch(request("https://worker.example/api/ai/daily-review", {
       method: "POST",
       headers: { Authorization: "Bearer valid", "Content-Type": "application/json" },
       body
-    }), { SHENK_TOKEN: "valid", DB: db });
+    }), env);
 
     const first = await invoke();
     const firstBody = await first.json();
+    const completed = await readDailyReviewStatus(worker, env, dailyJobFields("2099-01-05").jobId);
     const second = await invoke();
     const secondBody = await second.json();
     const status = await worker.fetch(
       request(`https://worker.example/api/ai/daily-review-jobs/${encodeURIComponent(dailyJobFields("2099-01-05").jobId)}`, {
         headers: { Authorization: "Bearer valid" }
       }),
-      { SHENK_TOKEN: "valid", DB: db }
+      env
     );
-    assert.equal(firstBody.state, "SUCCEEDED");
+    assert.equal(first.status, 202);
+    assert.equal(firstBody.state, "RUNNING");
+    assert.equal(completed.body.state, "SUCCEEDED");
     assert.equal(secondBody.state, "SUCCEEDED");
     assert.equal((await status.json()).state, "SUCCEEDED");
     assert.equal(upstreamCalls, 1);
-    assert.equal(firstBody.usage.totalTokens, 23013);
-    assert.equal(firstBody.usage.reasoningTokens, 1500);
-    assert.equal(firstBody.finishReason, "stop");
-    assert.equal(firstBody.upstreamRequests, 1);
+    assert.equal(completed.body.usage.totalTokens, 23013);
+    assert.equal(completed.body.usage.reasoningTokens, 1500);
+    assert.equal(completed.body.finishReason, "stop");
+    assert.equal(completed.body.upstreamRequests, 1);
   }
 
   {
@@ -278,6 +333,7 @@ async function run() {
         headers: { "Content-Type": "application/json" }
       });
     });
+    const env = dailyReviewWorkflowEnv(worker, aiJobDb());
     const response = await worker.fetch(
       request("https://worker.example/api/ai/daily-review", {
         method: "POST",
@@ -288,10 +344,12 @@ async function run() {
           snapshot: { schema: "daily_review_snapshot", contractVersion: "2.0", date: "2099-01-04", records: [] }
         })
       }),
-      { SHENK_TOKEN: "valid", DB: aiJobDb() }
+      env
     );
-    const body = await response.json();
-    assert.equal(response.status, 200);
+    const accepted = await response.json();
+    const { body } = await readDailyReviewStatus(worker, env, dailyJobFields("2099-01-04").jobId);
+    assert.equal(response.status, 202);
+    assert.equal(accepted.state, "RUNNING");
     assert.equal(body.review.conclusion, "Repaired review.");
     assert.equal(upstreamBodies.length, 2);
     assert.deepEqual(upstreamBodies[0].thinking, { type: "enabled" });
@@ -303,16 +361,18 @@ async function run() {
     let observedSignal;
     const worker = loadWorker(async (_url, options) => {
       observedSignal = options.signal;
-      if (observedSignal.aborted) {
-        const error = new Error("aborted");
-        error.name = "AbortError";
-        throw error;
-      }
-      throw new Error("expected the synthetic deadline to abort first");
-    }, {
-      setTimeout(callback) { callback(); return 1; },
-      clearTimeout() {}
+      return new Response(JSON.stringify({
+        choices: [{ message: { content: JSON.stringify({
+          conclusion: "Long-running review.",
+          assessment: "Generation completed without a client deadline.",
+          actions: ["Keep the next session easy."],
+          evidence: [],
+          cautions: [],
+          localSuggestion: null
+        }) } }]
+      }), { status: 200, headers: { "Content-Type": "application/json" } });
     });
+    const env = dailyReviewWorkflowEnv(worker, aiJobDb());
     const response = await worker.fetch(
       request("https://worker.example/api/ai/daily-review", {
         method: "POST",
@@ -323,13 +383,15 @@ async function run() {
           snapshot: { schema: "daily_review_snapshot", contractVersion: "2.0", date: "2099-01-03", records: [] }
         })
       }),
-      { SHENK_TOKEN: "valid", DB: aiJobDb() }
+      env
     );
-    assert.equal(response.status, 200);
-    const body = await response.json();
-    assert.equal(body.state, "FAILED");
-    assert.equal(body.error, "ai_provider_timeout");
-    assert.equal(observedSignal.aborted, true);
+    const accepted = await response.json();
+    const { body } = await readDailyReviewStatus(worker, env, dailyJobFields("2099-01-03").jobId);
+    assert.equal(response.status, 202);
+    assert.equal(accepted.state, "RUNNING");
+    assert.equal(body.state, "SUCCEEDED");
+    assert.equal(body.review.conclusion, "Long-running review.");
+    assert.equal(observedSignal, undefined);
   }
 
   {
@@ -347,6 +409,7 @@ async function run() {
         }
       }) } }]
     }), { status: 200, headers: { "Content-Type": "application/json" } }));
+    const env = dailyReviewWorkflowEnv(worker, aiJobDb());
     const response = await worker.fetch(
       request("https://worker.example/api/ai/daily-review", {
         method: "POST",
@@ -367,10 +430,12 @@ async function run() {
           }
         })
       }),
-      { SHENK_TOKEN: "valid", DB: aiJobDb() }
+      env
     );
-    const body = await response.json();
-    assert.equal(response.status, 200);
+    const accepted = await response.json();
+    const { body } = await readDailyReviewStatus(worker, env, dailyJobFields("2099-01-02").jobId);
+    assert.equal(response.status, 202);
+    assert.equal(accepted.state, "RUNNING");
     assert.equal(body.review.localSuggestion, null);
   }
 

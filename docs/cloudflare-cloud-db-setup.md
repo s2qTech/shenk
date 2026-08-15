@@ -34,17 +34,21 @@ npx wrangler d1 migrations apply shenk --remote
 
 ## Configure Secrets
 
-Use three separate secrets so each app can only write its own area.
+Use separate role tokens plus a dedicated daily-review payload-encryption secret.
 
 ```powershell
 npx wrangler secret put ADMIN_TOKEN
 npx wrangler secret put SHENK_TOKEN
 npx wrangler secret put TIMER_TOKEN
+npx wrangler secret put AI_JOB_ENCRYPTION_KEY
 ```
 
 - `ADMIN_TOKEN`: full read/write, for maintenance only.
 - `SHENK_TOKEN`: 身刻 can write plans, logs, metrics, weather, media, feedback.
 - `TIMER_TOKEN`: timer can write timer sessions.
+- `AI_JOB_ENCRYPTION_KEY`: at least 32 random characters; AES-GCM protects the per-job provider key and normalized snapshot before Cloudflare Workflows persists its event payload. Never reuse an app role token.
+
+`wrangler.toml` also binds `DAILY_REVIEW_WORKFLOW` to `DailyReviewWorkflow`. The submit endpoint writes `RUNNING` and returns immediately; the Workflow performs the provider call and writes the terminal D1 state independently of the phone connection.
 
 `SYNC_TOKEN` is still accepted as a backward-compatible admin token, but new deployments should use the role tokens above.
 

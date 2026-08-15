@@ -1,6 +1,7 @@
 package io.s2qtech.shenk
 
 import android.app.Application
+import androidx.work.ExistingWorkPolicy
 import io.s2qtech.shenk.sync.LocalFirstRepository
 import io.s2qtech.shenk.sync.CalendarRecordRepository
 import io.s2qtech.shenk.sync.CloudConnectionManager
@@ -92,7 +93,10 @@ class ShenkApplication : Application() {
                 reminderSettingsStore.settings.first(),
             )
             SyncScheduler(this@ShenkApplication).enqueue()
-            DailyReviewScheduler.enqueue(this@ShenkApplication)
+            DailyReviewScheduler.enqueue(
+                this@ShenkApplication,
+                policy = ExistingWorkPolicy.KEEP,
+            )
         }
     }
 }

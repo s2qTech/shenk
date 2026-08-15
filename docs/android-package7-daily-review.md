@@ -49,6 +49,9 @@ Package 7 generates one factual daily review after a formal workout, confirmed r
 - The user may explicitly generate a partial review after seeing the missing-field list.
 - Offline jobs remain queued until connectivity returns. After submission, Android uses the same deterministic job id and polls Worker state after any uncertain connection loss; it never submits a second provider request while the Worker reports `RUNNING`.
 - The Worker persists `RUNNING`, `SUCCEEDED`, or `FAILED` before returning the corresponding state. A repeated running or successful job id is idempotent and cannot call DeepSeek again. Only an explicit Worker `FAILED` state opens the user retry action.
+- Android submits once, accepts the Worker's immediate `RUNNING` response, and thereafter only polls D1-backed status. Opening or restarting Shenk keeps existing unique polling work, and chained follow-up work appends without replacing an active poll.
+- Cloudflare Workflows owns provider execution after acceptance. Its durable provider step has a 24-hour infrastructure guard rather than a phone/network deadline; the normal provider call and bounded structure-repair call have no application-defined timeout. The 20-second deadline remains limited to the explicit connection test.
+- The provider key and normalized snapshot are AES-GCM sealed before entering durable Workflow state. Only ciphertext is persisted by the Workflow engine; the dedicated encryption key is a Cloudflare secret, and D1 still stores only job status, result, and usage metadata.
 - Android preserves only the Worker's bounded machine-readable error code. It never displays or persists provider response bodies, but it distinguishes rejected keys, exhausted balance, unavailable models, rate limits, upstream availability, and malformed review output. Both transient and terminal jobs can be retried explicitly.
 
 ## Notifications
