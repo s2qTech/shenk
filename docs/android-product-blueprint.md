@@ -1,6 +1,6 @@
 # Android Product Blueprint
 
-Updated: 2026-08-08
+Updated: 2026-08-17
 Status: confirmed product direction; Packages 0-6 accepted, Package 7 implemented and awaiting Xiaomi 14 acceptance
 
 ## 1. Product Definition
@@ -270,6 +270,12 @@ Walking records may come from wearable data or manual entry and do not require a
 - Use spatial transitions: shared-axis movement between Calendar/Today/Training and container transforms for expanding a date.
 - Default motion should be subtle, approximately 180–280 ms, with reduced-motion support.
 - Every gesture path must have an accessible semantic action and meet font scaling and contrast requirements.
+
+### Confirmed visual-system follow-up
+
+The current native UI is functionally coherent and intentionally minimal, but its visual expression is still too bare in places. A broad, planned refinement is required rather than isolated decoration work. The follow-up starts from the brand foundation—Shenk logo and adaptive light/dark application icon—and then defines one coherent system for product icons, typography hierarchy, spacing rhythm, card grouping, color roles, elevation, component states, illustration/empty states, and motion.
+
+Before broad screen changes, complete a whole-product UI inventory and establish reusable tokens/components plus representative light/dark prototypes for Today, Calendar/date details, Training/timer, review, planning, data, and settings. Preserve the accepted information architecture, one-handed operation, accessibility, day priority, and domain ownership. Minimalism remains a direction, but must communicate intent, hierarchy, and brand character rather than appearing unfinished or relying on generic text-only layout.
 
 ## 13. Phase 1 Success Criteria
 
