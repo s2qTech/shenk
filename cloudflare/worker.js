@@ -1947,7 +1947,8 @@ async function generateDailyReview(body) {
     "localSuggestion 不得伪装成正式计划，且只能建议当天，不得安排未来日期。",
     "重点评价当天完成得怎么样、计划与实际是否匹配、存在什么问题及可能原因，并给出接下来或下一次如何修正；不要复述输入中的状态、测量和训练流水。",
     "conclusion 是完整、可独立阅读的事后评价结论，不超过 50 个汉字；只概括当天表现和最重要的问题，不写尚未执行的当日指令。assessment 是复盘分析，不超过 300 个汉字。",
-    "actions 为 1 至 3 条后续修正措施，面向接下来、下次训练或有依据时的次日；不得把 reviewed date 上尚未发生的动作写成仍需完成的任务。evidence 只保留 1 至 4 条关键依据；cautions 只写真实风险，没有则为空数组。",
+    "actions 为 1 至 3 条后续修正措施，每条只表达一个动作，面向接下来、下次训练或有依据时的次日；不得把 reviewed date 上尚未发生的动作写成仍需完成的任务。cautions 只写真实风险，没有则为空数组。",
+    "evidence 只保留 1 至 4 条最能支撑结论的关键依据，每条写成用户可直接阅读的简短中文事实。禁止输出 estimatedMinutes、durationSec、status_checkin、calf_ankle 等 JSON 字段名、下划线或驼峰枚举、内部 ID 和原始状态码；时长换算为小时/分钟，疼痛区域、侧别和程度写成人话。",
     "只输出 JSON，不要 Markdown：{\"conclusion\":\"...\",\"assessment\":\"...\",\"actions\":[\"...\"],\"evidence\":[\"...\"],\"cautions\":[\"...\"],\"localSuggestion\":null}。",
     "localSuggestion 非空时格式为：{\"date\":\"YYYY-MM-DD\",\"title\":\"...\",\"trainingType\":\"...\",\"estimatedMinutes\":30,\"reason\":\"...\"}。"
   ].join("\n");

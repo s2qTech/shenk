@@ -247,6 +247,8 @@ async function run() {
     assert.match(systemPrompt, /已经发生的执行结果/);
     assert.match(systemPrompt, /当天完成得怎么样/);
     assert.match(systemPrompt, /后续修正措施/);
+    assert.match(systemPrompt, /用户可直接阅读的简短中文事实/);
+    assert.match(systemPrompt, /禁止输出 estimatedMinutes、durationSec、status_checkin、calf_ankle/);
     assert.doesNotMatch(systemPrompt, /今天怎么做/);
     assert.doesNotMatch(JSON.stringify(body), /fixture-secret/);
   }

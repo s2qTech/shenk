@@ -626,22 +626,18 @@ private fun DayDetails(
             fontWeight = FontWeight.SemiBold,
         )
         Spacer(Modifier.height(18.dp))
-        Surface(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(24.dp),
-            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.52f),
-        ) {
-            Column(Modifier.fillMaxWidth().padding(18.dp)) {
-                GuidanceSummary(
-                    guidance = details.guidance,
-                    onEdit = details.actualLogs.firstOrNull()?.takeIf { canEdit }?.let { log ->
-                        { onEdit(log) }
-                    },
-                )
-                if (details.bodyMetrics.isNotEmpty()) {
-                    Spacer(Modifier.height(16.dp))
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-                    Spacer(Modifier.height(14.dp))
+        DayDetailCard {
+            GuidanceSummary(
+                guidance = details.guidance,
+                onEdit = details.actualLogs.firstOrNull()?.takeIf { canEdit }?.let { log ->
+                    { onEdit(log) }
+                },
+            )
+        }
+        if (details.bodyMetrics.isNotEmpty()) {
+            Spacer(Modifier.height(12.dp))
+            DayDetailCard {
+                Column(Modifier.fillMaxWidth()) {
                     Text(
                         "身体数据",
                         color = MaterialTheme.colorScheme.primary,
@@ -655,15 +651,15 @@ private fun DayDetails(
                         details.bodyMetrics.forEach { metric -> DailyMetricValue(metric) }
                     }
                 }
-                if (canReview || reviewState.review != null) {
-                    Spacer(Modifier.height(16.dp))
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-                    Spacer(Modifier.height(16.dp))
-                    CalendarReviewSummary(
-                        state = reviewState,
-                        onOpenReview = onOpenReview,
-                    )
-                }
+            }
+        }
+        if (canReview || reviewState.review != null) {
+            Spacer(Modifier.height(12.dp))
+            DayDetailCard {
+                CalendarReviewSummary(
+                    state = reviewState,
+                    onOpenReview = onOpenReview,
+                )
             }
         }
         if (canEdit && details.actualLogs.isEmpty()) {
@@ -676,6 +672,19 @@ private fun DayDetails(
             Text("训练记录已超过可修正范围。", color = MaterialTheme.colorScheme.outline)
         }
         Spacer(Modifier.height(20.dp))
+    }
+}
+
+@Composable
+private fun DayDetailCard(content: @Composable () -> Unit) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(24.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+    ) {
+        Column(Modifier.fillMaxWidth().padding(18.dp)) {
+            content()
+        }
     }
 }
 

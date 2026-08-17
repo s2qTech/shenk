@@ -2,19 +2,21 @@ package io.s2qtech.shenk
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -30,6 +32,9 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.material.icons.Icons
@@ -139,67 +144,87 @@ fun DailyReviewSheet(
         Spacer(Modifier.height(20.dp))
 
         state.review?.let { review ->
-            Surface(color = MaterialTheme.colorScheme.primaryContainer, shape = RoundedCornerShape(24.dp)) {
-                Column(Modifier.fillMaxWidth().padding(20.dp)) {
-                    Text("今日评价", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.secondary)
-                    Spacer(Modifier.height(6.dp))
-                    Text(review.conclusion, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
+            ReviewSectionCard(
+                title = "今日评价",
+                containerColor = MaterialTheme.colorScheme.primaryContainer,
+                contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+            ) {
+                Text(
+                    review.conclusion,
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.SemiBold,
+                )
+            }
 
-                    if (review.assessment.isNotBlank()) {
-                        Spacer(Modifier.height(20.dp))
-                        Text("复盘分析", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                        Spacer(Modifier.height(8.dp))
-                        Text(review.assessment, style = MaterialTheme.typography.bodyLarge)
-                    }
+            if (review.assessment.isNotBlank()) {
+                Spacer(Modifier.height(12.dp))
+                ReviewSectionCard(title = "复盘分析") {
+                    Text(review.assessment, style = MaterialTheme.typography.bodyLarge)
+                }
+            }
 
-                    review.localSuggestion?.let { suggestion ->
-                        Spacer(Modifier.height(20.dp))
-                        Text("本地建议", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                        Spacer(Modifier.height(8.dp))
-                        Text(
-                            buildString {
-                                append(suggestion.title)
-                                suggestion.estimatedMinutes?.let { append(" · 约 ${it} 分钟") }
-                            },
-                            style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.SemiBold,
-                        )
-                        suggestion.reason?.takeIf { it.isNotBlank() }?.let {
-                            Spacer(Modifier.height(6.dp))
-                            Text(it, style = MaterialTheme.typography.bodyLarge)
-                        }
+            review.localSuggestion?.let { suggestion ->
+                Spacer(Modifier.height(12.dp))
+                ReviewSectionCard(title = "本地建议") {
+                    Text(
+                        buildString {
+                            append(suggestion.title)
+                            suggestion.estimatedMinutes?.let { append(" · 约 ${it} 分钟") }
+                        },
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                    suggestion.reason?.takeIf { it.isNotBlank() }?.let {
                         Spacer(Modifier.height(6.dp))
-                        Text("仅在没有正式计划时生效，不会修改计划。", color = MaterialTheme.colorScheme.secondary)
+                        Text(it, style = MaterialTheme.typography.bodyLarge)
                     }
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        "仅在没有正式计划时生效，不会修改计划。",
+                        color = MaterialTheme.colorScheme.secondary,
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                }
+            }
 
-                    if (review.actions.isNotEmpty()) {
-                        Spacer(Modifier.height(20.dp))
-                        Text("后续修正", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                        review.actions.forEach { ReviewLine(it) }
-                    }
-                    if (review.cautions.isNotEmpty()) {
-                        Spacer(Modifier.height(16.dp))
-                        Text("需要留意", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                        review.cautions.forEach { ReviewLine(it, error = true) }
+            if (review.actions.isNotEmpty()) {
+                Spacer(Modifier.height(12.dp))
+                ReviewSectionCard(title = "接下来怎么做") {
+                    review.actions.forEachIndexed { index, action ->
+                        NumberedReviewLine(index + 1, action)
                     }
                 }
             }
 
-            if (review.evidence.isNotEmpty()) {
-                Spacer(Modifier.height(18.dp))
-                Text("判断依据", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                Spacer(Modifier.height(8.dp))
-                review.evidence.forEach { ReviewLine(it, subdued = true) }
+            if (review.cautions.isNotEmpty()) {
+                Spacer(Modifier.height(12.dp))
+                ReviewSectionCard(
+                    title = "需要留意",
+                    containerColor = MaterialTheme.colorScheme.errorContainer,
+                    contentColor = MaterialTheme.colorScheme.onErrorContainer,
+                    labelColor = MaterialTheme.colorScheme.error,
+                ) {
+                    review.cautions.forEach { ReviewFactLine(it) }
+                }
             }
-            Spacer(Modifier.height(10.dp))
+
+            if (review.evidence.isNotEmpty()) {
+                Spacer(Modifier.height(12.dp))
+                ReviewSectionCard(
+                    title = "判断依据",
+                    containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                ) {
+                    review.evidence.forEach { ReviewFactLine(humanizeDailyReviewEvidence(it), subdued = true) }
+                }
+            }
+
+            Spacer(Modifier.height(12.dp))
             Text(
                 "第 ${review.version} 版 · DeepSeek V4 Flash",
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.outline,
             )
-            Spacer(Modifier.height(22.dp))
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-            Spacer(Modifier.height(18.dp))
+            Spacer(Modifier.height(20.dp))
         }
 
         if (missing.isNotEmpty()) {
@@ -303,15 +328,135 @@ internal fun dailyReviewFailureMessage(error: String?, retrying: Boolean): Strin
 }
 
 @Composable
-private fun ReviewLine(text: String, error: Boolean = false, subdued: Boolean = false) {
-    Text(
-        text = "· $text",
-        modifier = Modifier.padding(top = 8.dp),
-        color = when {
-            error -> MaterialTheme.colorScheme.error
-            subdued -> MaterialTheme.colorScheme.secondary
-            else -> MaterialTheme.colorScheme.onPrimaryContainer
-        },
-        style = MaterialTheme.typography.bodyLarge,
+private fun ReviewSectionCard(
+    title: String,
+    containerColor: Color = MaterialTheme.colorScheme.surfaceContainerHigh,
+    contentColor: Color = MaterialTheme.colorScheme.onSurface,
+    labelColor: Color = MaterialTheme.colorScheme.primary,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        color = containerColor,
+        contentColor = contentColor,
+        shape = RoundedCornerShape(24.dp),
+    ) {
+        Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 18.dp)) {
+            Text(
+                title,
+                modifier = Modifier.semantics { heading() },
+                color = labelColor,
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.SemiBold,
+            )
+            Spacer(Modifier.height(10.dp))
+            content()
+        }
+    }
+}
+
+@Composable
+private fun NumberedReviewLine(number: Int, text: String) {
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(top = 6.dp, bottom = 6.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalAlignment = Alignment.Top,
+    ) {
+        Text(
+            number.toString().padStart(2, '0'),
+            modifier = Modifier.defaultMinSize(minWidth = 26.dp),
+            color = MaterialTheme.colorScheme.primary,
+            style = MaterialTheme.typography.labelLarge,
+            fontWeight = FontWeight.SemiBold,
+        )
+        Text(text, modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge)
+    }
+}
+
+@Composable
+private fun ReviewFactLine(text: String, subdued: Boolean = false) {
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(top = 5.dp, bottom = 5.dp),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        verticalAlignment = Alignment.Top,
+    ) {
+        Text("•", modifier = Modifier.width(10.dp), color = if (subdued) MaterialTheme.colorScheme.outline else Color.Unspecified)
+        Text(
+            text,
+            modifier = Modifier.weight(1f),
+            color = if (subdued) MaterialTheme.colorScheme.secondary else Color.Unspecified,
+            style = MaterialTheme.typography.bodyLarge,
+        )
+    }
+}
+
+internal fun humanizeDailyReviewEvidence(raw: String): String {
+    var text = raw.trim()
+    text = Regex("计划\\s*(?:为)?\\s*estimatedMinutes\\s*[=:]?\\s*(\\d+)", RegexOption.IGNORE_CASE)
+        .replace(text) { "计划时长为 ${it.groupValues[1]} 分钟" }
+    text = Regex("(?:实际训练日志|训练日志|实际记录)?\\s*durationSec\\s*[=:]?\\s*(\\d+)", RegexOption.IGNORE_CASE)
+        .replace(text) { match ->
+            val seconds = match.groupValues[1].toLongOrNull() ?: 0L
+            "实际记录时长为 ${formatReviewDuration(seconds)}"
+        }
+    val replacements = linkedMapOf(
+        "sleepDurationMinutes" to "睡眠时长",
+        "deepSleepMinutes" to "深睡时长",
+        "sleepQuality" to "睡眠质量",
+        "workPressure" to "工作压力",
+        "averageHeartRate" to "平均心率",
+        "perceivedEffort" to "主观强度",
+        "distanceKm" to "距离",
+        "estimatedMinutes" to "计划时长",
+        "durationSec" to "记录时长",
+        "status_checkin" to "状态记录",
+        "status checkin" to "状态记录",
+        "training_logs" to "实际训练记录",
+        "body_metrics" to "身体测量",
+        "daily_plan_items" to "正式计划",
+        "neck_shoulder" to "颈肩",
+        "lower_back" to "腰背部",
+        "hip_glute" to "髋臀部",
+        "thigh_knee" to "大腿与膝部",
+        "calf_ankle" to "小腿与踝部",
+        "left" to "左侧",
+        "right" to "右侧",
+        "severity" to "程度",
     )
+    replacements.forEach { (machine, display) ->
+        text = Regex("(?<![A-Za-z_])${Regex.escape(machine)}(?![A-Za-z_])", RegexOption.IGNORE_CASE)
+            .replace(text, display)
+    }
+    text = Regex("(\\d{4})-(\\d{2})-(\\d{2})").replace(text) {
+        "${it.groupValues[2].toInt()}月${it.groupValues[3].toInt()}日"
+    }
+    text = Regex("程度\\s*[=:]?\\s*(\\d+)(?!\\s*/5)").replace(text) {
+        "程度 ${it.groupValues[1]}/5"
+    }
+    text = Regex(
+        "状态记录\\s+(\\d+月\\d+日)\\s+记录\\s+(.+?)\\s+(左侧|右侧)\\s+程度\\s+(\\d+/5)",
+    ).replace(text) {
+        "${it.groupValues[1]}状态记录：${it.groupValues[3]}${it.groupValues[2]}不适，程度 ${it.groupValues[4]}"
+    }
+    text = Regex("(\\d+(?:\\.\\d+)?)\\s*km\\b", RegexOption.IGNORE_CASE).replace(text) {
+        "${it.groupValues[1]} 公里"
+    }
+    text = text
+        .replace(Regex("\\s*[,，]\\s*"), "，")
+        .replace(Regex("\\s*[;；]\\s*"), "；")
+        .replace(Regex("\\s+"), " ")
+        .replace("计划 计划时长", "计划时长")
+        .trim()
+    return text
+}
+
+private fun formatReviewDuration(seconds: Long): String {
+    val minutes = (seconds / 60).coerceAtLeast(0)
+    val hours = minutes / 60
+    val remainder = minutes % 60
+    return when {
+        hours == 0L -> "$minutes 分钟"
+        remainder == 0L -> "$hours 小时"
+        else -> "$hours 小时 $remainder 分钟"
+    }
 }

@@ -14,7 +14,7 @@ test('calendar observes and opens the review for the selected date', () => {
   assert.match(calendar, /canReview = !date\.isAfter\(today\)/);
 });
 
-test('calendar day overview combines guidance, body metrics, and a compact daily review', () => {
+test('calendar day overview gives guidance, body metrics, and review separate semantic cards', () => {
   const calendar = read('android-app/app/src/main/java/io/s2qtech/shenk/CalendarScreen.kt');
   const repository = read('android-app/core/data-sync/src/main/kotlin/io/s2qtech/shenk/sync/CalendarRecordRepository.kt');
 
@@ -25,6 +25,8 @@ test('calendar day overview combines guidance, body metrics, and a compact daily
   assert.doesNotMatch(calendar, /details\.actualLogs\.forEachIndexed/);
   assert.match(calendar, /if \(canEdit && details\.actualLogs\.isEmpty\(\)\)/);
   assert.match(calendar, /CalendarReviewSummary\(/);
+  assert.match(calendar, /private fun DayDetailCard/);
+  assert.match(calendar, /if \(details\.bodyMetrics\.isNotEmpty\(\)\) \{[\s\S]{0,120}DayDetailCard/);
   assert.match(calendar, /Text\(\s*review\.conclusion,/);
   assert.doesNotMatch(calendar, /review\.actions\.take\(1\)/);
   assert.doesNotMatch(calendar, /review\.conclusion,[\s\S]{0,200}maxLines/);
@@ -37,9 +39,12 @@ test('daily review sheet is date aware and supports returning to date details', 
   assert.match(sheet, /val reviewLabel = if \(isToday\) "今日简评" else "当日简评"/);
   assert.match(sheet, /onBack: \(\(\) -> Unit\)\? = null/);
   assert.match(sheet, /Text\("返回日期详情"\)/);
-  assert.match(sheet, /Text\("今日评价"/);
-  assert.match(sheet, /Text\("复盘分析"/);
-  assert.match(sheet, /Text\("后续修正"/);
+  assert.match(sheet, /title = "今日评价"/);
+  assert.match(sheet, /ReviewSectionCard\(title = "复盘分析"/);
+  assert.match(sheet, /title = "接下来怎么做"/);
+  assert.match(sheet, /title = "需要留意"/);
+  assert.match(sheet, /title = "判断依据"/);
+  assert.match(sheet, /humanizeDailyReviewEvidence\(it\)/);
   assert.match(sheet, /复盘当天执行，指出问题并给出后续修正/);
 });
 

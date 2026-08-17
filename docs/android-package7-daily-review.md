@@ -2,7 +2,7 @@
 
 Status: accepted on Xiaomi 14 on 2026-08-09; progress advanced to `8 / 9`.
 
-Updated: 2026-08-15
+Updated: 2026-08-17
 
 ## Scope
 
@@ -40,6 +40,9 @@ Package 7 generates one factual daily review after a formal workout, confirmed r
 - Pending generation is visible immediately on that card and in the detail sheet. `PENDING`, `RUNNING`, and `AWAITING_SERVER` are all one non-retryable generating state. The UI never exposes retry until the Worker has recorded `FAILED` for that job.
 - Opening a missing review is the generation action when the provider and critical inputs are ready: it queues once and immediately shows the durable pending state. Missing critical inputs still require an explicit "按现有事实生成" confirmation, and existing, pending, retrying, or completed jobs are never auto-duplicated.
 - The detail sheet contains the professional assessment, bounded action list, cautions, optional local suggestion, and secondary evidence. Raw status facts are supporting evidence and must not dominate the review.
+- The complete review uses separate top-level cards for conclusion, assessment, next actions, cautions, and evidence. It does not place the entire response inside one oversized container or nest cards. Actions are numbered for scanning, and cautions use a dedicated warning container.
+- Evidence is user-facing copy, never a debug surface. The Worker prompt forbids JSON field names, internal IDs, snake/camel enums, raw status codes, and unconverted seconds. Android also humanizes known legacy evidence at display time so already-generated reviews do not require regeneration.
+- Calendar date details apply the same grouping language to guidance, body data, and the concise review, while the continuous calendar agenda deliberately remains a transparent flat-row stream.
 - The Worker prompt requires a concise retrospective conclusion and professional synthesis that adds interpretation beyond the already visible morning-status and training summaries. It evaluates what was completed, whether execution matched the plan, what problems or causes appeared, and how to correct the next session or following days. It must not phrase an already completed day as pre-training guidance.
 
 ## Missing data and offline behavior
