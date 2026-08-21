@@ -3,6 +3,7 @@ package io.s2qtech.shenk.sync
 import android.content.ContentResolver
 import android.net.Uri
 import io.s2qtech.shenk.model.ContractVersion
+import io.s2qtech.shenk.model.EntityOwnership
 import io.s2qtech.shenk.model.SharedRecord
 import java.time.Instant
 import kotlinx.serialization.Serializable
@@ -30,7 +31,7 @@ class BusinessBackupCodec(
     },
 ) {
     fun encode(records: List<SharedRecord>): String {
-        records.forEach { assertNoSecretFields(it.envelope) }
+        validateRecords(records)
         return json.encodeToString(
             BusinessBackup.serializer(),
             BusinessBackup(
@@ -41,20 +42,35 @@ class BusinessBackupCodec(
     }
 
     fun decode(value: String): List<SharedRecord> {
-        require(value.toByteArray().size <= MAX_BACKUP_BYTES) { "backup is too large" }
+        require(value.toByteArray(Charsets.UTF_8).size <= MAX_BACKUP_BYTES) { "backup is too large" }
         val backup = json.decodeFromString(BusinessBackup.serializer(), value)
         require(backup.schema == BusinessBackup.SCHEMA) { "unsupported backup schema" }
         require(backup.contractVersion in setOf(ContractVersion.ACTIVE, ContractVersion.PLANNED)) {
             "unsupported backup contract"
         }
-        backup.records.forEach(::assertNoSecretFields)
-        return backup.records.map(::SharedRecord)
+        runCatching { Instant.parse(backup.exportedAt) }
+            .getOrElse { throw IllegalArgumentException("backup export time is invalid", it) }
+        return backup.records.map(::SharedRecord).also(::validateRecords)
+    }
+
+    private fun validateRecords(records: List<SharedRecord>) {
+        require(records.size <= MAX_RECORDS) { "backup contains too many records" }
+        val keys = mutableSetOf<String>()
+        records.forEach { record ->
+            assertNoSecretFields(record.envelope)
+            require(record.contractVersion in setOf(ContractVersion.ACTIVE, ContractVersion.PLANNED)) {
+                "unsupported record contract"
+            }
+            require(record.entity in EntityOwnership.knownEntities) { "unknown backup entity ${record.entity}" }
+            require(record.revision >= 0 && record.baseRevision >= 0) { "backup revision is invalid" }
+            require(keys.add(record.key.storageKey)) { "backup contains duplicate record ${record.key.storageKey}" }
+        }
     }
 
     private fun assertNoSecretFields(element: JsonElement) {
         when (element) {
             is JsonObject -> element.forEach { (key, value) ->
-                require(!SECRET_FIELD.matches(key)) { "backup contains forbidden configuration field" }
+                require(!isSecretField(key)) { "backup contains forbidden configuration field" }
                 assertNoSecretFields(value)
             }
             is JsonArray -> element.forEach(::assertNoSecretFields)
@@ -64,11 +80,33 @@ class BusinessBackupCodec(
 
     companion object {
         const val MAX_BACKUP_BYTES = 10 * 1024 * 1024
-        private val SECRET_FIELD = Regex(
-            "^(token|.*Token|apiKey|.*ApiKey|password|secret|migrationCode|profileAccessKey)$",
-            RegexOption.IGNORE_CASE,
+        const val MAX_RECORDS = 100_000
+
+        private val EXACT_SECRET_FIELDS = setOf(
+            "authorization",
+            "cookie",
+            "migrationcode",
+            "profileaccesskey",
         )
+
+        private fun isSecretField(key: String): Boolean {
+            val normalized = key.filter(Char::isLetterOrDigit).lowercase()
+            return normalized in EXACT_SECRET_FIELDS ||
+                normalized == "token" || normalized.endsWith("token") ||
+                normalized == "apikey" || normalized.endsWith("apikey") ||
+                normalized == "password" || normalized.endsWith("password") ||
+                normalized == "secret" || normalized.endsWith("secret") ||
+                normalized == "privatekey" || normalized.endsWith("privatekey")
+        }
     }
+}
+
+data class BackupRestoreResult(
+    val restored: Int,
+    val unchanged: Int,
+    val skippedExisting: Int,
+) {
+    val total: Int get() = restored + unchanged + skippedExisting
 }
 
 class SafBusinessBackup(
@@ -83,7 +121,7 @@ class SafBusinessBackup(
         } ?: error("unable to open backup destination")
     }
 
-    suspend fun restoreFrom(uri: Uri): Int {
+    suspend fun restoreFrom(uri: Uri): BackupRestoreResult {
         val text = contentResolver.openInputStream(uri)?.bufferedReader(Charsets.UTF_8)?.use { reader ->
             val buffer = CharArray(8192)
             val output = StringBuilder()
@@ -98,7 +136,6 @@ class SafBusinessBackup(
             output.toString()
         } ?: error("unable to open backup source")
         val records = codec.decode(text)
-        repository.restoreBackup(records)
-        return records.size
+        return repository.restoreBackup(records)
     }
 }

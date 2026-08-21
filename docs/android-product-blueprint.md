@@ -1,7 +1,7 @@
 # Android Product Blueprint
 
-Updated: 2026-08-17
-Status: confirmed product direction; Packages 0-6 accepted, Package 7 implemented and awaiting Xiaomi 14 acceptance
+Updated: 2026-08-22
+Status: confirmed product direction; Packages 0-7 accepted, Package 8 P8.0-P8.6 complete, P8.7 full regression next
 
 ## 1. Product Definition
 

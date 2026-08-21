@@ -186,17 +186,37 @@ class LocalFirstRepository(
         )
     }
 
-    suspend fun restoreBackup(records: List<SharedRecord>) {
+    suspend fun restoreBackup(records: List<SharedRecord>): BackupRestoreResult {
         records.forEach { require(it.entity in EntityOwnership.knownEntities) { "unknown entity ${it.entity}" } }
+        require(records.map { it.key.storageKey }.distinct().size == records.size) {
+            "backup contains duplicate records"
+        }
+        var restored = 0
+        var unchanged = 0
+        var skippedExisting = 0
         database.withTransaction {
             records.forEach { record ->
-                if (EntityOwnership.ownerOf(record.entity) == SharedEntityOwner.TIMER) {
-                    database.records().put(record.toEntity(SyncFoundationState.SYNCED))
+                val existingEntity = database.records().get(record.entity, record.id)
+                if (existingEntity != null) {
+                    val existing = decode(existingEntity)
+                    if (sameBusinessPayload(existing, record)) {
+                        unchanged += 1
+                    } else {
+                        // Backup restore is a merge, never an implicit replace. This preserves
+                        // queued edits, conflicts, and newer local facts until the user resolves them.
+                        skippedExisting += 1
+                    }
                 } else {
-                    queueInTransaction(record)
+                    if (EntityOwnership.ownerOf(record.entity) == SharedEntityOwner.TIMER) {
+                        database.records().put(record.toEntity(SyncFoundationState.SYNCED))
+                    } else {
+                        queueInTransaction(record)
+                    }
+                    restored += 1
                 }
             }
         }
+        return BackupRestoreResult(restored, unchanged, skippedExisting)
     }
 
     private suspend fun queueInTransaction(record: SharedRecord, forcedBaseRevision: Int? = null) {

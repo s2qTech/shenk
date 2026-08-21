@@ -82,6 +82,35 @@ class SyncEngineInstrumentedTest {
         }
     }
 
+    @Test
+    fun restoredBusinessRecordReplaysThroughOutboxAndBecomesSynced() {
+        runBlocking {
+            val restored = repository.restoreBackup(listOf(trainingLog("synthetic-restored-sync")))
+            val api = FakeWorkerApi(
+                upsertResponse = buildJsonObject {
+                    put("accepted", JsonArray(listOf(buildJsonObject {
+                        put("entity", JsonPrimitive("training_logs"))
+                        put("id", JsonPrimitive("synthetic-restored-sync"))
+                        put("revision", JsonPrimitive(7))
+                        put("updatedAt", JsonPrimitive("2100-01-01T00:05:00Z"))
+                    })))
+                    put("conflicts", JsonArray(emptyList()))
+                },
+            )
+
+            val result = engine(api).synchronize()
+
+            assertEquals(1, restored.restored)
+            assertEquals(1, result.pushed)
+            assertEquals(0, database.outbox().count())
+            assertEquals(7, repository.get("training_logs", "synthetic-restored-sync")?.revision)
+            assertEquals(
+                SyncFoundationState.SYNCED.name,
+                database.records().get("training_logs", "synthetic-restored-sync")?.syncState,
+            )
+        }
+    }
+
     private fun engine(api: WorkerRecordApi) = SyncEngine(
         database = database,
         repository = repository,

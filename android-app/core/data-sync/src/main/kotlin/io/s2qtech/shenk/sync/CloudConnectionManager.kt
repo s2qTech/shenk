@@ -126,11 +126,7 @@ class CloudConnectionManager(
 
     private suspend fun saveConfiguration(profile: SyncProfilePayload) {
         try {
-            // API base is written last, so a partial secure-store failure cannot mark a clean install configured.
-            secrets.put(SecretName.SHENK_TOKEN, profile.token)
-            secrets.put(SecretName.TIMER_TOKEN, profile.timerToken)
-            preferences.setTimerUrl(profile.timerUrl)
-            preferences.setApiBase(profile.apiBase)
+            replaceSyncConfiguration(preferences, secrets, profile)
         } catch (error: CancellationException) {
             throw error
         } catch (error: Exception) {
@@ -141,4 +137,38 @@ class CloudConnectionManager(
     companion object {
         const val DEFAULT_SHENK_API_BASE = "https://shenke-cloud-db.sq-muyi.workers.dev/api"
     }
+}
+
+internal suspend fun replaceSyncConfiguration(
+    preferences: DevicePreferencesStore,
+    secrets: SecretStore,
+    profile: SyncProfilePayload,
+) {
+    val previousSettings = preferences.syncSettings()
+    val previousShenkToken = secrets.get(SecretName.SHENK_TOKEN)
+    val previousTimerToken = secrets.get(SecretName.TIMER_TOKEN)
+
+    // Clearing the marker first prevents a partially replaced profile from appearing usable.
+    preferences.setApiBase("")
+    try {
+        secrets.put(SecretName.SHENK_TOKEN, profile.token)
+        secrets.put(SecretName.TIMER_TOKEN, profile.timerToken)
+        preferences.setTimerUrl(profile.timerUrl)
+        preferences.setApiBase(profile.apiBase)
+    } catch (error: Exception) {
+        var rollbackComplete = runCatching {
+            secrets.restore(SecretName.SHENK_TOKEN, previousShenkToken)
+            secrets.restore(SecretName.TIMER_TOKEN, previousTimerToken)
+            preferences.setTimerUrl(previousSettings.timerUrl)
+        }.isSuccess
+        if (rollbackComplete) {
+            rollbackComplete = runCatching { preferences.setApiBase(previousSettings.apiBase) }.isSuccess
+        }
+        if (!rollbackComplete) runCatching { preferences.setApiBase("") }
+        throw error
+    }
+}
+
+private suspend fun SecretStore.restore(name: SecretName, value: String?) {
+    if (value.isNullOrBlank()) remove(name) else put(name, value)
 }

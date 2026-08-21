@@ -4,6 +4,7 @@ import android.content.Context
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
 import android.util.Base64
+import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
@@ -36,7 +37,11 @@ const val DEFAULT_AI_PROVIDER = "deepseek"
 const val DEFAULT_AI_BASE_URL = "https://api.deepseek.com"
 const val DEFAULT_AI_MODEL = "deepseek-v4-flash"
 
-class DevicePreferencesStore(private val context: Context) {
+class DevicePreferencesStore internal constructor(
+    private val preferencesStore: DataStore<Preferences>,
+) {
+    constructor(context: Context) : this(context.shenkPreferences)
+
     private object Keys {
         val apiBase = stringPreferencesKey("sync_api_base")
         val timerUrl = stringPreferencesKey("timer_url")
@@ -44,9 +49,9 @@ class DevicePreferencesStore(private val context: Context) {
     }
 
     suspend fun syncSettings(): SyncEndpointSettings {
-        val preferences = context.shenkPreferences.data.first()
+        val preferences = preferencesStore.data.first()
         val deviceId = preferences[Keys.deviceId] ?: UUID.randomUUID().toString().also { generated ->
-            context.shenkPreferences.edit { it[Keys.deviceId] = generated }
+            preferencesStore.edit { it[Keys.deviceId] = generated }
         }
         return SyncEndpointSettings(
             apiBase = preferences[Keys.apiBase].orEmpty(),
@@ -60,7 +65,7 @@ class DevicePreferencesStore(private val context: Context) {
         require(normalized.isEmpty() || normalized.startsWith("https://")) {
             "Timer URL must use HTTPS"
         }
-        context.shenkPreferences.edit { preferences ->
+        preferencesStore.edit { preferences ->
             if (normalized.isEmpty()) preferences.remove(Keys.timerUrl) else preferences[Keys.timerUrl] = normalized
         }
     }
@@ -70,7 +75,7 @@ class DevicePreferencesStore(private val context: Context) {
         require(normalized.isEmpty() || normalized.startsWith("https://")) {
             "API base must use HTTPS"
         }
-        context.shenkPreferences.edit { preferences ->
+        preferencesStore.edit { preferences ->
             if (normalized.isEmpty()) preferences.remove(Keys.apiBase) else preferences[Keys.apiBase] = normalized
         }
     }
@@ -81,7 +86,7 @@ class DevicePreferencesStore(private val context: Context) {
         require(value == AiProviderSettings()) { "phase 1 only supports the canonical DeepSeek V4 Flash provider" }
     }
 
-    internal val dataStore get() = context.shenkPreferences
+    internal val dataStore get() = preferencesStore
 }
 
 enum class SecretName(val preferenceKey: String) {

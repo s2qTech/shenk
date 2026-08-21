@@ -95,3 +95,55 @@ test("P8.5 enforces contrast, scalable controls, TalkBack alternatives, and redu
   assert.match(training, /CustomAccessibilityAction\("删除\$\{routine\.title\}"\)/);
   assert.match(deviceTest, /rootInActiveWindow/);
 });
+
+test("P8.6 keeps backup restore additive, secret-free, and reachable through SAF", () => {
+  const backup = read("android-app/core/data-sync/src/main/kotlin/io/s2qtech/shenk/sync/BusinessBackup.kt");
+  const repository = read("android-app/core/data-sync/src/main/kotlin/io/s2qtech/shenk/sync/LocalFirstRepository.kt");
+  const today = read("android-app/app/src/main/java/io/s2qtech/shenk/TodayScreen.kt");
+  const settings = read("android-app/app/src/main/java/io/s2qtech/shenk/AppSettingsSheet.kt");
+
+  assert.match(backup, /shenk_business_backup\/v1/);
+  assert.match(backup, /MAX_BACKUP_BYTES/);
+  assert.match(backup, /EntityOwnership\.knownEntities/);
+  assert.match(backup, /duplicate record/);
+  assert.match(backup, /profileaccesskey/);
+  assert.match(backup, /authorization/);
+  assert.match(repository, /Backup restore is a merge, never an implicit replace/);
+  assert.match(repository, /skippedExisting/);
+  assert.match(today, /ActivityResultContracts\.CreateDocument\("application\/json"\)/);
+  assert.match(today, /ActivityResultContracts\.OpenDocument\(\)/);
+  assert.match(settings, /数据备份/);
+  assert.match(settings, /绝不覆盖本机现有修改/);
+});
+
+test("P8.6 aligns encrypted migration parameters and rolls back partial local replacement", () => {
+  const androidCrypto = read("android-app/core/data-sync/src/main/kotlin/io/s2qtech/shenk/sync/SyncProfileCrypto.kt");
+  const webCrypto = read("src/sync-profile-core.js");
+  const connection = read("android-app/core/data-sync/src/main/kotlin/io/s2qtech/shenk/sync/CloudConnectionManager.kt");
+  const keystoreTest = read("android-app/core/data-sync/src/androidTest/kotlin/io/s2qtech/shenk/sync/KeystoreSecretStoreInstrumentedTest.kt");
+
+  assert.match(androidCrypto, /shenk_sync_profile\/v1/);
+  assert.match(webCrypto, /shenk_sync_profile\/v1/);
+  assert.match(androidCrypto, /ITERATIONS = 210_000/);
+  assert.match(webCrypto, /210000/);
+  assert.match(androidCrypto, /SALT_BYTES = 16/);
+  assert.match(androidCrypto, /IV_BYTES = 12/);
+  assert.match(webCrypto, /new Uint8Array\(16\)/);
+  assert.match(webCrypto, /new Uint8Array\(12\)/);
+  assert.match(connection, /preferences\.setApiBase\(""\)/);
+  assert.match(connection, /previousShenkToken/);
+  assert.match(connection, /previousTimerToken/);
+  assert.match(keystoreTest, /shenk_device_preferences_test_/);
+  assert.doesNotMatch(keystoreTest, /DevicePreferencesStore\(context\)/);
+});
+
+test("P8.6 migration and Worker tests generate transient access codes at runtime", () => {
+  const sources = [
+    read("tests/sync-profile-core.test.js"),
+    read("tests/sync-transfer.test.js"),
+    read("tests/worker-security.test.js")
+  ];
+  const literalCredential = /(migrationCode|profileAccessKey|transferCode)\s*=\s*["'][A-Za-z0-9_-]{20,}["']/;
+
+  sources.forEach((source) => assert.doesNotMatch(source, literalCredential));
+});

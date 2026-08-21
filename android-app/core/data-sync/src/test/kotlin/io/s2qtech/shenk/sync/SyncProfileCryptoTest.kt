@@ -1,6 +1,7 @@
 package io.s2qtech.shenk.sync
 
 import java.util.UUID
+import java.util.Base64
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonObject
@@ -47,6 +48,31 @@ class SyncProfileCryptoTest {
         assertEquals(crypto.deriveProfileId(migrationCode), profileId)
         assertEquals(payload, gateway.load(migrationCode))
         assertEquals(migrationCode, api.lastProfileAccessKey)
+    }
+
+    @Test
+    fun malformedProfileParametersAreRejectedBeforeDecryption() {
+        val crypto = SyncProfileCrypto()
+        val code = crypto.generateMigrationCode()
+        val profile = crypto.encrypt(payload(), code)
+        val invalidBytes = Base64.getUrlEncoder().withoutPadding().encodeToString(ByteArray(3))
+
+        assertThrows(IllegalArgumentException::class.java) { crypto.decrypt(profile.copy(salt = invalidBytes), code) }
+        assertThrows(IllegalArgumentException::class.java) { crypto.decrypt(profile.copy(iv = invalidBytes), code) }
+        assertThrows(IllegalArgumentException::class.java) { crypto.decrypt(profile.copy(updatedAt = "not-an-instant"), code) }
+    }
+
+    @Test
+    fun embeddedUrlCredentialsAndOversizedSecretsAreRejected() {
+        val crypto = SyncProfileCrypto()
+        val code = crypto.generateMigrationCode()
+
+        assertThrows(IllegalArgumentException::class.java) {
+            crypto.encrypt(payload().copy(apiBase = "https://user:password@example.invalid/api"), code)
+        }
+        assertThrows(IllegalArgumentException::class.java) {
+            crypto.encrypt(payload().copy(token = "x".repeat(SyncProfileCrypto.MAX_SECRET_CHARS + 1)), code)
+        }
     }
 
     private fun payload() = SyncProfilePayload(

@@ -45,9 +45,9 @@ The exported Room schema is committed under `android-app/core/data-sync/schemas/
 
 ## Business backup
 
-The Storage Access Framework exports `shenk_business_backup/v1` JSON containing complete shared business envelopes only. It excludes preferences, secrets, outbox, conflicts and sync cursors. Import validates schema, contract version, maximum size, entity names and recursively rejects secret-shaped fields before a transaction begins.
+The Storage Access Framework exports `shenk_business_backup/v1` JSON containing complete shared business envelopes only. It excludes preferences, secrets, outbox, conflicts and sync cursors. Import validates schema and timestamp, contract version, maximum size/count, entity names, duplicate record keys and revisions, and recursively rejects normalized secret-shaped fields before a transaction begins. Package 8 exposes this engine from Settings through the system document picker.
 
-Restored Shenk-owned records are queued for synchronization. Restored timer-owned facts remain readable locally and are not written by the record module.
+Restore is additive and never an implicit replace. Missing Shenk-owned records are queued for synchronization; missing timer-owned facts remain readable locally and are not written by the record module. Identical existing records are left unchanged, while a differing existing ID is reported and skipped so queued edits, conflicts, and newer local facts cannot be silently overwritten.
 
 ## Rollback
 
@@ -56,6 +56,6 @@ Package 2 does not migrate production Web or D1 storage. Rolling Android back be
 ## Verification gates
 
 - JVM: domain ownership, additive-field preservation, profile crypto/gateway and backup rejection tests.
-- Android instrumentation: transaction atomicity, owner refusal, dirty-pull protection, stale-pull handling, required metadata, process-death database reopen, accepted/unacknowledged sync behavior and Keystore recreation.
+- Android instrumentation: transaction atomicity, owner refusal, dirty-pull protection, stale-pull handling, required metadata, process-death database reopen, safe backup merge, restored outbox replay, accepted/unacknowledged sync behavior, Android-provider migration crypto and isolated Keystore recreation.
 - Build: KSP Room generation, lint, unit tests, Android-test APK compilation and debug APK assembly.
 - CI: the same build gate plus API 36 emulator execution on the current stable Android baseline.

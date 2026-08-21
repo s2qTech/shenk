@@ -69,6 +69,7 @@ import io.s2qtech.shenk.sync.CloudConnectionFailure
 import io.s2qtech.shenk.sync.CloudConnectionManager
 import io.s2qtech.shenk.sync.CloudConnectionState
 import io.s2qtech.shenk.sync.SyncScheduler
+import io.s2qtech.shenk.sync.SafBusinessBackup
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.util.Locale
@@ -78,8 +79,10 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
-private enum class TodaySheet { MORNING, PRE_WORKOUT, RECORD_DAY, REMINDERS, CONNECTION, DAILY_REVIEW, SETTINGS, AI_SETTINGS }
+private enum class TodaySheet { MORNING, PRE_WORKOUT, RECORD_DAY, REMINDERS, CONNECTION, DAILY_REVIEW, SETTINGS, AI_SETTINGS, DATA_BACKUP }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -109,7 +112,14 @@ fun TodayRoute(
     var connection by remember { mutableStateOf(CloudConnectionState(false, "")) }
     var connectionBusy by remember { mutableStateOf(false) }
     var connectionError by remember { mutableStateOf<String?>(null) }
+    var backupBusy by remember { mutableStateOf(false) }
     var reminderSystemRefresh by remember { mutableIntStateOf(0) }
+    val businessBackup = remember(context) {
+        SafBusinessBackup(
+            contentResolver = context.contentResolver,
+            repository = (context.applicationContext as ShenkApplication).localFirstRepository,
+        )
+    }
     LaunchedEffect(Unit) {
         reminders = reminderStore.settings.first()
         connection = cloudConnectionManager.state()
@@ -120,6 +130,44 @@ fun TodayRoute(
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission(),
     ) { reminderSystemRefresh += 1 }
+    val exportBackupLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/json"),
+    ) { uri ->
+        if (uri != null) scope.launch {
+            backupBusy = true
+            try {
+                withContext(Dispatchers.IO) { businessBackup.exportTo(uri) }
+                snackbar.showSnackbar("业务备份已导出")
+                sheet = null
+            } catch (error: CancellationException) {
+                throw error
+            } catch (_: Exception) {
+                snackbar.showSnackbar("备份导出失败，本机数据未改变")
+            } finally {
+                backupBusy = false
+            }
+        }
+    }
+    val importBackupLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument(),
+    ) { uri ->
+        if (uri != null) scope.launch {
+            backupBusy = true
+            try {
+                val result = withContext(Dispatchers.IO) { businessBackup.restoreFrom(uri) }
+                if (result.restored > 0) SyncScheduler(context).enqueue()
+                val skipped = if (result.skippedExisting > 0) "，跳过 ${result.skippedExisting} 条本机已有记录" else ""
+                snackbar.showSnackbar("已恢复 ${result.restored} 条，${result.unchanged} 条无需更改$skipped")
+                sheet = null
+            } catch (error: CancellationException) {
+                throw error
+            } catch (_: Exception) {
+                snackbar.showSnackbar("备份无效或恢复失败，本机数据未改变")
+            } finally {
+                backupBusy = false
+            }
+        }
+    }
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
@@ -314,12 +362,20 @@ fun TodayRoute(
             AppSettingsSheet(
                 onReminders = { sheet = TodaySheet.REMINDERS },
                 onAiService = { sheet = TodaySheet.AI_SETTINGS },
+                onBackup = { sheet = TodaySheet.DATA_BACKUP },
             )
         }
         TodaySheet.AI_SETTINGS -> ModalBottomSheet(onDismissRequest = { sheet = null }) {
             AiProviderSettingsSheet(
                 repository = dailyReviewRepository,
                 onMessage = { message -> scope.launch { snackbar.showSnackbar(message) } },
+            )
+        }
+        TodaySheet.DATA_BACKUP -> ModalBottomSheet(onDismissRequest = { if (!backupBusy) sheet = null }) {
+            DataBackupSheet(
+                busy = backupBusy,
+                onExport = { exportBackupLauncher.launch("shenk-business-${LocalDate.now()}.json") },
+                onImport = { importBackupLauncher.launch(arrayOf("application/json", "text/json", "text/plain")) },
             )
         }
         null -> Unit

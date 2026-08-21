@@ -3,6 +3,7 @@ package io.s2qtech.shenk.sync
 import java.security.MessageDigest
 import java.security.SecureRandom
 import java.time.Instant
+import java.net.URI
 import java.util.Base64
 import javax.crypto.Cipher
 import javax.crypto.SecretKeyFactory
@@ -59,8 +60,8 @@ class SyncProfileCrypto(
 
     fun encrypt(payload: SyncProfilePayload, migrationCode: String): EncryptedSyncProfile {
         validatePayload(payload)
-        val salt = ByteArray(16).also(random::nextBytes)
-        val iv = ByteArray(12).also(random::nextBytes)
+        val salt = ByteArray(SALT_BYTES).also(random::nextBytes)
+        val iv = ByteArray(IV_BYTES).also(random::nextBytes)
         val cipher = Cipher.getInstance("AES/GCM/NoPadding")
         cipher.init(Cipher.ENCRYPT_MODE, deriveKey(validateMigrationCode(migrationCode), salt), GCMParameterSpec(128, iv))
         val ciphertext = cipher.doFinal(json.encodeToString(SyncProfilePayload.serializer(), payload).toByteArray())
@@ -77,15 +78,23 @@ class SyncProfileCrypto(
             "unsupported sync profile"
         }
         require(profile.iterations == ITERATIONS) { "unsupported sync profile iterations" }
+        runCatching { Instant.parse(profile.updatedAt) }
+            .getOrElse { throw IllegalArgumentException("sync profile timestamp is invalid", it) }
+        val salt = profile.salt.base64UrlBytes()
+        val iv = profile.iv.base64UrlBytes()
+        val ciphertext = profile.ciphertext.base64UrlBytes()
+        require(salt.size == SALT_BYTES) { "sync profile salt is invalid" }
+        require(iv.size == IV_BYTES) { "sync profile IV is invalid" }
+        require(ciphertext.size in GCM_TAG_BYTES..MAX_CIPHERTEXT_BYTES) { "sync profile ciphertext is invalid" }
         val cipher = Cipher.getInstance("AES/GCM/NoPadding")
         cipher.init(
             Cipher.DECRYPT_MODE,
-            deriveKey(validateMigrationCode(migrationCode), profile.salt.base64UrlBytes()),
-            GCMParameterSpec(128, profile.iv.base64UrlBytes()),
+            deriveKey(validateMigrationCode(migrationCode), salt),
+            GCMParameterSpec(128, iv),
         )
         val payload = json.decodeFromString(
             SyncProfilePayload.serializer(),
-            cipher.doFinal(profile.ciphertext.base64UrlBytes()).toString(Charsets.UTF_8),
+            cipher.doFinal(ciphertext).toString(Charsets.UTF_8),
         )
         validatePayload(payload)
         return payload
@@ -99,14 +108,30 @@ class SyncProfileCrypto(
     }
 
     private fun validatePayload(payload: SyncProfilePayload) {
-        require(payload.apiBase.startsWith("https://")) { "sync profile API base must use HTTPS" }
-        require(payload.timerUrl.startsWith("https://")) { "sync profile timer URL must use HTTPS" }
+        requireValidHttpsUrl(payload.apiBase, "API base")
+        requireValidHttpsUrl(payload.timerUrl, "timer URL")
         require(payload.token.isNotBlank() && payload.timerToken.isNotBlank()) { "sync profile is incomplete" }
+        require(payload.token.length <= MAX_SECRET_CHARS && payload.timerToken.length <= MAX_SECRET_CHARS) {
+            "sync profile secret is too large"
+        }
+    }
+
+    private fun requireValidHttpsUrl(value: String, label: String) {
+        val uri = runCatching { URI(value) }
+            .getOrElse { throw IllegalArgumentException("sync profile $label is invalid", it) }
+        require(uri.scheme.equals("https", ignoreCase = true) && !uri.host.isNullOrBlank() && uri.userInfo == null) {
+            "sync profile $label must use HTTPS without embedded credentials"
+        }
     }
 
     companion object {
         const val PROFILE_SCHEMA = "shenk_sync_profile/v1"
         const val ITERATIONS = 210_000
+        const val SALT_BYTES = 16
+        const val IV_BYTES = 12
+        const val GCM_TAG_BYTES = 16
+        const val MAX_CIPHERTEXT_BYTES = 64 * 1024
+        const val MAX_SECRET_CHARS = 8 * 1024
 
         fun validateMigrationCode(value: String): String = value.trim().also {
             require(it.matches(Regex("^[A-Za-z0-9_-]{20,200}$"))) { "invalid migration code" }

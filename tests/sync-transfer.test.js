@@ -4,7 +4,7 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 const vm = require("node:vm");
-const { webcrypto } = require("node:crypto");
+const { randomBytes, webcrypto } = require("node:crypto");
 
 function loadSyncTransferApi() {
   const appPath = path.join(__dirname, "..", "src", "app.js");
@@ -87,7 +87,7 @@ function loadSyncTransferApi() {
 
 async function run() {
   const api = loadSyncTransferApi();
-  const migrationCode = "Ncv_3tMJ5V7DCS9gTgH0aWzqY_eZ4bKv1X2pL8rQ6s";
+  const migrationCode = randomBytes(32).toString("base64url");
   const firstId = await api.deriveSyncProfileIdFromTransferCode(migrationCode);
   const secondId = await api.deriveSyncProfileIdFromTransferCode(migrationCode);
   const differentId = await api.deriveSyncProfileIdFromTransferCode(`${migrationCode}_other`);
@@ -99,8 +99,8 @@ async function run() {
     schema: "shenke_config_v1",
     apiBase: "https://example.workers.dev/api",
     timerUrl: "https://example.github.io/timer/",
-    token: "fixture_shenk_token",
-    timerToken: "fixture_timer_token"
+    token: randomBytes(32).toString("base64url"),
+    timerToken: randomBytes(32).toString("base64url")
   };
   const encrypted = await api.encryptSyncProfilePayload(payload, migrationCode);
   assert.notEqual(encrypted.ciphertext, JSON.stringify(payload));

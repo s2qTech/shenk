@@ -176,6 +176,56 @@ class LocalFirstRepositoryInstrumentedTest {
         }
     }
 
+    @Test
+    fun backupRestoreQueuesShenkRecordsButKeepsTimerFactsLocal() {
+        runBlocking {
+            val repository = repository(database)
+
+            val result = repository.restoreBackup(
+                listOf(
+                    trainingLog("synthetic-restored", "restored"),
+                    SharedRecord.create("timer_sessions", "synthetic-timer", buildJsonObject {}),
+                ),
+            )
+
+            assertEquals(BackupRestoreResult(restored = 2, unchanged = 0, skippedExisting = 0), result)
+            assertEquals(2, database.records().count())
+            assertEquals(1, database.outbox().count())
+            assertEquals(SyncFoundationState.SYNCED.name, database.records().get("timer_sessions", "synthetic-timer")?.syncState)
+        }
+    }
+
+    @Test
+    fun backupRestoreNeverOverwritesExistingLocalChanges() {
+        runBlocking {
+            val repository = repository(database)
+            repository.persistAndEnqueue(trainingLog("synthetic-existing", "local"), SharedEntityOwner.RECORD)
+
+            val result = repository.restoreBackup(
+                listOf(trainingLog("synthetic-existing", "backup")),
+            )
+
+            assertEquals(BackupRestoreResult(restored = 0, unchanged = 0, skippedExisting = 1), result)
+            assertEquals("local", repository.get("training_logs", "synthetic-existing")?.data?.get("subjectiveResult")?.toString()?.trim('"'))
+            assertEquals(1, database.outbox().count())
+        }
+    }
+
+    @Test
+    fun invalidBackupIsRejectedBeforeRestoreTransactionStarts() {
+        runBlocking {
+            val repository = repository(database)
+            val valid = trainingLog("synthetic-valid-before-invalid", "backup")
+            val unknown = SharedRecord.create("unknown_records", "synthetic-unknown", buildJsonObject {})
+
+            assertThrows(IllegalArgumentException::class.java) {
+                runBlocking { repository.restoreBackup(listOf(valid, unknown)) }
+            }
+            assertEquals(0, database.records().count())
+            assertEquals(0, database.outbox().count())
+        }
+    }
+
     private fun repository(db: ShenkDatabase): LocalFirstRepository {
         var sequence = 0
         return LocalFirstRepository(

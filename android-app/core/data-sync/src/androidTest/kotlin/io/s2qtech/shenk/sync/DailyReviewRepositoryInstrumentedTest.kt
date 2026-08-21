@@ -104,7 +104,7 @@ class DailyReviewRepositoryInstrumentedTest {
     }
 
     @Test
-    fun interruptedRunningJobIsRecoveredForImmediateRetry() {
+    fun interruptedRunningJobResumesPollingTheSameServerJob() {
         runBlocking {
             database.aiReviewJobs().put(
                 AiReviewJobEntity(
@@ -126,8 +126,8 @@ class DailyReviewRepositoryInstrumentedTest {
 
             val recovered = database.aiReviewJobs().nextDue(NOW)
             assertEquals("interrupted-job", recovered?.jobId)
-            assertEquals("RETRY", recovered?.state)
-            assertEquals("generation_interrupted", recovered?.lastError)
+            assertEquals("AWAITING_SERVER", recovered?.state)
+            assertEquals(null, recovered?.lastError)
         }
     }
 

@@ -40,7 +40,7 @@ async function run() {
   assert.equal(core.normalizeTimerUrl(""), "https://timer.example.test/");
   assert.throws(() => core.assertAccessKey("short"));
 
-  const transferCode = "qwertyuiopasdfghjklzxcvbnm_1234567890";
+  const transferCode = core.generateAccessKey();
   const profileIdA = await core.deriveProfileId(transferCode);
   const profileIdB = await core.deriveProfileId(transferCode);
   assert.equal(profileIdA, profileIdB);
@@ -49,8 +49,8 @@ async function run() {
   const payload = {
     apiBase: "https://example.test/api",
     timerUrl: "https://timer.example.test/",
-    token: "shenk_fixture_token",
-    timerToken: "timer_fixture_token"
+    token: core.generateAccessKey(),
+    timerToken: core.generateAccessKey()
   };
   const encrypted = await core.encrypt(payload, transferCode);
   assert.equal(encrypted.schema, "shenk_sync_profile/v1");

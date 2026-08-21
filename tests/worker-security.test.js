@@ -464,7 +464,7 @@ async function run() {
 
 {
   const worker = loadWorker();
-  const profileAccessKey = "fixture_profile_access_key_1234567890";
+  const profileAccessKey = nodeCrypto.randomBytes(32).toString("base64url");
   const accessKeyHash = nodeCrypto.createHash("sha256").update(profileAccessKey).digest("hex");
   const row = {
     id: "profile_fixture",

@@ -15,6 +15,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Alarm
 import androidx.compose.material.icons.rounded.AutoAwesome
+import androidx.compose.material.icons.rounded.Storage
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
@@ -46,7 +47,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeout
 
 @Composable
-fun AppSettingsSheet(onReminders: () -> Unit, onAiService: () -> Unit) {
+fun AppSettingsSheet(onReminders: () -> Unit, onAiService: () -> Unit, onBackup: () -> Unit) {
     Column(
         modifier = Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 22.dp, vertical = 8.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -56,6 +57,41 @@ fun AppSettingsSheet(onReminders: () -> Unit, onAiService: () -> Unit) {
         Spacer(Modifier.height(6.dp))
         SettingsRow("提醒", "晨起、午间和周复盘", Icons.Rounded.Alarm, onReminders)
         SettingsRow("AI 服务", "DeepSeek V4 Flash · 每日简评", Icons.Rounded.AutoAwesome, onAiService)
+        SettingsRow("数据备份", "导出或安全合并业务记录", Icons.Rounded.Storage, onBackup)
+        Spacer(Modifier.height(24.dp))
+    }
+}
+
+@Composable
+fun DataBackupSheet(
+    busy: Boolean,
+    onExport: () -> Unit,
+    onImport: () -> Unit,
+) {
+    Column(
+        modifier = Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 22.dp, vertical = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Text("数据备份", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.SemiBold)
+        Text("通过系统文件选择器保存或恢复完整业务记录。", color = MaterialTheme.colorScheme.secondary)
+        Spacer(Modifier.height(6.dp))
+        Surface(color = MaterialTheme.colorScheme.surfaceVariant, shape = RoundedCornerShape(22.dp)) {
+            Column(Modifier.fillMaxWidth().padding(18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("隐私与恢复规则", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                Text("备份不包含 API Key、云端令牌、迁移码、同步队列或冲突记录。", color = MaterialTheme.colorScheme.secondary)
+                Text("导入只补充缺失记录；同 ID 内容不同时会跳过，绝不覆盖本机现有修改。", color = MaterialTheme.colorScheme.secondary)
+            }
+        }
+        Button(
+            onClick = onExport,
+            enabled = !busy,
+            modifier = Modifier.fillMaxWidth().heightIn(min = 54.dp),
+        ) { Text(if (busy) "正在处理" else "导出 JSON 备份") }
+        OutlinedButton(
+            onClick = onImport,
+            enabled = !busy,
+            modifier = Modifier.fillMaxWidth().heightIn(min = 54.dp),
+        ) { Text("从 JSON 安全恢复") }
         Spacer(Modifier.height(24.dp))
     }
 }
