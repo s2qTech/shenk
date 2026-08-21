@@ -84,9 +84,18 @@ Implementation notes:
 - Test credentials and migration access codes are generated transiently at runtime. The Keystore instrumentation test uses a random DataStore file and random alias, removes both afterward, and no longer touches production preferences.
 - Xiaomi 14 accepted a same-package/same-signature data-preserving install: `firstInstallTime` remained 2026-08-12, the Room database remained present, and the cold start completed in 2035 ms. The standalone synthetic-data test package passed 42/42 tests, including Android-provider PBKDF2/AES-GCM migration, a temporary ContentResolver JSON export/restore round trip, backup transaction rejection, safe merge, outbox replay, and Keystore cleanup, then removed both the temporary URI and test package.
 
-### P8.7 Full regression
+### P8.7 Full regression - complete
 
 - Run cross-package automated gates and Xiaomi 14 critical-path acceptance.
+
+Implementation notes:
+
+- The cross-repository gate passed all 61 Node tests. Package 8 foundation verification then passed all Android JVM tests, debug and release lint, debug and unsigned release assembly, plus both instrumentation APK assemblies.
+- The isolated `io.s2qtech.shenk.sync.test` package passed 42/42 tests on Xiaomi 14. It covered local-first writes, outbox recovery, conflicts, day priority, check-ins, calendar records, timer ownership, plan patch validation/undo, daily-review jobs, migration crypto, backup restore, and realistic performance volumes without targeting the production package or reading its Room data.
+- A data-preserving debug install retained the 2026-08-12 first-install identity and the existing `shenk-native.db`. Three production-package read-only tests passed: Xiaomi/notification setting targets, installed APK package/version/hash/signature verification, and accessibility navigation across Calendar, Today, and Training followed by Settings -> Data backup reachability.
+- The final cold launch completed in 2110 ms. Ordinary app state remained portrait-locked while the device-wide auto-rotate setting stayed off; font scale and all animation scales remained `1.0`. No active Shenk notification or synthetic SAF backup row remained after acceptance.
+- Full regression found and corrected two test-layer issues: the P8.6 SAF test now exposes a JUnit `void` method, and the accessibility test uses a shell-initiated foreground launch because current HyperOS rejects `ActivityScenario` background starts. Production launch, navigation, storage, notification, and update behavior did not change.
+- Both temporary instrumentation packages were removed. P8.7 introduced no entity, schema, migration, ownership, permission, reminder, or user-data change.
 
 ### P8.8 Signed release candidate
 
@@ -98,4 +107,6 @@ Implementation notes:
 
 P8.0 and P8.1 passed on 2026-08-10. P8.2 passed on 2026-08-12: the authenticated no-release Worker route is deployed; all Node and Package 8 foundation gates passed; Xiaomi 14 accepted a data-preserving same-package/same-signature update; the focused on-device test verified APK package, version, SHA-256, and signing-certificate inspection; and a six-second cold-start check showed Today with zero update prompts while no release metadata was configured. The temporary instrumentation APK was removed after the test. P8.3 passed on 2026-08-12: JVM coverage verifies delivery-status composition and Xiaomi-family detection; the Package 8 foundation gate passed; Xiaomi 14 accepted the data-preserving install and the focused device test verified real notification state plus public system-setting targets. Device diagnostics found notifications currently disabled by HyperOS (`importance=NONE` / AppOps `ignore`), which the app now exposes instead of silently implying delivery. No permission or reminder setting was changed, and the temporary instrumentation APK was removed. P8.4 passed automated and Xiaomi 14 gates on 2026-08-12. The median debug cold start improved from 579 ms to 505 ms; four primary-page transitions were 1.17% janky at p95 19 ms; 12 calendar gestures were 0.09% janky at p95 25 ms; the 400-day/560-record projection completed in 123 ms; a full 100-operation outbox batch completed in 716 ms; and one virtual timer hour completed its 14,400 ticks in 40 ms. P8.5 passed its automated and Xiaomi 14 gates on 2026-08-15: contrast, 1.5x text, 48 dp touch targets, Android accessibility-node labels/actions, and zero-animation behavior were accepted, while the absence of an installed TalkBack package is recorded above. The temporary test package was removed and all changed device settings were restored. P8.6 passed on 2026-08-22: all 61 cross-repository tests, Android JVM gates, debug/release lint and assemblies, and 42 Xiaomi 14 isolated instrumentation tests passed. The production package retained its original install identity and Room database; the temporary synthetic backup URI and test package were removed.
 
-Package 8 remains in progress and the project remains at `8 / 9` until every stage above passes its gate.
+P8.7 passed on 2026-08-22 with the same 61 cross-repository tests, Package 8 Android gates, 42 isolated device tests, three read-only production-package checks, data-preserving installation, 2110 ms cold launch, primary-space navigation, backup-entry reachability, orientation/system-state verification, and complete test-artifact cleanup. P8.8 signed release candidate is next.
+
+Package 8 remains in progress and the project remains at `8 / 9` until P8.8 passes its gate.
