@@ -1,7 +1,8 @@
 param(
     [Parameter(Mandatory = $true)]
     [string]$RollbackRevision,
-    [string]$OutputDirectory = ""
+    [string]$OutputDirectory = "",
+    [string]$SigningStoreFile = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -44,7 +45,18 @@ if ($versionCode -lt 11 -or $versionName -notmatch "-rc\.[0-9]+$") {
 }
 
 $gradle = Join-Path $androidRoot "gradlew.bat"
-& $gradle package8ReleaseCandidateCheck "-PSHENK_REQUIRE_RELEASE_SIGNING=true"
+$gradleArguments = @(
+    "package8ReleaseCandidateCheck",
+    "-PSHENK_REQUIRE_RELEASE_SIGNING=true"
+)
+if (-not [string]::IsNullOrWhiteSpace($SigningStoreFile)) {
+    $signingStore = (Resolve-Path -LiteralPath $SigningStoreFile).Path
+    if ($signingStore.StartsWith($repositoryRoot, [StringComparison]::OrdinalIgnoreCase)) {
+        throw "The signing-store override must remain outside the repository."
+    }
+    $gradleArguments += "-PSHENK_RELEASE_STORE_FILE=$signingStore"
+}
+& $gradle @gradleArguments
 if ($LASTEXITCODE -ne 0) {
     throw "The signed Package 8 release-candidate gate failed."
 }

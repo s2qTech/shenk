@@ -31,7 +31,7 @@ The example is synthetic. Never commit a real release manifest, APK, signing cer
 
 1. Establish the intended long-lived signing identity outside Git. Before any install, compare its certificate with the certificate of the application already installed on Xiaomi 14. A different certificate cannot perform a data-preserving Android update; stop for an explicit signing/data-transition decision and never uninstall or clear the existing app as a shortcut.
 2. Check out a clean accepted source revision with a `versionCode` greater than every installed or previously published build. The first candidate is `1.0.0-rc.1` / `11`.
-3. Supply all external `SHENK_RELEASE_*` properties and run `android-app/ci/build-private-release.ps1 -RollbackRevision <known-good-revision>`. The script invokes `package8ReleaseCandidateCheck` with signing required, verifies the exact APK with Android build tools, and creates the ignored private release record.
+3. Supply all external `SHENK_RELEASE_*` properties and run `android-app/ci/build-private-release.ps1 -RollbackRevision <known-good-revision>`. If the local build sandbox cannot read the permanent store directly, pass a short-lived external copy with `-SigningStoreFile <temporary-path>` and remove it immediately after the build. The script rejects repository-local overrides, invokes `package8ReleaseCandidateCheck` with signing required, verifies the exact APK with Android build tools, and creates the ignored private release record.
 4. Run `android-app/ci/verify-private-release-device.ps1 -ApkPath <archived-apk> -AdbPath <adb>` on the connected Xiaomi 14. The script verifies application ID, increasing version, signing-certificate equality, `adb install -r`, unchanged first-install identity, installed version, and cold launch. It contains no uninstall or data-clear path.
 5. Confirm the accepted daily critical path and archive the release record outside the repository. Only source revision, version, checksum, byte size, signing certificate digest, build time, and rollback revision belong in that record; signing secrets remain external.
 6. Upload that exact signed APK to the private R2 bucket under a new immutable `android/` object key.
@@ -40,6 +40,8 @@ The example is synthetic. Never commit a real release manifest, APK, signing cer
 9. Install through the app on Xiaomi 14 and confirm Android shows the expected update, not a new application or downgrade.
 
 The default archive directory is `outputs/private-release/`, which is excluded from Git. Copy the accepted archive to the private release-record location before relying on it for recovery.
+
+On the private development machine, complete external release configuration also signs debug validation APKs with the same long-lived certificate. This keeps future device testing data-preserving after the release candidate is installed. CI never receives these credentials and continues using its generated debug identity. Losing the long-lived private key prevents all future in-place updates, so retain an encrypted backup of the PKCS#12 file and its password in separate protected locations.
 
 ## Disable and rollback
 

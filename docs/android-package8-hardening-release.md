@@ -107,7 +107,8 @@ Preparation in progress:
 - `package8ReleaseCandidateCheck` requires complete repository-external signing inputs and an explicit `SHENK_REQUIRE_RELEASE_SIGNING=true`; the existing unsigned CI gate remains unchanged.
 - `ci/build-private-release.ps1` accepts only a clean committed revision, verifies the signed APK identity and certificate, and writes an ignored private archive containing the APK, SHA-256, byte size, certificate digest, source revision, and known-good rollback revision. It never archives signing inputs.
 - `ci/verify-private-release-device.ps1` compares the RC certificate with the already installed application before `adb install -r`. A mismatch stops without uninstalling, clearing, downgrading, or modifying application data.
-- The repository and current user-level Gradle configuration contain no private signing inputs. P8.8 remains incomplete until the intended long-lived signing identity is supplied outside Git, its compatibility with the installed Xiaomi 14 application is established, and the signed RC passes the data-preserving device gate.
+- The Xiaomi 14 certificate matches the original local debug identity. That private key is rewrapped as a strong-password PKCS#12 keystore outside Git, with the legacy source moved out of Android's default debug location and both external files restricted to the current Windows user. On a developer machine with complete external release configuration, debug validation builds intentionally use the same long-lived identity so later tests can update the private installation without clearing data; CI still has no release credentials and keeps its ordinary generated debug identity.
+- P8.8 remains incomplete until the signed RC archive and Xiaomi 14 data-preserving device gate pass.
 
 ## Current Gate
 

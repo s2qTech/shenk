@@ -39,6 +39,24 @@ if (Regex("package[0-7]", RegexOption.IGNORE_CASE).containsMatchIn(shenkVersionN
 if (requireReleaseSigning && !releaseSigningComplete) {
     throw GradleException("SHENK_REQUIRE_RELEASE_SIGNING is true but release signing is incomplete.")
 }
+val signedReleaseRequested = gradle.startParameter.taskNames.any { taskName ->
+    taskName.substringAfterLast(':') in setOf(
+        "package8ReleaseCandidateCheck",
+        "verifySignedReleaseConfiguration",
+    )
+}
+if (signedReleaseRequested && !requireReleaseSigning) {
+    throw GradleException("A private release candidate requires SHENK_REQUIRE_RELEASE_SIGNING=true.")
+}
+if (signedReleaseRequested && !releaseSigningComplete) {
+    throw GradleException("A private release candidate requires all external SHENK_RELEASE_* values.")
+}
+if (
+    signedReleaseRequested &&
+    Regex("(?:dev|debug|snapshot)", RegexOption.IGNORE_CASE).containsMatchIn(shenkVersionName)
+) {
+    throw GradleException("A private release candidate must not use a development version name.")
+}
 if (releaseSigningComplete) {
     val store = file(releaseStorePath).canonicalFile
     val repository = rootProject.projectDir.parentFile.canonicalFile.toPath()
@@ -77,6 +95,13 @@ android {
     buildTypes {
         getByName("debug") {
             isDebuggable = true
+            // A configured private developer machine keeps debug installs on the
+            // same long-lived identity as the private release so device data can
+            // survive local validation. CI has no release credentials and keeps
+            // the normal generated debug identity.
+            if (releaseSigningComplete) {
+                signingConfig = signingConfigs.getByName("release")
+            }
         }
         getByName("release") {
             isDebuggable = false
@@ -111,17 +136,6 @@ tasks.register("verifyReleaseConfiguration") {
 tasks.register("verifySignedReleaseConfiguration") {
     group = "verification"
     description = "Requires complete external signing inputs for a distributable private release candidate."
-    doLast {
-        if (!requireReleaseSigning) {
-            throw GradleException("A private release candidate requires SHENK_REQUIRE_RELEASE_SIGNING=true.")
-        }
-        if (!releaseSigningComplete) {
-            throw GradleException("A private release candidate requires all external SHENK_RELEASE_* values.")
-        }
-        if (Regex("(?:dev|debug|snapshot)", RegexOption.IGNORE_CASE).containsMatchIn(shenkVersionName)) {
-            throw GradleException("A private release candidate must not use a development version name.")
-        }
-    }
 }
 
 kotlin {

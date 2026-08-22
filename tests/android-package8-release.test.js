@@ -19,6 +19,7 @@ test("Package 8 centralizes release versioning and keeps private signing externa
   assert.match(appBuild, /SHENK_REQUIRE_RELEASE_SIGNING/);
   assert.match(appBuild, /Release keystore must be stored outside the repository/);
   assert.match(appBuild, /isDebuggable = false/);
+  assert.match(appBuild, /if \(releaseSigningComplete\) \{\s*signingConfig = signingConfigs\.getByName\("release"\)/);
   assert.match(ignore, /\*\.jks/);
   assert.match(ignore, /\*\.keystore/);
   assert.match(ignore, /release-signing\.properties/);
@@ -36,6 +37,8 @@ test("P8.8 release candidate is signed, reproducible, and installed without bypa
   assert.match(appBuild, /SHENK_REQUIRE_RELEASE_SIGNING=true/);
   assert.match(buildScript, /status --porcelain/);
   assert.match(buildScript, /package8ReleaseCandidateCheck/);
+  assert.match(buildScript, /SigningStoreFile/);
+  assert.match(buildScript, /must remain outside the repository/);
   assert.match(buildScript, /Signer #1 certificate SHA-256 digest/);
   assert.match(buildScript, /sourceRevision/);
   assert.match(buildScript, /rollbackRevision/);
