@@ -1,8 +1,8 @@
 # Android Package 8: Hardening and Private Release
 
 Updated: 2026-08-22
-Status: In progress
-Overall delivery progress: `8 / 9`
+Status: Complete
+Overall delivery progress: `9 / 9`
 
 Package 8 turns the accepted Packages 0-7 product into a reliable private release. It does not change plan ownership, timer ownership, calendar precedence, AI permissions, or Contract v1/v2 semantics.
 
@@ -97,25 +97,27 @@ Implementation notes:
 - Full regression found and corrected two test-layer issues: the P8.6 SAF test now exposes a JUnit `void` method, and the accessibility test uses a shell-initiated foreground launch because current HyperOS rejects `ActivityScenario` background starts. Production launch, navigation, storage, notification, and update behavior did not change.
 - Both temporary instrumentation packages were removed. P8.7 introduced no entity, schema, migration, ownership, permission, reminder, or user-data change.
 
-### P8.8 Signed release candidate
+### P8.8 Signed release candidate - complete
 
 - Build a signed private RC outside CI, archive checksums and source revision, install on-device, and document rollback.
 
-Preparation in progress:
+Implementation notes:
 
 - The first RC is version `1.0.0-rc.1` with `versionCode 11`, which is strictly newer than the accepted Package 8 development build.
 - `package8ReleaseCandidateCheck` requires complete repository-external signing inputs and an explicit `SHENK_REQUIRE_RELEASE_SIGNING=true`; the existing unsigned CI gate remains unchanged.
 - `ci/build-private-release.ps1` accepts only a clean committed revision, verifies the signed APK identity and certificate, and writes an ignored private archive containing the APK, SHA-256, byte size, certificate digest, source revision, and known-good rollback revision. It never archives signing inputs.
 - `ci/verify-private-release-device.ps1` compares the RC certificate with the already installed application before `adb install -r`. A mismatch stops without uninstalling, clearing, downgrading, or modifying application data.
 - The Xiaomi 14 certificate matches the original local debug identity. That private key is rewrapped as a strong-password PKCS#12 keystore outside Git, with the legacy source moved out of Android's default debug location and both external files restricted to the current Windows user. On a developer machine with complete external release configuration, debug validation builds intentionally use the same long-lived identity so later tests can update the private installation without clearing data; CI still has no release credentials and keeps its ordinary generated debug identity.
-- P8.8 remains incomplete until the signed RC archive and Xiaomi 14 data-preserving device gate pass.
+- The accepted signed APK was built from committed revision `756b4a3`, with the P8.7 full-regression revision recorded as the known-good forward-rollback source. The private archive contains the exact APK, checksum, byte size, certificate digest, source revision, and rollback revision without any signing secret.
+- Xiaomi 14 updated in place from versionCode 10 to 11 with the same signing certificate and unchanged first-install identity. Today retained existing content, Calendar retained actual records and formal plans, Training retained the routine library, system back returned to Today, and Settings -> Data backup remained reachable.
+- The signed Android 16 cold-launch gate reported 3015 ms `WaitTime`. Auto-rotate remained off, font and animation scales remained `1.0`, no test package or active Shenk notification remained, and the temporary signing-store copy plus temporary build ACL were removed.
 
 ## Current Gate
 
-`android-app/gradlew.bat package8FoundationCheck` runs the native automated suite, release configuration validation, release lint, and an unsigned release assembly. A distributable RC is deferred to P8.8 and requires external signing material.
+`android-app/gradlew.bat package8FoundationCheck` remains the credential-free CI gate. `package8ReleaseCandidateCheck` is the private-machine distribution gate and requires complete external signing material plus `SHENK_REQUIRE_RELEASE_SIGNING=true`.
 
 P8.0 and P8.1 passed on 2026-08-10. P8.2 passed on 2026-08-12: the authenticated no-release Worker route is deployed; all Node and Package 8 foundation gates passed; Xiaomi 14 accepted a data-preserving same-package/same-signature update; the focused on-device test verified APK package, version, SHA-256, and signing-certificate inspection; and a six-second cold-start check showed Today with zero update prompts while no release metadata was configured. The temporary instrumentation APK was removed after the test. P8.3 passed on 2026-08-12: JVM coverage verifies delivery-status composition and Xiaomi-family detection; the Package 8 foundation gate passed; Xiaomi 14 accepted the data-preserving install and the focused device test verified real notification state plus public system-setting targets. Device diagnostics found notifications currently disabled by HyperOS (`importance=NONE` / AppOps `ignore`), which the app now exposes instead of silently implying delivery. No permission or reminder setting was changed, and the temporary instrumentation APK was removed. P8.4 passed automated and Xiaomi 14 gates on 2026-08-12. The median debug cold start improved from 579 ms to 505 ms; four primary-page transitions were 1.17% janky at p95 19 ms; 12 calendar gestures were 0.09% janky at p95 25 ms; the 400-day/560-record projection completed in 123 ms; a full 100-operation outbox batch completed in 716 ms; and one virtual timer hour completed its 14,400 ticks in 40 ms. P8.5 passed its automated and Xiaomi 14 gates on 2026-08-15: contrast, 1.5x text, 48 dp touch targets, Android accessibility-node labels/actions, and zero-animation behavior were accepted, while the absence of an installed TalkBack package is recorded above. The temporary test package was removed and all changed device settings were restored. P8.6 passed on 2026-08-22: all 61 cross-repository tests, Android JVM gates, debug/release lint and assemblies, and 42 Xiaomi 14 isolated instrumentation tests passed. The production package retained its original install identity and Room database; the temporary synthetic backup URI and test package were removed.
 
-P8.7 passed on 2026-08-22 with the same 61 cross-repository tests, Package 8 Android gates, 42 isolated device tests, three read-only production-package checks, data-preserving installation, 2110 ms cold launch, primary-space navigation, backup-entry reachability, orientation/system-state verification, and complete test-artifact cleanup. P8.8 signed release candidate is next.
+P8.7 passed on 2026-08-22 with the same 61 cross-repository tests, Package 8 Android gates, 42 isolated device tests, three read-only production-package checks, data-preserving installation, 2110 ms cold launch, primary-space navigation, backup-entry reachability, orientation/system-state verification, and complete test-artifact cleanup. P8.8 then passed with 62 repository tests, the configuration-cache-compatible signed release gate, verifiable private archive, signed data-preserving Xiaomi 14 update, retained Today/Calendar/Training data and navigation, backup-entry reachability, system-state preservation, and signing-artifact cleanup.
 
-Package 8 remains in progress and the project remains at `8 / 9` until P8.8 passes its gate.
+Package 8 is complete. Native Android phase-1 delivery is `9 / 9`.

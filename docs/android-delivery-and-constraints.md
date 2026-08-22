@@ -1,7 +1,7 @@
 # Android Delivery Plan and Constraints
 
-Updated: 2026-08-09
-Status: confirmed planning baseline; Packages 0-7 accepted, Package 8 in progress, progress `8 / 9`
+Updated: 2026-08-22
+Status: confirmed planning baseline; Packages 0-8 accepted, phase-1 progress `9 / 9`
 
 ## 1. Delivery Model
 
@@ -86,6 +86,8 @@ Package 8 is implemented in the ordered stages documented in `android-package8-h
 - Signed private APK and rollback instructions.
 
 Exit: the user can rely on Android for the defined 80% daily workflow.
+
+Accepted on 2026-08-22 with signed private RC `1.0.0-rc.1`: external signing and checksum archive, data-preserving Xiaomi 14 update, retained business data, signed-release critical navigation, backup reachability, system-state verification, and rollback revision record all passed.
 
 Phase-2 work starts only after Package 8: widget, Health Connect/Xiaomi data, and exercise animation assets.
 

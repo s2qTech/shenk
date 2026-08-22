@@ -1,7 +1,7 @@
 # Android Private Update Operations
 
 Updated: 2026-08-22
-Status: P8.2 transport runbook; publishing begins only with the signed P8.8 release candidate
+Status: accepted private-release runbook; signed P8.8 release candidate installed, authenticated publication remains optional
 
 ## Trust boundary
 

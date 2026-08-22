@@ -1,7 +1,7 @@
 # Android Product Blueprint
 
 Updated: 2026-08-22
-Status: confirmed product direction; Packages 0-7 accepted, Package 8 P8.0-P8.7 complete, P8.8 signed release candidate next
+Status: confirmed product direction; Packages 0-8 accepted, phase-1 progress `9 / 9`
 
 ## 1. Product Definition
 

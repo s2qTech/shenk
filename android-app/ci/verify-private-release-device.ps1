@@ -141,7 +141,14 @@ if ($LASTEXITCODE -ne 0) {
     throw "The release candidate did not launch."
 }
 $totalTimeLine = $launch | Where-Object { $_ -match "^TotalTime:\s+\d+$" } | Select-Object -First 1
-$totalTime = if ($totalTimeLine) { [int]($totalTimeLine -replace "^TotalTime:\s+", "") } else { $null }
+$waitTimeLine = $launch | Where-Object { $_ -match "^WaitTime:\s+\d+$" } | Select-Object -First 1
+$launchTime = if ($totalTimeLine) {
+    [int]($totalTimeLine -replace "^TotalTime:\s+", "")
+} elseif ($waitTimeLine) {
+    [int]($waitTimeLine -replace "^WaitTime:\s+", "")
+} else {
+    $null
+}
 
 [pscustomobject]@{
     package = $PackageName
@@ -150,6 +157,6 @@ $totalTime = if ($totalTimeLine) { [int]($totalTimeLine -replace "^TotalTime:\s+
     versionName = $after.versionName
     firstInstallTime = $after.firstInstallTime
     signingCertificateSha256 = $releaseCertificate
-    coldLaunchMilliseconds = $totalTime
+    coldLaunchMilliseconds = $launchTime
     dataPreservingUpdate = $true
 } | ConvertTo-Json

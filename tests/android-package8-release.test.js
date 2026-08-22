@@ -45,6 +45,7 @@ test("P8.8 release candidate is signed, reproducible, and installed without bypa
   assert.match(deviceScript, /Signing certificate mismatch/);
   assert.match(deviceScript, /install -r/);
   assert.match(deviceScript, /firstInstallTime/);
+  assert.match(deviceScript, /WaitTime/);
   assert.doesNotMatch(deviceScript, /adb uninstall|pm clear/);
 });
 
@@ -67,7 +68,7 @@ test("Package 8 private release and rollback decisions are documented", () => {
 
   assert.match(packageDoc, /P8\.0/);
   assert.match(packageDoc, /P8\.8/);
-  assert.match(packageDoc, /8 \/ 9/);
+  assert.match(packageDoc, /9 \/ 9/);
   assert.match(adr, /authenticated Worker/i);
   assert.match(adr, /once per 24 hours/i);
   assert.match(adr, /versionCode/i);

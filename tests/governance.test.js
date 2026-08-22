@@ -13,8 +13,8 @@ test("repository governance entrypoints and canonical documents are present", ()
   const agents = read("AGENTS.md");
 
   assert.equal(guardrails.schema, "shenk_project_guardrails/v1");
-  assert.equal(guardrails.activeDelivery.phase, "android_package_8_in_progress");
-  assert.equal(guardrails.activeDelivery.progress, "8/9");
+  assert.equal(guardrails.activeDelivery.phase, "android_phase_1_complete");
+  assert.equal(guardrails.activeDelivery.progress, "9/9");
   assert.equal(guardrails.activeDelivery.productionContract, "1.0");
   assert.deepEqual(guardrails.activeDelivery.workerSupportedContracts, ["1.0", "2.0"]);
   assert.equal(guardrails.activeDelivery.androidProductionStack, "kotlin_jetpack_compose");
