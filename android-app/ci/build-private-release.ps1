@@ -56,9 +56,14 @@ if (-not [string]::IsNullOrWhiteSpace($SigningStoreFile)) {
     }
     $gradleArguments += "-PSHENK_RELEASE_STORE_FILE=$signingStore"
 }
-& $gradle @gradleArguments
-if ($LASTEXITCODE -ne 0) {
-    throw "The signed Package 8 release-candidate gate failed."
+Push-Location $androidRoot
+try {
+    & $gradle @gradleArguments
+    if ($LASTEXITCODE -ne 0) {
+        throw "The signed Package 8 release-candidate gate failed."
+    }
+} finally {
+    Pop-Location
 }
 
 $apk = Join-Path $androidRoot "app\build\outputs\apk\release\app-release.apk"
