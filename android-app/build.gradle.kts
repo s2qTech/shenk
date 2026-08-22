@@ -31,6 +31,16 @@ tasks.register("package8FoundationCheck") {
     )
 }
 
+tasks.register("package8ReleaseCandidateCheck") {
+    group = "verification"
+    description = "Runs the Package 8 gate and requires an externally signed private release APK."
+    dependsOn(
+        "package8FoundationCheck",
+        ":app:verifySignedReleaseConfiguration",
+        ":app:assembleRelease",
+    )
+}
+
 tasks.register("package5Check") {
     group = "verification"
     description = "Compatibility alias for the current native Android quality gate."

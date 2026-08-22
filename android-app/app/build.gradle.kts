@@ -108,6 +108,22 @@ tasks.register("verifyReleaseConfiguration") {
     description = "Validates Package 8 versioning and optional private release signing inputs."
 }
 
+tasks.register("verifySignedReleaseConfiguration") {
+    group = "verification"
+    description = "Requires complete external signing inputs for a distributable private release candidate."
+    doLast {
+        if (!requireReleaseSigning) {
+            throw GradleException("A private release candidate requires SHENK_REQUIRE_RELEASE_SIGNING=true.")
+        }
+        if (!releaseSigningComplete) {
+            throw GradleException("A private release candidate requires all external SHENK_RELEASE_* values.")
+        }
+        if (Regex("(?:dev|debug|snapshot)", RegexOption.IGNORE_CASE).containsMatchIn(shenkVersionName)) {
+            throw GradleException("A private release candidate must not use a development version name.")
+        }
+    }
+}
+
 kotlin {
     jvmToolchain(25)
     compilerOptions {

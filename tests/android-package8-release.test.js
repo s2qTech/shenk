@@ -14,8 +14,8 @@ test("Package 8 centralizes release versioning and keeps private signing externa
   const ignore = read(".gitignore");
   const example = read("android-app/release-signing.properties.example");
 
-  assert.match(properties, /SHENK_VERSION_CODE=10/);
-  assert.match(properties, /SHENK_VERSION_NAME=0\.8\.2-package8-dev/);
+  assert.match(properties, /SHENK_VERSION_CODE=11/);
+  assert.match(properties, /SHENK_VERSION_NAME=1\.0\.0-rc\.1/);
   assert.match(appBuild, /SHENK_REQUIRE_RELEASE_SIGNING/);
   assert.match(appBuild, /Release keystore must be stored outside the repository/);
   assert.match(appBuild, /isDebuggable = false/);
@@ -23,6 +23,26 @@ test("Package 8 centralizes release versioning and keeps private signing externa
   assert.match(ignore, /\*\.keystore/);
   assert.match(ignore, /release-signing\.properties/);
   assert.doesNotMatch(example, /BEGIN PRIVATE KEY|api[_-]?key\s*=\s*[A-Za-z0-9_-]{20,}/i);
+});
+
+test("P8.8 release candidate is signed, reproducible, and installed without bypassing identity checks", () => {
+  const rootBuild = read("android-app/build.gradle.kts");
+  const appBuild = read("android-app/app/build.gradle.kts");
+  const buildScript = read("android-app/ci/build-private-release.ps1");
+  const deviceScript = read("android-app/ci/verify-private-release-device.ps1");
+
+  assert.match(rootBuild, /tasks\.register\("package8ReleaseCandidateCheck"\)/);
+  assert.match(rootBuild, /:app:verifySignedReleaseConfiguration/);
+  assert.match(appBuild, /SHENK_REQUIRE_RELEASE_SIGNING=true/);
+  assert.match(buildScript, /status --porcelain/);
+  assert.match(buildScript, /package8ReleaseCandidateCheck/);
+  assert.match(buildScript, /Signer #1 certificate SHA-256 digest/);
+  assert.match(buildScript, /sourceRevision/);
+  assert.match(buildScript, /rollbackRevision/);
+  assert.match(deviceScript, /Signing certificate mismatch/);
+  assert.match(deviceScript, /install -r/);
+  assert.match(deviceScript, /firstInstallTime/);
+  assert.doesNotMatch(deviceScript, /adb uninstall|pm clear/);
 });
 
 test("Package 8 release foundation is an explicit CI gate", () => {
