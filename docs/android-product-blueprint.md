@@ -277,6 +277,8 @@ The current native UI is functionally coherent and intentionally minimal, but it
 
 Before broad screen changes, complete a whole-product UI inventory and establish reusable tokens/components plus representative light/dark prototypes for Today, Calendar/date details, Training/timer, review, planning, data, and settings. Preserve the accepted information architecture, one-handed operation, accessibility, day priority, and domain ownership. Minimalism remains a direction, but must communicate intent, hierarchy, and brand character rather than appearing unfinished or relying on generic text-only layout.
 
+Implementation began on 2026-08-27 after the representative mobile prototype was accepted. The first native slice establishes the shared light/dark color, typography, shape, page-position, card, and lower-thumb-control language on Today, Calendar, and the Training routine library. The Xiaomi 14 gate verified both themes, retained the existing application identity and Room database, and exercised Calendar distance/return controls plus the Training scene dock. This is a reusable-system rollout, not authorization to change business copy, navigation ownership, plan resolution, recording, timer facts, or sync behavior. The timer and remaining secondary surfaces follow in separate, reviewable slices.
+
 ## 13. Phase 1 Success Criteria
 
 The first release succeeds when the user can stop opening the Web app for most daily tasks:

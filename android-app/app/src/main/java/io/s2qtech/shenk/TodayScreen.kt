@@ -396,56 +396,67 @@ private fun TodayScreen(
     onTraining: () -> Unit,
     onRecordDay: () -> Unit,
 ) {
-    Column(
+    Box(
         modifier = modifier
             .fillMaxSize()
-            .testTag("today-screen")
-            .verticalScroll(rememberScrollState())
-            .statusBarsPadding()
-            .padding(horizontal = 22.dp, vertical = 18.dp),
+            .testTag("today-screen"),
     ) {
-        Column {
-            Text(
-                text = "今天",
-                style = MaterialTheme.typography.displaySmall,
-                fontWeight = FontWeight.SemiBold,
-            )
-            Text(
-                text = date.format(DateTimeFormatter.ofPattern("M月d日 EEEE", Locale.CHINA)),
-                color = MaterialTheme.colorScheme.secondary,
-            )
-        }
-        Spacer(Modifier.height(26.dp))
-
-        if (!cloudConfigured) {
-            CloudSetupPrompt(onClick = onConnect)
-            Spacer(Modifier.height(18.dp))
-        }
-
-        val guidance = records?.guidance
-        if (guidance == null) {
-            Box(Modifier.fillMaxWidth().height(180.dp), contentAlignment = Alignment.Center) {
-                Text("正在读取今天…", color = MaterialTheme.colorScheme.secondary)
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .statusBarsPadding()
+                .padding(start = 22.dp, top = 26.dp, end = 22.dp, bottom = 18.dp),
+        ) {
+            Column {
+                Text(
+                    text = "今天",
+                    style = MaterialTheme.typography.displaySmall,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                Spacer(Modifier.height(5.dp))
+                Text(
+                    text = date.format(DateTimeFormatter.ofPattern("M月d日 EEEE", Locale.CHINA)),
+                    color = MaterialTheme.colorScheme.secondary,
+                    style = MaterialTheme.typography.bodyLarge,
+                )
             }
-        } else {
-            GuidanceBlock(
-                guidance = guidance,
-                dailyReviewState = dailyReviewState,
-                onTraining = onTraining,
-                onRecordDay = onRecordDay,
-                onDailyReview = onDailyReview,
-            )
-        }
-        Spacer(Modifier.height(30.dp))
-        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-        Spacer(Modifier.height(22.dp))
+            Spacer(Modifier.height(22.dp))
 
-        MorningStatusSection(
-            records = records,
-            onMorning = onMorning,
-            onPreWorkout = onPreWorkout,
+            if (!cloudConfigured) {
+                CloudSetupPrompt(onClick = onConnect)
+                Spacer(Modifier.height(18.dp))
+            }
+
+            val guidance = records?.guidance
+            if (guidance == null) {
+                Box(Modifier.fillMaxWidth().height(180.dp), contentAlignment = Alignment.Center) {
+                    Text("正在读取今天…", color = MaterialTheme.colorScheme.secondary)
+                }
+            } else {
+                GuidanceBlock(
+                    guidance = guidance,
+                    dailyReviewState = dailyReviewState,
+                    onTraining = onTraining,
+                    onRecordDay = onRecordDay,
+                    onDailyReview = onDailyReview,
+                )
+            }
+            Spacer(Modifier.height(26.dp))
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+            Spacer(Modifier.height(20.dp))
+
+            MorningStatusSection(
+                records = records,
+                onMorning = onMorning,
+                onPreWorkout = onPreWorkout,
+            )
+            Spacer(Modifier.height(24.dp))
+        }
+        PrimaryPageIndicator(
+            selectedPage = 1,
+            modifier = Modifier.align(Alignment.TopCenter),
         )
-        Spacer(Modifier.height(24.dp))
     }
 }
 
@@ -494,37 +505,43 @@ private fun GuidanceBlock(
         GuidanceSource.LOCAL_SUGGESTION -> "本地建议"
     }
     Surface(
+        modifier = Modifier.fillMaxWidth(),
         color = when (guidance.source) {
             GuidanceSource.ACTUAL -> MaterialTheme.colorScheme.primaryContainer
             GuidanceSource.FORMAL_PLAN -> MaterialTheme.colorScheme.secondaryContainer
             GuidanceSource.LOCAL_SUGGESTION -> MaterialTheme.colorScheme.tertiaryContainer
         },
-        shape = RoundedCornerShape(28.dp),
-        shadowElevation = 8.dp,
-        tonalElevation = 2.dp,
+        shape = RoundedCornerShape(26.dp),
+        shadowElevation = 2.dp,
+        tonalElevation = 1.dp,
+        border = androidx.compose.foundation.BorderStroke(
+            1.dp,
+            MaterialTheme.colorScheme.primary.copy(alpha = 0.07f),
+        ),
     ) {
-        Column(Modifier.fillMaxWidth().padding(24.dp)) {
+        Column(Modifier.fillMaxWidth().padding(horizontal = 22.dp, vertical = 21.dp)) {
             Text(source, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.secondary)
-            Spacer(Modifier.height(14.dp))
+            Spacer(Modifier.height(9.dp))
             Text(guidance.title, style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.SemiBold)
             guidance.estimatedMinutes?.let {
-                Text("约 $it 分钟", style = MaterialTheme.typography.titleMedium)
+                Spacer(Modifier.height(3.dp))
+                Text("约 $it 分钟", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.secondary)
             }
             guidance.note?.takeIf { it.isNotBlank() }?.let {
-                Spacer(Modifier.height(14.dp))
-                Text(it, style = MaterialTheme.typography.bodyLarge)
+                Spacer(Modifier.height(12.dp))
+                Text(it, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             when (TodayPrimaryActionResolver.resolve(guidance)) {
                 TodayPrimaryAction.NONE -> Unit
                 TodayPrimaryAction.OPEN_TIMER -> {
-                    Spacer(Modifier.height(20.dp))
+                    Spacer(Modifier.height(18.dp))
                     Button(
                         onClick = onTraining,
                         modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp).testTag("today-open-training"),
                     ) { Text("进入训练") }
                 }
                 TodayPrimaryAction.RECORD_DAY -> {
-                    Spacer(Modifier.height(20.dp))
+                    Spacer(Modifier.height(18.dp))
                     Button(
                         onClick = onRecordDay,
                         modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp).testTag("today-record-day"),

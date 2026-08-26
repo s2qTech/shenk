@@ -316,92 +316,117 @@ private fun RoutineLibraryScreen(
             )
         },
     ) { scaffoldPadding ->
-        LazyColumn(
+        Box(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(scaffoldPadding)
-                .statusBarsPadding(),
-            contentPadding = PaddingValues(horizontal = 20.dp, vertical = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+                .padding(scaffoldPadding),
         ) {
-        item {
-            Column {
-                Text("训练", style = MaterialTheme.typography.displaySmall, fontWeight = FontWeight.SemiBold)
-                Text("选择今天要执行的流程", color = MaterialTheme.colorScheme.secondary)
-            }
-        }
-        if (pending.isNotEmpty()) {
-            item {
-                Text("待补训练记录", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-            }
-            items(pending.take(3), key = { it.session.id }) { item ->
-                Surface(
-                    modifier = Modifier.fillMaxWidth(),
-                    color = MaterialTheme.colorScheme.tertiaryContainer,
-                    shape = RoundedCornerShape(18.dp),
-                ) {
-                    Row(
-                        Modifier.padding(horizontal = 18.dp, vertical = 12.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Column(Modifier.weight(1f)) {
-                            Text(item.routineTitle, fontWeight = FontWeight.SemiBold)
-                            Text("${item.session.date} · ${formatDuration(item.session.actualSeconds)}", color = MaterialTheme.colorScheme.secondary)
-                        }
-                        Row {
-                            TextButton(onClick = { onIgnorePending(item) }) { Text("忽略") }
-                            TextButton(onClick = { onPending(item) }) { Text("补记录") }
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .statusBarsPadding(),
+                contentPadding = PaddingValues(start = 20.dp, top = 26.dp, end = 20.dp, bottom = 18.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                item {
+                    Column {
+                        Text("训练", style = MaterialTheme.typography.displaySmall, fontWeight = FontWeight.SemiBold)
+                        Spacer(Modifier.height(5.dp))
+                        Text(
+                            "选择今天要执行的流程",
+                            color = MaterialTheme.colorScheme.secondary,
+                            style = MaterialTheme.typography.bodyLarge,
+                        )
+                    }
+                }
+                if (pending.isNotEmpty()) {
+                    item {
+                        Text("待补训练记录", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                    }
+                    items(pending.take(3), key = { it.session.id }) { item ->
+                        Surface(
+                            modifier = Modifier.fillMaxWidth(),
+                            color = MaterialTheme.colorScheme.tertiaryContainer,
+                            shape = RoundedCornerShape(18.dp),
+                        ) {
+                            Row(
+                                Modifier.padding(horizontal = 18.dp, vertical = 12.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Column(Modifier.weight(1f)) {
+                                    Text(item.routineTitle, fontWeight = FontWeight.SemiBold)
+                                    Text(
+                                        "${item.session.date} · ${formatDuration(item.session.actualSeconds)}",
+                                        color = MaterialTheme.colorScheme.secondary,
+                                    )
+                                }
+                                Row {
+                                    TextButton(onClick = { onIgnorePending(item) }) { Text("忽略") }
+                                    TextButton(onClick = { onPending(item) }) { Text("补记录") }
+                                }
+                            }
                         }
                     }
                 }
-            }
-        }
-        notice?.let { message ->
-            item {
-                Surface(
-                    color = MaterialTheme.colorScheme.tertiaryContainer,
-                    shape = RoundedCornerShape(18.dp),
-                    modifier = Modifier.fillMaxWidth(),
-                ) { Text(message, modifier = Modifier.padding(16.dp)) }
-            }
-        }
-        val routines = library.byScene[scene].orEmpty()
-        if (routines.isEmpty()) {
-            item {
-                Surface(
-                    color = MaterialTheme.colorScheme.surfaceVariant,
-                    shape = RoundedCornerShape(22.dp),
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Column(Modifier.padding(24.dp)) {
-                        Text("这个场景还没有可执行方案", style = MaterialTheme.typography.titleLarge)
-                        Text("联网同步后会缓存 AI 管理的现行方案；本地不会用旧写死流程替代。", color = MaterialTheme.colorScheme.secondary)
+                notice?.let { message ->
+                    item {
+                        Surface(
+                            color = MaterialTheme.colorScheme.tertiaryContainer,
+                            shape = RoundedCornerShape(18.dp),
+                            modifier = Modifier.fillMaxWidth(),
+                        ) { Text(message, modifier = Modifier.padding(16.dp)) }
+                    }
+                }
+                val routines = library.byScene[scene].orEmpty()
+                if (routines.isEmpty()) {
+                    item {
+                        Surface(
+                            color = MaterialTheme.colorScheme.surfaceVariant,
+                            shape = RoundedCornerShape(22.dp),
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Column(Modifier.padding(24.dp)) {
+                                Text("这个场景还没有可执行方案", style = MaterialTheme.typography.titleLarge)
+                                Text(
+                                    "联网同步后会缓存 AI 管理的现行方案；本地不会用旧写死流程替代。",
+                                    color = MaterialTheme.colorScheme.secondary,
+                                )
+                            }
+                        }
+                    }
+                } else {
+                    items(routines, key = RoutineTemplate::id) { routine ->
+                        val expandedSeconds = expandRoutine(routine).sumOf { it.seconds }
+                        SwipeRevealRoutineCard(
+                            routine = routine,
+                            expandedSeconds = expandedSeconds,
+                            revealed = revealedRoutineId == routine.id,
+                            onReveal = { revealedRoutineId = routine.id },
+                            onClose = {
+                                if (revealedRoutineId == routine.id) revealedRoutineId = null
+                            },
+                            onSelect = { onSelect(routine) },
+                            onDelete = {
+                                revealedRoutineId = null
+                                routinePendingDelete = routine
+                            },
+                        )
+                    }
+                }
+                if (library.rejectedCount > 0) {
+                    item {
+                        Text(
+                            "有 ${library.rejectedCount} 个方案缺少权威字段或格式无效，未加入计时器。",
+                            color = MaterialTheme.colorScheme.error,
+                        )
                     }
                 }
             }
-        } else {
-            items(routines, key = RoutineTemplate::id) { routine ->
-                val expandedSeconds = expandRoutine(routine).sumOf { it.seconds }
-                SwipeRevealRoutineCard(
-                    routine = routine,
-                    expandedSeconds = expandedSeconds,
-                    revealed = revealedRoutineId == routine.id,
-                    onReveal = { revealedRoutineId = routine.id },
-                    onClose = {
-                        if (revealedRoutineId == routine.id) revealedRoutineId = null
-                    },
-                    onSelect = { onSelect(routine) },
-                    onDelete = {
-                        revealedRoutineId = null
-                        routinePendingDelete = routine
-                    },
-                )
-            }
-        }
-        if (library.rejectedCount > 0) {
-            item { Text("有 ${library.rejectedCount} 个方案缺少权威字段或格式无效，未加入计时器。", color = MaterialTheme.colorScheme.error) }
-        }
+            PrimaryPageIndicator(
+                selectedPage = 2,
+                modifier = Modifier.align(Alignment.TopCenter),
+            )
         }
     }
 
@@ -456,7 +481,7 @@ private fun SwipeRevealRoutineCard(
         modifier = Modifier
             .fillMaxWidth()
             .heightIn(min = 88.dp)
-            .clip(RoundedCornerShape(22.dp)),
+            .clip(RoundedCornerShape(24.dp)),
     ) {
         Surface(
             modifier = Modifier.matchParentSize(),
@@ -524,10 +549,15 @@ private fun SwipeRevealRoutineCard(
                 }
                 .testTag("routine-${routine.id}"),
             color = MaterialTheme.colorScheme.surface,
-            tonalElevation = 1.dp,
-            shape = RoundedCornerShape(22.dp),
+            tonalElevation = 0.dp,
+            shadowElevation = 1.dp,
+            shape = RoundedCornerShape(24.dp),
+            border = androidx.compose.foundation.BorderStroke(
+                1.dp,
+                MaterialTheme.colorScheme.primary.copy(alpha = 0.07f),
+            ),
         ) {
-            Column(Modifier.padding(horizontal = 20.dp, vertical = 18.dp)) {
+            Column(Modifier.padding(horizontal = 20.dp, vertical = 17.dp)) {
                 Text(routine.title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
                 Text("${formatDuration(expandedSeconds)} · ${routine.steps.size} 个动作", color = MaterialTheme.colorScheme.secondary)
             }

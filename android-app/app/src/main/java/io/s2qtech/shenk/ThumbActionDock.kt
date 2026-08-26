@@ -40,11 +40,11 @@ fun ThumbActionDock(
         modifier = modifier
             .fillMaxWidth()
             .navigationBarsPadding()
-            .padding(horizontal = 16.dp, vertical = 10.dp),
-        color = MaterialTheme.colorScheme.surfaceContainerHigh,
-        shape = RoundedCornerShape(28.dp),
-        tonalElevation = 3.dp,
-        shadowElevation = 8.dp,
+            .padding(horizontal = 18.dp, vertical = 10.dp),
+        color = MaterialTheme.colorScheme.surfaceContainer,
+        shape = RoundedCornerShape(25.dp),
+        tonalElevation = 1.dp,
+        shadowElevation = 5.dp,
     ) {
         Row(
             modifier = Modifier.fillMaxWidth().padding(6.dp),
@@ -56,16 +56,16 @@ fun ThumbActionDock(
                     onClick = action.onClick,
                     modifier = Modifier
                         .weight(1f)
-                        .heightIn(min = 56.dp)
+                        .heightIn(min = 52.dp)
                         .testTag(action.testTag),
-                    shape = RoundedCornerShape(22.dp),
+                    shape = RoundedCornerShape(20.dp),
                     color = if (action.selected) {
-                        MaterialTheme.colorScheme.primaryContainer
+                        MaterialTheme.colorScheme.primary
                     } else {
                         Color.Transparent
                     },
                     contentColor = if (action.selected) {
-                        MaterialTheme.colorScheme.onPrimaryContainer
+                        MaterialTheme.colorScheme.onPrimary
                     } else {
                         MaterialTheme.colorScheme.onSurfaceVariant
                     },
@@ -76,8 +76,8 @@ fun ThumbActionDock(
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         action.icon?.let { icon ->
-                            Icon(icon, contentDescription = null, modifier = Modifier.size(22.dp))
-                            androidx.compose.foundation.layout.Spacer(Modifier.size(8.dp))
+                            Icon(icon, contentDescription = null, modifier = Modifier.size(20.dp))
+                            androidx.compose.foundation.layout.Spacer(Modifier.size(7.dp))
                         }
                         Text(
                             text = action.label,
@@ -102,11 +102,11 @@ fun ThumbDockButton(
     Surface(
         onClick = onClick,
         modifier = modifier.navigationBarsPadding().padding(bottom = 10.dp),
-        color = MaterialTheme.colorScheme.primaryContainer,
-        contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-        shape = RoundedCornerShape(24.dp),
-        tonalElevation = 3.dp,
-        shadowElevation = 8.dp,
+        color = MaterialTheme.colorScheme.primary,
+        contentColor = MaterialTheme.colorScheme.onPrimary,
+        shape = RoundedCornerShape(23.dp),
+        tonalElevation = 1.dp,
+        shadowElevation = 6.dp,
     ) {
         Row(
             modifier = Modifier.padding(horizontal = 22.dp, vertical = 15.dp),

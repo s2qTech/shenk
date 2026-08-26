@@ -161,11 +161,10 @@ fun CalendarScreen(
             Modifier
                 .fillMaxSize()
                 .padding(inner)
-                .statusBarsPadding()
                 .navigationBarsPadding()
                 .testTag("calendar-screen"),
         ) {
-            Column(Modifier.fillMaxSize()) {
+            Column(Modifier.fillMaxSize().statusBarsPadding()) {
                 CalendarHeader(month = visibleMonth)
                 LazyColumn(
                     modifier = Modifier.fillMaxSize().testTag("calendar-agenda"),
@@ -190,7 +189,11 @@ fun CalendarScreen(
             }
             AnimatedVisibility(
                 visible = listState.isScrollInProgress,
-                modifier = Modifier.align(Alignment.Center).testTag("calendar-week-distance"),
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .statusBarsPadding()
+                    .padding(top = 76.dp, end = 18.dp)
+                    .testTag("calendar-week-distance"),
                 enter = fadeIn() + scaleIn(initialScale = 0.88f),
                 exit = fadeOut() + scaleOut(targetScale = 0.94f),
             ) {
@@ -231,6 +234,10 @@ fun CalendarScreen(
                     label = "今天",
                 )
             }
+            PrimaryPageIndicator(
+                selectedPage = 0,
+                modifier = Modifier.align(Alignment.TopCenter),
+            )
         }
     }
 
@@ -341,11 +348,11 @@ private fun CalendarHeader(
     month: YearMonth,
 ) {
     Row(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 16.dp),
-        horizontalArrangement = Arrangement.spacedBy(14.dp),
+        modifier = Modifier.fillMaxWidth().padding(start = 20.dp, top = 26.dp, end = 20.dp, bottom = 14.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text("月历", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.SemiBold)
+        Text("日历", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.SemiBold)
         Text(
             "${month.year}年${month.monthValue}月",
             color = MaterialTheme.colorScheme.secondary,
@@ -358,25 +365,21 @@ private fun CalendarHeader(
 private fun WeekDistanceHud(distance: Int) {
     val amount = kotlin.math.abs(distance)
     Surface(
-        color = MaterialTheme.colorScheme.inverseSurface.copy(alpha = 0.92f),
-        contentColor = MaterialTheme.colorScheme.inverseOnSurface,
-        shape = RoundedCornerShape(24.dp),
-        shadowElevation = 10.dp,
+        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.94f),
+        contentColor = MaterialTheme.colorScheme.onSurface,
+        shape = RoundedCornerShape(18.dp),
+        border = androidx.compose.foundation.BorderStroke(
+            1.dp,
+            MaterialTheme.colorScheme.primary.copy(alpha = 0.10f),
+        ),
+        shadowElevation = 4.dp,
     ) {
-        Column(
-            modifier = Modifier.padding(horizontal = 28.dp, vertical = 20.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-        ) {
-            Text(
-                if (distance == 0) "本周" else amount.toString(),
-                style = MaterialTheme.typography.displaySmall,
-                fontWeight = FontWeight.SemiBold,
-            )
-            if (distance != 0) {
-                Text("周${if (distance < 0) "前" else "后"}", style = MaterialTheme.typography.titleMedium)
-                Text("距今", style = MaterialTheme.typography.labelMedium)
-            }
-        }
+        Text(
+            text = if (distance == 0) "本周" else "$amount 周${if (distance < 0) "前" else "后"}",
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 9.dp),
+            style = MaterialTheme.typography.labelLarge,
+            fontWeight = FontWeight.SemiBold,
+        )
     }
 }
 
