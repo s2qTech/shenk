@@ -13,6 +13,8 @@ import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -54,12 +56,17 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
+import androidx.compose.material.icons.rounded.Check
+import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.DeleteOutline
 import androidx.compose.material.icons.rounded.Pause
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.SkipNext
 import androidx.compose.material.icons.rounded.SkipPrevious
 import androidx.compose.material.icons.rounded.StopCircle
+import androidx.compose.material.icons.rounded.WarningAmber
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -85,7 +92,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import io.s2qtech.shenk.model.RoutineScene
+import io.s2qtech.shenk.model.RoutineRole
 import io.s2qtech.shenk.model.RoutineStep
 import io.s2qtech.shenk.model.RoutineTemplate
 import io.s2qtech.shenk.model.TimerSessionFact
@@ -575,26 +584,66 @@ private fun RoutinePreviewScreen(
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
         bottomBar = {
-            Row(
-                Modifier.fillMaxWidth().navigationBarsPadding().padding(16.dp),
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            Surface(
+                color = MaterialTheme.colorScheme.background.copy(alpha = 0.96f),
+                tonalElevation = 0.dp,
+                shadowElevation = 3.dp,
+                shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
             ) {
-                OutlinedButton(onClick = onBack, modifier = Modifier.weight(1f)) { Text("返回") }
-                Button(onClick = onStart, modifier = Modifier.weight(2f).testTag("timer-start")) { Text("开始训练") }
+                Button(
+                    onClick = onStart,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .navigationBarsPadding()
+                        .padding(horizontal = 20.dp, vertical = 12.dp)
+                        .heightIn(min = 56.dp)
+                        .testTag("timer-start"),
+                    shape = RoundedCornerShape(19.dp),
+                ) {
+                    Text("开始训练", fontWeight = FontWeight.SemiBold)
+                    Spacer(Modifier.width(8.dp))
+                    Icon(Icons.AutoMirrored.Rounded.KeyboardArrowRight, contentDescription = null)
+                }
             }
         },
     ) { padding ->
         LazyColumn(
             Modifier.fillMaxSize().padding(padding).statusBarsPadding(),
-            contentPadding = PaddingValues(horizontal = 20.dp, vertical = 16.dp),
+            contentPadding = PaddingValues(start = 20.dp, top = 8.dp, end = 20.dp, bottom = 16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             item {
-                Text(routine.scene.displayName, color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelLarge)
+                TextButton(onClick = onBack) {
+                    Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = null)
+                    Spacer(Modifier.width(4.dp))
+                    Text("返回训练")
+                }
+                Spacer(Modifier.height(12.dp))
+                Text(
+                    "${routine.scene.displayName} · ${routine.role.previewLabel}",
+                    color = MaterialTheme.colorScheme.primary,
+                    style = MaterialTheme.typography.labelLarge,
+                )
+                Spacer(Modifier.height(4.dp))
                 Text(routine.title, style = MaterialTheme.typography.displaySmall, fontWeight = FontWeight.SemiBold)
-                Text("${formatDuration(snapshot.totalPlannedSeconds)} · ${snapshot.logicalActionCount} 个动作", color = MaterialTheme.colorScheme.secondary)
-                Spacer(Modifier.height(10.dp))
-                Text("点击动作可查看要领、风险和准备/换侧细节。", color = MaterialTheme.colorScheme.outline)
+                Spacer(Modifier.height(7.dp))
+                Text(
+                    "${formatDuration(snapshot.totalPlannedSeconds)} · ${snapshot.logicalActionCount} 个逻辑动作",
+                    color = MaterialTheme.colorScheme.secondary,
+                    style = MaterialTheme.typography.bodyLarge,
+                )
+                Spacer(Modifier.height(20.dp))
+                Surface(
+                    color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.58f),
+                    shape = RoundedCornerShape(17.dp),
+                ) {
+                    Text(
+                        "预览按逻辑动作分组；准备、换侧等执行细节会在计时时自动展开。点击动作可查看完整说明。",
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 13.dp),
+                        color = MaterialTheme.colorScheme.secondary,
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                }
             }
             items(routine.steps, key = RoutineStep::stepId) { step ->
                 ExercisePreviewCard(step, routine)
@@ -609,16 +658,27 @@ private fun ExercisePreviewCard(step: RoutineStep, routine: RoutineTemplate) {
     val runtime = remember(step, routine) { expandRoutine(routine).filter { it.sourceStepId == step.stepId } }
     Surface(
         modifier = Modifier.fillMaxWidth().clickable { expanded = !expanded },
-        shape = RoundedCornerShape(20.dp),
-        color = MaterialTheme.colorScheme.surfaceVariant,
+        shape = RoundedCornerShape(18.dp),
+        color = MaterialTheme.colorScheme.surface,
+        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.08f)),
     ) {
-        Column(Modifier.padding(18.dp)) {
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+        Column(Modifier.padding(horizontal = 17.dp, vertical = 15.dp)) {
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
                 Column(Modifier.weight(1f)) {
                     Text(step.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                     step.dose?.let { Text(it, color = MaterialTheme.colorScheme.secondary) }
                 }
                 Text(formatDuration(runtime.sumOf { it.seconds }), color = MaterialTheme.colorScheme.primary)
+                Icon(
+                    Icons.AutoMirrored.Rounded.KeyboardArrowRight,
+                    contentDescription = if (expanded) "收起说明" else "展开说明",
+                    tint = MaterialTheme.colorScheme.secondary,
+                    modifier = Modifier.graphicsLayer { rotationZ = if (expanded) 90f else 0f },
+                )
             }
             AnimatedVisibility(expanded) {
                 Column {
@@ -655,7 +715,9 @@ private fun ActiveTimerScreen(
 ) {
     val step = snapshot.currentStep
     val progress = step?.let { 1f - snapshot.currentStepRemainingMillis.toFloat() / (it.seconds * 1000f) } ?: 1f
+    val nextLogicalStep = snapshot.nextLogicalStep()
     Scaffold(
+        modifier = Modifier.testTag("timer-active"),
         containerColor = MaterialTheme.colorScheme.background,
         bottomBar = {
             TimerControlBar(snapshot, onPause, onPrevious, onNext, onStop, onFinish)
@@ -664,23 +726,80 @@ private fun ActiveTimerScreen(
         BoxWithConstraints(Modifier.fillMaxSize().padding(padding).statusBarsPadding()) {
             val landscape = maxWidth > maxHeight
             if (landscape) {
-                Row(Modifier.fillMaxSize().padding(16.dp), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-                    Column(
-                        Modifier.weight(1.15f).fillMaxHeight(),
-                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                Column(
+                    Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 8.dp),
+                    verticalArrangement = Arrangement.spacedBy(9.dp),
+                ) {
+                    TimerTopline(snapshot, Modifier.fillMaxWidth())
+                    Row(
+                        Modifier.fillMaxWidth().weight(1f),
+                        horizontalArrangement = Arrangement.spacedBy(14.dp),
                     ) {
-                        TimerHero(snapshot, progress, Modifier.fillMaxWidth().weight(1f))
-                        NextActionStrip(snapshot.nextStep, Modifier.fillMaxWidth())
+                        TimerHero(
+                            snapshot = snapshot,
+                            progress = progress,
+                            modifier = Modifier.weight(1.08f).fillMaxHeight(),
+                            compact = true,
+                        )
+                        Column(
+                            Modifier.weight(0.92f).fillMaxHeight(),
+                            verticalArrangement = Arrangement.spacedBy(9.dp),
+                        ) {
+                            TimerDetails(step, voiceNotice, Modifier.fillMaxWidth().weight(1f))
+                            NextActionStrip(nextLogicalStep, Modifier.fillMaxWidth())
+                        }
                     }
-                    TimerDetails(step, voiceNotice, Modifier.weight(0.85f).fillMaxHeight())
                 }
             } else {
-                Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    TimerHero(snapshot, progress, Modifier.fillMaxWidth().weight(0.84f))
-                    NextActionStrip(snapshot.nextStep, Modifier.fillMaxWidth())
-                    TimerDetails(step, voiceNotice, Modifier.fillMaxWidth().weight(1.16f))
+                Column(
+                    Modifier.fillMaxSize().padding(horizontal = 20.dp, vertical = 10.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    TimerTopline(snapshot, Modifier.fillMaxWidth())
+                    TimerHero(snapshot, progress, Modifier.fillMaxWidth())
+                    TimerDetails(step, voiceNotice, Modifier.fillMaxWidth().weight(1f))
+                    NextActionStrip(nextLogicalStep, Modifier.fillMaxWidth())
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun TimerTopline(snapshot: TimerSnapshot, modifier: Modifier = Modifier) {
+    val routineTitle = snapshot.request?.routine?.title ?: "训练"
+    Surface(
+        modifier = modifier,
+        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.72f),
+        shape = RoundedCornerShape(18.dp),
+        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.07f)),
+    ) {
+        Row(
+            Modifier.fillMaxWidth().padding(horizontal = 15.dp, vertical = 11.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                routineTitle,
+                modifier = Modifier.weight(1f),
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                "${snapshot.currentLogicalAction} / ${snapshot.logicalActionCount}",
+                modifier = Modifier.padding(horizontal = 14.dp),
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+            )
+            Text(
+                "还剩 ${formatClock(snapshot.totalRemainingSeconds())}",
+                modifier = Modifier.weight(1f),
+                color = MaterialTheme.colorScheme.secondary,
+                style = MaterialTheme.typography.labelLarge,
+                maxLines = 1,
+                textAlign = androidx.compose.ui.text.style.TextAlign.End,
+            )
         }
     }
 }
@@ -696,22 +815,28 @@ private fun TimerControlBar(
 ) {
     val active = snapshot.state in ACTIVE_TIMER_STATES
     val terminal = snapshot.state in TERMINAL_TIMER_STATES
-    Surface(tonalElevation = 2.dp) {
+    Surface(
+        tonalElevation = 0.dp,
+        shadowElevation = 3.dp,
+        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.97f),
+        shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
+    ) {
         Row(
-            Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 16.dp, vertical = 10.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 14.dp, vertical = 10.dp),
+            horizontalArrangement = Arrangement.spacedBy(9.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             OutlinedIconButton(
                 onClick = onPrevious,
                 enabled = active && snapshot.currentStepIndex > 0,
-                modifier = Modifier.size(54.dp),
+                modifier = Modifier.size(52.dp),
             ) {
                 Icon(Icons.Rounded.SkipPrevious, contentDescription = "上一个动作")
             }
             Button(
                 onClick = if (terminal) onFinish else onPause,
-                modifier = Modifier.weight(1f).heightIn(min = 54.dp),
+                modifier = Modifier.weight(1.45f).heightIn(min = 60.dp),
+                shape = RoundedCornerShape(20.dp),
             ) {
                 when (snapshot.state) {
                     TimerEngineState.RUNNING -> {
@@ -730,14 +855,14 @@ private fun TimerControlBar(
             OutlinedIconButton(
                 onClick = onNext,
                 enabled = active,
-                modifier = Modifier.size(54.dp),
+                modifier = Modifier.size(52.dp),
             ) {
                 Icon(Icons.Rounded.SkipNext, contentDescription = "下一个动作")
             }
             FilledIconButton(
                 onClick = onStop,
                 enabled = active,
-                modifier = Modifier.size(54.dp),
+                modifier = Modifier.size(52.dp),
             ) {
                 Icon(Icons.Rounded.StopCircle, contentDescription = "结束训练")
             }
@@ -746,27 +871,72 @@ private fun TimerControlBar(
 }
 
 @Composable
-private fun TimerHero(snapshot: TimerSnapshot, progress: Float, modifier: Modifier) {
-    Surface(modifier = modifier, color = MaterialTheme.colorScheme.primaryContainer, shape = RoundedCornerShape(28.dp)) {
+private fun TimerHero(
+    snapshot: TimerSnapshot,
+    progress: Float,
+    modifier: Modifier,
+    compact: Boolean = false,
+) {
+    Surface(modifier = modifier, color = MaterialTheme.colorScheme.background, shape = RoundedCornerShape(0.dp)) {
         Column(
-            Modifier.fillMaxSize().padding(24.dp),
-            verticalArrangement = Arrangement.SpaceBetween,
+            Modifier.fillMaxWidth().padding(horizontal = 5.dp, vertical = if (compact) 2.dp else 8.dp),
         ) {
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Text("${snapshot.currentLogicalAction} / ${snapshot.logicalActionCount}", color = MaterialTheme.colorScheme.secondary)
-                Text(if (snapshot.state == TimerEngineState.PAUSED) "已暂停" else "训练中", color = MaterialTheme.colorScheme.primary)
+            Surface(
+                color = if (snapshot.state == TimerEngineState.PAUSED) {
+                    MaterialTheme.colorScheme.tertiaryContainer
+                } else {
+                    MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.68f)
+                },
+                shape = RoundedCornerShape(50),
+            ) {
+                Row(
+                    Modifier.padding(horizontal = 13.dp, vertical = if (compact) 5.dp else 7.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Surface(
+                        modifier = Modifier.size(7.dp),
+                        color = if (snapshot.state == TimerEngineState.PAUSED) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.primary,
+                        shape = RoundedCornerShape(50),
+                    ) {}
+                    Text(
+                        if (snapshot.state == TimerEngineState.PAUSED) "已暂停" else "训练中",
+                        color = if (snapshot.state == TimerEngineState.PAUSED) MaterialTheme.colorScheme.onTertiaryContainer else MaterialTheme.colorScheme.primary,
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                }
             }
-            Column {
-                Text(
-                    snapshot.currentStep?.name ?: "训练完成",
-                    style = MaterialTheme.typography.headlineLarge,
-                    fontWeight = FontWeight.SemiBold,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                Text(formatClock(snapshot.remainingSeconds), style = MaterialTheme.typography.displayLarge, fontWeight = FontWeight.Bold)
-            }
-            LinearProgressIndicator(progress = { progress.coerceIn(0f, 1f) }, modifier = Modifier.fillMaxWidth())
+            Spacer(Modifier.height(if (compact) 7.dp else 15.dp))
+            Text(
+                snapshot.currentStep?.name ?: "训练完成",
+                style = if (compact) MaterialTheme.typography.headlineSmall else MaterialTheme.typography.headlineLarge,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = if (compact) 1 else 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Spacer(Modifier.height(if (compact) 2.dp else 5.dp))
+            Text(
+                "第 ${snapshot.currentLogicalAction} 项，共 ${snapshot.logicalActionCount} 项",
+                color = MaterialTheme.colorScheme.secondary,
+                style = if (compact) MaterialTheme.typography.bodySmall else MaterialTheme.typography.bodyMedium,
+            )
+            Text(
+                formatClock(snapshot.remainingSeconds),
+                modifier = Modifier.align(Alignment.CenterHorizontally),
+                style = MaterialTheme.typography.displayLarge.copy(
+                    fontSize = if (compact) 58.sp else 84.sp,
+                    lineHeight = if (compact) 60.sp else 88.sp,
+                    letterSpacing = if (compact) (-2).sp else (-3).sp,
+                    fontWeight = FontWeight.Bold,
+                    fontFeatureSettings = "tnum",
+                ),
+                maxLines = 1,
+            )
+            LinearProgressIndicator(
+                progress = { progress.coerceIn(0f, 1f) },
+                modifier = Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(50)),
+            )
         }
     }
 }
@@ -775,26 +945,34 @@ private fun TimerHero(snapshot: TimerSnapshot, progress: Float, modifier: Modifi
 private fun NextActionStrip(next: RuntimeStep?, modifier: Modifier) {
     Surface(
         modifier = modifier,
-        color = MaterialTheme.colorScheme.secondaryContainer,
-        shape = RoundedCornerShape(20.dp),
+        color = MaterialTheme.colorScheme.surface,
+        shape = RoundedCornerShape(18.dp),
+        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.08f)),
     ) {
         Row(
-            Modifier.padding(horizontal = 18.dp, vertical = 13.dp),
+            Modifier.fillMaxWidth().padding(horizontal = 15.dp, vertical = 11.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {
+            Icon(
+                Icons.AutoMirrored.Rounded.KeyboardArrowRight,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(26.dp),
+            )
+            Spacer(Modifier.width(8.dp))
             Column(Modifier.weight(1f)) {
-                Text("接下来", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
+                Text("接下来", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
                 Text(
                     next?.name ?: "这是最后一项",
-                    style = MaterialTheme.typography.titleMedium,
+                    style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.SemiBold,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
             }
             next?.let {
-                Text(formatClock(it.seconds), style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
+                Text(formatClock(it.seconds), style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.secondary)
             }
         }
     }
@@ -805,15 +983,19 @@ private fun TimerDetails(step: RuntimeStep?, voiceNotice: String?, modifier: Mod
     val cues = step?.cues.orEmpty()
     val breath = step?.breath?.takeIf(String::isNotBlank)
     val warnings = step?.warnings.orEmpty()
-    Surface(modifier = modifier, color = MaterialTheme.colorScheme.surfaceVariant, shape = RoundedCornerShape(28.dp)) {
+    Surface(
+        modifier = modifier,
+        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.7f),
+        shape = RoundedCornerShape(20.dp),
+    ) {
         LazyColumn(
             Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(24.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
+            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 10.dp),
+            verticalArrangement = Arrangement.spacedBy(7.dp),
         ) {
             voiceNotice?.let { notice ->
                 item {
-                    Surface(color = MaterialTheme.colorScheme.errorContainer, shape = RoundedCornerShape(14.dp)) {
+                    Surface(color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.72f), shape = RoundedCornerShape(14.dp)) {
                         Text(
                             notice,
                             modifier = Modifier.fillMaxWidth().padding(12.dp),
@@ -822,23 +1004,32 @@ private fun TimerDetails(step: RuntimeStep?, voiceNotice: String?, modifier: Mod
                     }
                 }
             }
-            item { Text("动作要领", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold) }
+            item {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Rounded.Info, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                    Spacer(Modifier.width(9.dp))
+                    Text("动作要领", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
+                }
+            }
             if (cues.isEmpty()) {
-                item { Text("保持稳定、自然呼吸。", color = MaterialTheme.colorScheme.secondary) }
+                item { Text("保持稳定、自然呼吸。", color = MaterialTheme.colorScheme.secondary, style = MaterialTheme.typography.bodyMedium) }
             } else {
-                items(cues) { cue -> Text("· $cue", style = MaterialTheme.typography.bodyLarge) }
+                items(cues) { cue -> Text(cue, style = MaterialTheme.typography.bodyMedium) }
             }
             breath?.let {
                 item { Text("呼吸：$breath", color = MaterialTheme.colorScheme.primary) }
             }
             if (warnings.isNotEmpty()) {
                 item {
-                    Spacer(Modifier.height(6.dp))
                     HorizontalDivider()
-                    Spacer(Modifier.height(6.dp))
-                    Text("注意事项", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                    Spacer(Modifier.height(3.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Rounded.WarningAmber, contentDescription = null, tint = MaterialTheme.colorScheme.error)
+                        Spacer(Modifier.width(9.dp))
+                        Text("需要留意", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.error, fontWeight = FontWeight.SemiBold)
+                    }
                 }
-                items(warnings) { warning -> Text("· $warning", color = MaterialTheme.colorScheme.error) }
+                items(warnings) { warning -> Text(warning, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium) }
             }
         }
     }
@@ -856,13 +1047,52 @@ private fun PostWorkoutSheet(
     var result by remember(session.id) { mutableStateOf("合适") }
     var notes by remember(session.id) { mutableStateOf("") }
     val title = session.routineSnapshot["title"]?.jsonPrimitive?.content ?: "训练"
-    ModalBottomSheet(onDismissRequest = onDismiss) {
+    val completedActions = session.stepResults.count { it.completed }
+    val totalActions = session.stepResults.size
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        containerColor = MaterialTheme.colorScheme.background,
+    ) {
         Column(
-            Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 22.dp, vertical = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp),
+            Modifier
+                .fillMaxWidth()
+                .verticalScroll(rememberScrollState())
+                .navigationBarsPadding()
+                .padding(horizontal = 22.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(13.dp),
         ) {
-            Text("完成训练记录", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold)
-            Text("$title · ${formatDuration(session.actualSeconds)}", color = MaterialTheme.colorScheme.secondary)
+            Surface(
+                modifier = Modifier.size(58.dp).align(Alignment.CenterHorizontally),
+                color = MaterialTheme.colorScheme.primary,
+                shape = RoundedCornerShape(21.dp),
+                shadowElevation = 4.dp,
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(Icons.Rounded.Check, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimary)
+                }
+            }
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                Text("计时事实已保存", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
+                Text("完成训练", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold)
+                Text("$title · ${formatDuration(session.actualSeconds)}", color = MaterialTheme.colorScheme.secondary)
+            }
+            Surface(
+                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.75f),
+                shape = RoundedCornerShape(18.dp),
+                border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.08f)),
+            ) {
+                Row(
+                    Modifier.fillMaxWidth().padding(vertical = 15.dp),
+                    horizontalArrangement = Arrangement.SpaceEvenly,
+                ) {
+                    CompletionFact("完成动作", if (totalActions > 0) "$completedActions / $totalActions" else "—")
+                    CompletionFact("有效训练", formatClock(session.activeSeconds))
+                    CompletionFact("暂停", formatClock(session.pausedSeconds))
+                }
+            }
             OutlinedTextField(
                 value = heartRate,
                 onValueChange = { heartRate = it.filter(Char::isDigit).take(3) },
@@ -871,7 +1101,7 @@ private fun PostWorkoutSheet(
                 modifier = Modifier.fillMaxWidth(),
             )
             Column {
-                Text("体感强度 ${effort.toInt()} / 10")
+                Text("体感强度 ${effort.toInt()} / 10", fontWeight = FontWeight.SemiBold)
                 Slider(value = effort, onValueChange = { effort = it }, valueRange = 1f..10f, steps = 8)
             }
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -881,6 +1111,11 @@ private fun PostWorkoutSheet(
                 }
             }
             OutlinedTextField(value = notes, onValueChange = { notes = it }, label = { Text("备注（可选）") }, minLines = 2, modifier = Modifier.fillMaxWidth())
+            Text(
+                "正式训练记录将在确认后保存；选择稍后补充只会保留上面的计时事实。",
+                color = MaterialTheme.colorScheme.secondary,
+                style = MaterialTheme.typography.bodySmall,
+            )
             Button(
                 onClick = {
                     onSave(
@@ -903,15 +1138,48 @@ private fun PostWorkoutSheet(
                         ),
                     )
                 },
-                modifier = Modifier.fillMaxWidth().testTag("post-workout-save"),
+                modifier = Modifier.fillMaxWidth().heightIn(min = 54.dp).testTag("post-workout-save"),
+                shape = RoundedCornerShape(18.dp),
             ) { Text("保存正式记录") }
             TextButton(onClick = onDismiss, modifier = Modifier.fillMaxWidth()) { Text("稍后补充") }
         }
     }
 }
 
+@Composable
+private fun CompletionFact(label: String, value: String) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Text(label, color = MaterialTheme.colorScheme.secondary, style = MaterialTheme.typography.labelSmall)
+        Spacer(Modifier.height(5.dp))
+        Text(value, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+    }
+}
+
 private val ACTIVE_TIMER_STATES = setOf(TimerEngineState.RUNNING, TimerEngineState.PAUSED)
 private val TERMINAL_TIMER_STATES = setOf(TimerEngineState.COMPLETED, TimerEngineState.STOPPED)
+
+private val RoutineRole.previewLabel: String
+    get() = when (this) {
+        RoutineRole.MAIN -> "主训练"
+        RoutineRole.WARMUP -> "热身"
+        RoutineRole.STRETCH -> "拉伸"
+        RoutineRole.COOLDOWN -> "放松"
+        RoutineRole.RECOVERY -> "恢复"
+        RoutineRole.AUXILIARY -> "辅助"
+    }
+
+internal fun TimerSnapshot.nextLogicalStep(): RuntimeStep? {
+    val currentLogicalIndex = currentStep?.logicalIndex ?: return null
+    return steps.asSequence()
+        .drop(currentStepIndex + 1)
+        .firstOrNull { it.logicalIndex > currentLogicalIndex }
+}
+
+internal fun TimerSnapshot.totalRemainingSeconds(): Int {
+    if (steps.isEmpty()) return 0
+    val futureSeconds = steps.drop(currentStepIndex + 1).sumOf(RuntimeStep::seconds)
+    return remainingSeconds + futureSeconds
+}
 
 private fun formatDuration(seconds: Int): String = when {
     seconds >= 3600 -> "${seconds / 3600} 小时 ${(seconds % 3600) / 60} 分"

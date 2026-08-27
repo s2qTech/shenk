@@ -29,6 +29,7 @@ import io.s2qtech.shenk.sync.PlanCollaborationRepository
 import io.s2qtech.shenk.sync.RoutineLibraryRepository
 import io.s2qtech.shenk.sync.TodayRecordRepository
 import io.s2qtech.shenk.model.TodayGuidance
+import io.s2qtech.shenk.timer.TimerEngineState
 import java.time.LocalDate
 import kotlinx.coroutines.launch
 
@@ -53,7 +54,11 @@ fun ShenkApp(
     onExternalRequestConsumed: () -> Unit = {},
     onPrimaryPagesReady: () -> Unit = {},
 ) {
-    val pager = rememberPagerState(initialPage = 1, pageCount = { 3 })
+    val coordinator = remember { timerCoordinator() }
+    val initialPrimaryPage = remember {
+        initialPrimaryPageForTimerState(coordinator.snapshot.value.state)
+    }
+    val pager = rememberPagerState(initialPage = initialPrimaryPage, pageCount = { 3 })
     val scope = rememberCoroutineScope()
     var secondary by remember { mutableStateOf<SecondarySpace?>(null) }
     var trainingLaunch by remember { mutableStateOf<TrainingLaunchRequest?>(null) }
@@ -67,7 +72,7 @@ fun ShenkApp(
             withFrameNanos { }
             pager.scrollToPage(TRAINING_PAGE)
             withFrameNanos { }
-            pager.scrollToPage(TODAY_PAGE)
+            pager.scrollToPage(initialPrimaryPage)
             withFrameNanos { }
             primaryPagerWarmed = true
             onPrimaryPagesReady()
@@ -163,7 +168,7 @@ fun ShenkApp(
                             routineRepository = routineLibraryRepository,
                             sessionRepository = timerSessionRepository,
                             recordRepository = calendarRepository,
-                            coordinator = timerCoordinator(),
+                            coordinator = coordinator,
                             launchRequest = trainingLaunch,
                             onLaunchConsumed = { trainingLaunch = null },
                             onReady = { primaryPagesReady[TRAINING_PAGE] = true },
@@ -194,6 +199,9 @@ private const val CALENDAR_PAGE = 0
 private const val TODAY_PAGE = 1
 private const val TRAINING_PAGE = 2
 private const val PRIMARY_PAGE_RETENTION_RADIUS = 2
+
+internal fun initialPrimaryPageForTimerState(state: TimerEngineState): Int =
+    if (state == TimerEngineState.IDLE) TODAY_PAGE else TRAINING_PAGE
 
 private suspend fun androidx.compose.foundation.pager.PagerState.animatePrimaryPage(page: Int) {
     animateScrollToPage(page = page)

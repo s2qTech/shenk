@@ -230,6 +230,10 @@ The flow starts with a fast `no abnormality` action. Fatigue and pain are distin
 - Female text-to-speech is preferred when available.
 - Every exercise announces its cue together with countdown behavior.
 - Current action, remaining time, exercise cues, and warnings are the dominant content.
+- The compact status line shows routine name, current logical-action position, and total remaining time without consuming the hero area.
+- The current action uses a large tabular countdown plus a thin progress indicator. The following-action strip skips prepare, side-switch, and rest implementation fragments and names the next logical exercise.
+- Portrait and landscape use the same hierarchy at different densities. Activity recreation during a running or paused timer must reopen the Training page instead of resetting the primary pager to Today.
+- Pause/resume is the dominant lower-thumb control; previous, next, and stop remain visibly available without becoming equal-weight primary actions.
 - Do not create a custom lock-screen experience. If Android requires a foreground-service notification, keep it minimal and private.
 
 ### Completion
@@ -278,6 +282,8 @@ The current native UI is functionally coherent and intentionally minimal, but it
 Before broad screen changes, complete a whole-product UI inventory and establish reusable tokens/components plus representative light/dark prototypes for Today, Calendar/date details, Training/timer, review, planning, data, and settings. Preserve the accepted information architecture, one-handed operation, accessibility, day priority, and domain ownership. Minimalism remains a direction, but must communicate intent, hierarchy, and brand character rather than appearing unfinished or relying on generic text-only layout.
 
 Implementation began on 2026-08-27 after the representative mobile prototype was accepted. The first native slice establishes the shared light/dark color, typography, shape, page-position, card, and lower-thumb-control language on Today, Calendar, and the Training routine library. The Xiaomi 14 gate verified both themes, retained the existing application identity and Room database, and exercised Calendar distance/return controls plus the Training scene dock. This is a reusable-system rollout, not authorization to change business copy, navigation ownership, plan resolution, recording, timer facts, or sync behavior. The timer and remaining secondary surfaces follow in separate, reviewable slices.
+
+The second native slice applies the shared system to routine preview, active timer, and completion while preserving timer/session ownership. Real-device acceptance covered dark and light portrait states plus landscape Activity recreation, retained the original application identity and database, and left no validation session or formal record behind. Daily review, planning, data, settings, empty/error states, and motion follow in separate, reviewable slices.
 
 ## 13. Phase 1 Success Criteria
 
