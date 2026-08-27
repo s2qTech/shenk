@@ -4,11 +4,14 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
@@ -17,6 +20,8 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.customActions
@@ -31,6 +36,8 @@ import io.s2qtech.shenk.sync.TodayRecordRepository
 import io.s2qtech.shenk.model.TodayGuidance
 import io.s2qtech.shenk.timer.TimerEngineState
 import java.time.LocalDate
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 
 private enum class SecondarySpace { DATA, PLANNING }
@@ -55,9 +62,13 @@ fun ShenkApp(
     onPrimaryPagesReady: () -> Unit = {},
 ) {
     val coordinator = remember { timerCoordinator() }
-    val initialPrimaryPage = remember {
-        initialPrimaryPageForTimerState(coordinator.snapshot.value.state)
+    val initialTimerEngineState = remember(coordinator) { coordinator.snapshot.value.state }
+    val initialPrimaryPage = remember(initialTimerEngineState) {
+        initialPrimaryPageForTimerState(initialTimerEngineState)
     }
+    val timerEngineState by remember(coordinator) {
+        coordinator.snapshot.map { it.state }.distinctUntilChanged()
+    }.collectAsState(initial = initialTimerEngineState)
     val pager = rememberPagerState(initialPage = initialPrimaryPage, pageCount = { 3 })
     val scope = rememberCoroutineScope()
     var secondary by remember { mutableStateOf<SecondarySpace?>(null) }
@@ -110,70 +121,81 @@ fun ShenkApp(
                     secondary = null
                 },
             )
-            null -> HorizontalPager(
-                state = pager,
-                beyondViewportPageCount = PRIMARY_PAGE_RETENTION_RADIUS,
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(MaterialTheme.colorScheme.background)
-                    .semantics {
-                        stateDescription = when (pager.currentPage) {
-                            CALENDAR_PAGE -> "日历，第 1 页，共 3 页"
-                            TODAY_PAGE -> "今天，第 2 页，共 3 页"
-                            else -> "训练，第 3 页，共 3 页"
+            null -> {
+                HorizontalPager(
+                    state = pager,
+                    beyondViewportPageCount = PRIMARY_PAGE_RETENTION_RADIUS,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(MaterialTheme.colorScheme.background)
+                        .semantics {
+                            stateDescription = when (pager.currentPage) {
+                                CALENDAR_PAGE -> "日历，第 1 页，共 3 页"
+                                TODAY_PAGE -> "今天，第 2 页，共 3 页"
+                                else -> "训练，第 3 页，共 3 页"
+                            }
+                            customActions = buildList {
+                                if (pager.currentPage != CALENDAR_PAGE) {
+                                    add(CustomAccessibilityAction("转到日历") {
+                                        scope.launch { pager.animatePrimaryPage(CALENDAR_PAGE) }
+                                        true
+                                    })
+                                }
+                                if (pager.currentPage != TODAY_PAGE) {
+                                    add(CustomAccessibilityAction("转到今天") {
+                                        scope.launch { pager.animatePrimaryPage(TODAY_PAGE) }
+                                        true
+                                    })
+                                }
+                                if (pager.currentPage != TRAINING_PAGE) {
+                                    add(CustomAccessibilityAction("转到训练") {
+                                        scope.launch { pager.animatePrimaryPage(TRAINING_PAGE) }
+                                        true
+                                    })
+                                }
+                            }
                         }
-                        customActions = buildList {
-                            if (pager.currentPage != CALENDAR_PAGE) {
-                                add(CustomAccessibilityAction("转到日历") {
-                                    scope.launch { pager.animatePrimaryPage(CALENDAR_PAGE) }
-                                    true
-                                })
-                            }
-                            if (pager.currentPage != TODAY_PAGE) {
-                                add(CustomAccessibilityAction("转到今天") {
-                                    scope.launch { pager.animatePrimaryPage(TODAY_PAGE) }
-                                    true
-                                })
-                            }
-                            if (pager.currentPage != TRAINING_PAGE) {
-                                add(CustomAccessibilityAction("转到训练") {
-                                    scope.launch { pager.animatePrimaryPage(TRAINING_PAGE) }
-                                    true
-                                })
-                            }
+                        .testTag("primary-pager"),
+                ) { page ->
+                    PrimaryPageSlot(page = page) {
+                        when (page) {
+                            CALENDAR_PAGE -> CalendarScreen(
+                                repository = calendarRepository,
+                                onReady = { primaryPagesReady[CALENDAR_PAGE] = true },
+                            )
+                            TODAY_PAGE -> TodayRoute(
+                                repository = todayRepository,
+                                recordRepository = calendarRepository,
+                                reminderStore = reminderStore,
+                                cloudConnectionManager = cloudConnectionManager,
+                                onReady = { primaryPagesReady[TODAY_PAGE] = true },
+                                onData = { secondary = SecondarySpace.DATA },
+                                onPlanning = { secondary = SecondarySpace.PLANNING },
+                                onTraining = { guidance ->
+                                    trainingLaunch = TrainingLaunchRequest(LocalDate.now(), guidance)
+                                    scope.launch { pager.animatePrimaryPage(2) }
+                                },
+                            )
+                            TRAINING_PAGE -> TrainingRoute(
+                                routineRepository = routineLibraryRepository,
+                                sessionRepository = timerSessionRepository,
+                                recordRepository = calendarRepository,
+                                coordinator = coordinator,
+                                launchRequest = trainingLaunch,
+                                onLaunchConsumed = { trainingLaunch = null },
+                                onReady = { primaryPagesReady[TRAINING_PAGE] = true },
+                            )
                         }
                     }
-                    .testTag("primary-pager"),
-            ) { page ->
-                PrimaryPageSlot(page = page) {
-                    when (page) {
-                        CALENDAR_PAGE -> CalendarScreen(
-                            repository = calendarRepository,
-                            onReady = { primaryPagesReady[CALENDAR_PAGE] = true },
-                        )
-                        TODAY_PAGE -> TodayRoute(
-                            repository = todayRepository,
-                            recordRepository = calendarRepository,
-                            reminderStore = reminderStore,
-                            cloudConnectionManager = cloudConnectionManager,
-                            onReady = { primaryPagesReady[TODAY_PAGE] = true },
-                            onData = { secondary = SecondarySpace.DATA },
-                            onPlanning = { secondary = SecondarySpace.PLANNING },
-                            onTraining = { guidance ->
-                                trainingLaunch = TrainingLaunchRequest(LocalDate.now(), guidance)
-                                scope.launch { pager.animatePrimaryPage(2) }
-                            },
-                        )
-                        TRAINING_PAGE -> TrainingRoute(
-                            routineRepository = routineLibraryRepository,
-                            sessionRepository = timerSessionRepository,
-                            recordRepository = calendarRepository,
-                            coordinator = coordinator,
-                            launchRequest = trainingLaunch,
-                            onLaunchConsumed = { trainingLaunch = null },
-                            onReady = { primaryPagesReady[TRAINING_PAGE] = true },
-                        )
-                    }
+                }
+                if (timerEngineState == TimerEngineState.IDLE || pager.settledPage != TRAINING_PAGE) {
+                    PagerDrivenPrimaryPageIndicator(
+                        pagerState = pager,
+                        modifier = Modifier
+                            .align(Alignment.TopCenter)
+                            .statusBarsPadding()
+                            .padding(top = 10.dp),
+                    )
                 }
             }
         }

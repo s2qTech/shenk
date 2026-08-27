@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -156,7 +157,10 @@ fun CalendarScreen(
         }
     }
 
-    Scaffold(snackbarHost = { SnackbarHost(snackbar) }) { inner ->
+    Scaffold(
+        snackbarHost = { SnackbarHost(snackbar) },
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
+    ) { inner ->
         Box(
             Modifier
                 .fillMaxSize()
@@ -192,7 +196,7 @@ fun CalendarScreen(
                 modifier = Modifier
                     .align(Alignment.TopEnd)
                     .statusBarsPadding()
-                    .padding(top = 76.dp, end = 18.dp)
+                    .padding(top = 60.dp, end = 18.dp)
                     .testTag("calendar-week-distance"),
                 enter = fadeIn() + scaleIn(initialScale = 0.88f),
                 exit = fadeOut() + scaleOut(targetScale = 0.94f),
@@ -234,10 +238,6 @@ fun CalendarScreen(
                     label = "今天",
                 )
             }
-            PrimaryPageIndicator(
-                selectedPage = 0,
-                modifier = Modifier.align(Alignment.TopCenter),
-            )
         }
     }
 
@@ -348,7 +348,7 @@ private fun CalendarHeader(
     month: YearMonth,
 ) {
     Row(
-        modifier = Modifier.fillMaxWidth().padding(start = 20.dp, top = 26.dp, end = 20.dp, bottom = 14.dp),
+        modifier = Modifier.fillMaxWidth().padding(start = 20.dp, top = 10.dp, end = 20.dp, bottom = 14.dp),
         horizontalArrangement = Arrangement.spacedBy(12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {

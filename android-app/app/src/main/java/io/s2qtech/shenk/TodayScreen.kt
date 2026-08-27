@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -180,6 +181,7 @@ fun TodayRoute(
     Scaffold(
         snackbarHost = { SnackbarHost(snackbar) },
         containerColor = MaterialTheme.colorScheme.background,
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
         bottomBar = {
             TodayDestinationBar(
                 onData = onData,
@@ -406,7 +408,7 @@ private fun TodayScreen(
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
                 .statusBarsPadding()
-                .padding(start = 22.dp, top = 26.dp, end = 22.dp, bottom = 18.dp),
+                .padding(start = 22.dp, top = 10.dp, end = 22.dp, bottom = 18.dp),
         ) {
             Column {
                 Text(
@@ -453,10 +455,6 @@ private fun TodayScreen(
             )
             Spacer(Modifier.height(24.dp))
         }
-        PrimaryPageIndicator(
-            selectedPage = 1,
-            modifier = Modifier.align(Alignment.TopCenter),
-        )
     }
 }
 

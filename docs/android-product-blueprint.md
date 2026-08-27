@@ -90,6 +90,7 @@ Calendar  <-  Today  ->  Training
 - System back, visible navigation controls, and accessibility actions must provide alternatives to gestures.
 - Calendar and Training are expanded states of the primary space, not independent exit destinations. System back from either one returns to Today first; only a back action from Today may leave the app.
 - High-frequency choices and primary actions belong in the lower thumb-reach zone. The top region is reserved for context, status, and genuinely low-frequency navigation.
+- The three-position primary-page indicator is shared by the pager, not duplicated inside each page. Its selected capsule follows the continuous drag offset and occupies the same compact top safety band as page context; it must not create a second status-bar inset or remain visible over timer preview/active states.
 - A gesture-only action is never sufficient: every reveal, collapse, and primary command has a visible or accessibility equivalent.
 
 Secondary spaces are reached contextually from the content that owns them:

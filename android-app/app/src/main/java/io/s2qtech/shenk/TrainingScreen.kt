@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -311,6 +312,7 @@ private fun RoutineLibraryScreen(
             .fillMaxSize()
             .testTag("training-screen"),
         containerColor = MaterialTheme.colorScheme.background,
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
         bottomBar = {
             ThumbActionDock(
                 actions = RoutineScene.entries.map { value ->
@@ -334,7 +336,7 @@ private fun RoutineLibraryScreen(
                 modifier = Modifier
                     .fillMaxSize()
                     .statusBarsPadding(),
-                contentPadding = PaddingValues(start = 20.dp, top = 26.dp, end = 20.dp, bottom = 18.dp),
+                contentPadding = PaddingValues(start = 20.dp, top = 10.dp, end = 20.dp, bottom = 18.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 item {
@@ -432,10 +434,6 @@ private fun RoutineLibraryScreen(
                     }
                 }
             }
-            PrimaryPageIndicator(
-                selectedPage = 2,
-                modifier = Modifier.align(Alignment.TopCenter),
-            )
         }
     }
 
