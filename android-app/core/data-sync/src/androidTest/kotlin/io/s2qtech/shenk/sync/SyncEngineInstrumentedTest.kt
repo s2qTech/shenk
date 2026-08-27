@@ -11,6 +11,9 @@ import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -111,6 +114,37 @@ class SyncEngineInstrumentedTest {
         }
     }
 
+    @Test
+    fun timerFactUsesTimerRoleApiWhileOtherRecordsUseShenkRoleApi() {
+        runBlocking {
+            repository.persistAndEnqueue(trainingLog("synthetic-role-log"), SharedEntityOwner.RECORD)
+            repository.persistAndEnqueue(
+                SharedRecord.create(
+                    entity = "timer_sessions",
+                    id = "synthetic-role-timer",
+                    data = buildJsonObject { put("completion", JsonPrimitive("completed")) },
+                ),
+                SharedEntityOwner.TIMER,
+            )
+            val shenkApi = AcceptingWorkerApi()
+            val timerApi = AcceptingWorkerApi()
+
+            val result = SyncEngine(
+                database = database,
+                repository = repository,
+                api = shenkApi,
+                timerApi = timerApi,
+                deviceId = "synthetic-device",
+                timeSource = clock,
+            ).synchronize()
+
+            assertEquals(2, result.pushed)
+            assertEquals(listOf("training_logs"), shenkApi.upsertEntities)
+            assertEquals(listOf("timer_sessions"), timerApi.upsertEntities)
+            assertEquals(0, database.outbox().count())
+        }
+    }
+
     private fun engine(api: WorkerRecordApi) = SyncEngine(
         database = database,
         repository = repository,
@@ -146,6 +180,31 @@ class SyncEngineInstrumentedTest {
         override suspend fun upsert(request: JsonObject): JsonObject {
             lastUpsert = request
             return upsertResponse
+        }
+    }
+
+    private class AcceptingWorkerApi : WorkerRecordApi {
+        val upsertEntities = mutableListOf<String>()
+
+        override suspend fun query(request: JsonObject): JsonObject = buildJsonObject {
+            put("serverTime", JsonPrimitive("2100-01-01T00:10:00Z"))
+            put("records", JsonArray(emptyList()))
+        }
+
+        override suspend fun upsert(request: JsonObject): JsonObject {
+            val records = request.getValue("records").jsonArray.map { it.jsonObject }
+            upsertEntities += records.map { it.getValue("entity").jsonPrimitive.content }
+            return buildJsonObject {
+                put("accepted", JsonArray(records.map { envelope ->
+                    buildJsonObject {
+                        put("entity", envelope.getValue("entity"))
+                        put("id", envelope.getValue("id"))
+                        put("revision", JsonPrimitive(2))
+                        put("updatedAt", JsonPrimitive("2100-01-01T00:05:00Z"))
+                    }
+                }))
+                put("conflicts", JsonArray(emptyList()))
+            }
         }
     }
 }

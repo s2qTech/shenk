@@ -28,6 +28,7 @@ The exported Room schema is committed under `android-app/core/data-sync/schemas/
 ## Sync and conflict rules
 
 - WorkManager starts only with network connectivity and uses exponential retry.
+- Mixed outbox batches are partitioned by authoritative owner before upload: Shenk-owned entities use the Shenk credential and `timer_sessions` use the timer credential. A missing role credential leaves that operation retryable; it is never sent under a different role.
 - Upserts are batched to the Worker limit and retain an idempotency key until acknowledged.
 - An omitted record in a successful Worker response is not treated as success; it remains retryable.
 - A pulled record at or below the dirty row's base revision is stale and ignored.

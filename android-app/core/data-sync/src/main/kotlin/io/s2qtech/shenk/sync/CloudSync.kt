@@ -10,6 +10,8 @@ import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import io.s2qtech.shenk.model.ContractVersion
+import io.s2qtech.shenk.model.EntityOwnership
+import io.s2qtech.shenk.model.SharedEntityOwner
 import io.s2qtech.shenk.model.SharedRecord
 import io.s2qtech.shenk.model.SharedRecordKey
 import java.util.concurrent.TimeUnit
@@ -72,6 +74,7 @@ class SyncEngine(
     private val database: ShenkDatabase,
     private val repository: LocalFirstRepository,
     private val api: WorkerRecordApi,
+    private val timerApi: WorkerRecordApi? = api,
     private val deviceId: String,
     private val json: Json = Json { ignoreUnknownKeys = true },
     private val timeSource: TimeSource = SystemTimeSource,
@@ -95,6 +98,35 @@ class SyncEngine(
     private suspend fun pushDue(): PushBatchResult {
         val operations = database.outbox().due(timeSource.epochMillis(), OUTBOX_BATCH_SIZE)
         if (operations.isEmpty()) return PushBatchResult()
+        val (timerOperations, shenkOperations) = operations.partition {
+            EntityOwnership.ownerOf(it.entity) == SharedEntityOwner.TIMER
+        }
+        var result = PushBatchResult()
+        if (shenkOperations.isNotEmpty()) {
+            result += pushOperations(shenkOperations, api)
+        }
+        if (timerOperations.isNotEmpty()) {
+            val roleApi = timerApi
+            if (roleApi == null) {
+                timerOperations.forEach { operation ->
+                    repository.markRetry(
+                        operation,
+                        retryAt(operation.attempts),
+                        "timer_token_missing",
+                    )
+                }
+                result += PushBatchResult(inspected = timerOperations.size)
+            } else {
+                result += pushOperations(timerOperations, roleApi)
+            }
+        }
+        return result
+    }
+
+    private suspend fun pushOperations(
+        operations: List<OutboxEntity>,
+        roleApi: WorkerRecordApi,
+    ): PushBatchResult {
         val request = buildJsonObject {
             put("contractVersion", JsonPrimitive(ContractVersion.PLANNED))
             put("deviceId", JsonPrimitive(deviceId))
@@ -103,7 +135,7 @@ class SyncEngine(
             })
         }
         return try {
-            val response = api.upsert(request)
+            val response = roleApi.upsert(request)
             var acceptedCount = 0
             var conflictCount = 0
             val acknowledged = mutableSetOf<String>()
@@ -190,7 +222,13 @@ private data class PushBatchResult(
     val accepted: Int = 0,
     val conflicts: Int = 0,
     val inspected: Int = 0,
-)
+) {
+    operator fun plus(other: PushBatchResult) = PushBatchResult(
+        accepted = accepted + other.accepted,
+        conflicts = conflicts + other.conflicts,
+        inspected = inspected + other.inspected,
+    )
+}
 
 class SyncScheduler(private val context: Context) {
     fun enqueue() {
@@ -220,7 +258,9 @@ class CloudSyncWorker(
     override suspend fun doWork(): Result {
         val preferences = DevicePreferencesStore(applicationContext)
         val settings = preferences.syncSettings()
-        val token = KeystoreSecretStore(preferences).get(SecretName.SHENK_TOKEN)
+        val secrets = KeystoreSecretStore(preferences)
+        val token = secrets.get(SecretName.SHENK_TOKEN)
+        val timerToken = secrets.get(SecretName.TIMER_TOKEN)
         if (settings.apiBase.isBlank() || token.isNullOrBlank()) return Result.success()
         val json = Json { ignoreUnknownKeys = true }
         val database = ShenkDatabase.get(applicationContext)
@@ -228,6 +268,9 @@ class CloudSyncWorker(
             database = database,
             repository = LocalFirstRepository(database, localDeviceId = settings.deviceId),
             api = WorkerRecordApiFactory.create(settings.apiBase, token, json),
+            timerApi = timerToken
+                ?.takeIf(String::isNotBlank)
+                ?.let { WorkerRecordApiFactory.create(settings.apiBase, it, json) },
             deviceId = settings.deviceId,
             json = json,
         )

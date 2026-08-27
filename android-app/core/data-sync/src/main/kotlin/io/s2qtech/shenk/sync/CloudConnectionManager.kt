@@ -58,7 +58,7 @@ class CloudConnectionManager(
             throw CloudConnectionException(CloudConnectionFailure.INVALID_MIGRATION_CODE, error)
         }
         val profile = loadProfile(normalizedCode)
-        val result = synchronizeWith(profile.apiBase, profile.token)
+        val result = synchronizeWith(profile.apiBase, profile.token, profile.timerToken)
         saveConfiguration(profile)
         return result
     }
@@ -68,8 +68,9 @@ class CloudConnectionManager(
         val token = requireNotNull(secrets.get(SecretName.SHENK_TOKEN)) {
             "Cloud connection is not configured"
         }
+        val timerToken = secrets.get(SecretName.TIMER_TOKEN)
         require(settings.apiBase.isNotBlank()) { "Cloud API base is not configured" }
-        return synchronizeWith(settings.apiBase, token)
+        return synchronizeWith(settings.apiBase, token, timerToken)
     }
 
     private suspend fun loadProfile(migrationCode: String): SyncProfilePayload {
@@ -96,7 +97,11 @@ class CloudConnectionManager(
         }
     }
 
-    private suspend fun synchronizeWith(apiBase: String, token: String): CloudConnectionResult {
+    private suspend fun synchronizeWith(
+        apiBase: String,
+        token: String,
+        timerToken: String?,
+    ): CloudConnectionResult {
         val settings = preferences.syncSettings()
         val result = try {
             withContext(Dispatchers.IO) {
@@ -104,6 +109,9 @@ class CloudConnectionManager(
                     database = database,
                     repository = localRepository,
                     api = WorkerRecordApiFactory.create(apiBase, token, json),
+                    timerApi = timerToken
+                        ?.takeIf(String::isNotBlank)
+                        ?.let { WorkerRecordApiFactory.create(apiBase, it, json) },
                     deviceId = settings.deviceId,
                     json = json,
                 ).synchronize()

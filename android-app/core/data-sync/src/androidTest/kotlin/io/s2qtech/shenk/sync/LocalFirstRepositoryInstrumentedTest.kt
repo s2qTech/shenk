@@ -143,6 +143,25 @@ class LocalFirstRepositoryInstrumentedTest {
     }
 
     @Test
+    fun keepingLocalConflictQueuesAgainstRemoteRevisionAndClearsConflict() {
+        runBlocking {
+            val repository = repository(database)
+            val key = io.s2qtech.shenk.model.SharedRecordKey("training_logs", "synthetic-keep-local")
+            repository.persistAndEnqueue(trainingLog(key.id, "local"), SharedEntityOwner.RECORD)
+            repository.applyRemote(
+                trainingLog(key.id, "remote").withSyncMetadata(revision = 4, baseRevision = 4),
+            )
+
+            repository.resolveWithLocal(key, SharedEntityOwner.RECORD)
+
+            assertNull(database.conflicts().get(key.storageKey))
+            assertEquals(4, database.outbox().get(key.storageKey)?.baseRevision)
+            assertEquals(SyncFoundationState.QUEUED.name, database.records().get(key.entity, key.id)?.syncState)
+            assertEquals("local", repository.get(key.entity, key.id)?.data?.get("subjectiveResult")?.toString()?.trim('"'))
+        }
+    }
+
+    @Test
     fun firstWriteCompletesRequiredEnvelopeMetadata() {
         runBlocking {
             val repository = repository(database)
