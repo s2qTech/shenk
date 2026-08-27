@@ -1,5 +1,6 @@
 package io.s2qtech.shenk
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
@@ -133,14 +134,18 @@ fun DailyReviewSheet(
             }
             Spacer(Modifier.height(4.dp))
         }
-        Text(reviewLabel, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.SemiBold)
-        if (!isToday) {
-            Text(
-                date.format(DateTimeFormatter.ofPattern("M月d日 EEEE", Locale.CHINA)),
-                color = MaterialTheme.colorScheme.secondary,
-            )
-        }
-        Text("复盘当天执行，指出问题并给出后续修正；不会修改正式计划。", color = MaterialTheme.colorScheme.secondary)
+        Text(reviewLabel, style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.SemiBold)
+        Text(
+            date.format(DateTimeFormatter.ofPattern("M月d日 EEEE", Locale.CHINA)),
+            color = MaterialTheme.colorScheme.primary,
+            style = MaterialTheme.typography.labelLarge,
+        )
+        Spacer(Modifier.height(5.dp))
+        Text(
+            "复盘当天执行，给出后续修正；不会修改正式计划。",
+            color = MaterialTheme.colorScheme.secondary,
+            style = MaterialTheme.typography.bodyMedium,
+        )
         Spacer(Modifier.height(20.dp))
 
         state.review?.let { review ->
@@ -151,7 +156,7 @@ fun DailyReviewSheet(
             ) {
                 Text(
                     review.conclusion,
-                    style = MaterialTheme.typography.titleLarge,
+                    style = MaterialTheme.typography.headlineSmall,
                     fontWeight = FontWeight.SemiBold,
                 )
             }
@@ -228,8 +233,16 @@ fun DailyReviewSheet(
         }
 
         if (missing.isNotEmpty()) {
-            Text("缺少 ${missing.joinToString("、")}", color = MaterialTheme.colorScheme.error)
-            Text("仍可按现有事实生成，缺失值不会被当作正常。", color = MaterialTheme.colorScheme.secondary)
+            ReviewSectionCard(
+                title = "资料不完整",
+                containerColor = MaterialTheme.colorScheme.tertiaryContainer,
+                contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
+                labelColor = MaterialTheme.colorScheme.tertiary,
+            ) {
+                Text("缺少 ${missing.joinToString("、")}", style = MaterialTheme.typography.bodyLarge)
+                Spacer(Modifier.height(5.dp))
+                Text("仍可按现有事实生成，缺失值不会被当作正常。", style = MaterialTheme.typography.bodyMedium)
+            }
             Spacer(Modifier.height(14.dp))
         }
 
@@ -330,7 +343,7 @@ internal fun dailyReviewFailureMessage(error: String?, retrying: Boolean): Strin
 @Composable
 private fun ReviewSectionCard(
     title: String,
-    containerColor: Color = MaterialTheme.colorScheme.surfaceContainerHigh,
+    containerColor: Color = MaterialTheme.colorScheme.surface,
     contentColor: Color = MaterialTheme.colorScheme.onSurface,
     labelColor: Color = MaterialTheme.colorScheme.primary,
     content: @Composable ColumnScope.() -> Unit,
@@ -340,6 +353,8 @@ private fun ReviewSectionCard(
         color = containerColor,
         contentColor = contentColor,
         shape = RoundedCornerShape(24.dp),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+        shadowElevation = 1.dp,
     ) {
         Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 18.dp)) {
             Text(

@@ -18,7 +18,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.ContentCopy
 import androidx.compose.material.icons.rounded.ContentPaste
@@ -31,7 +30,6 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -50,9 +48,14 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -63,6 +66,10 @@ import io.s2qtech.shenk.sync.PlanCollaborationRepository
 import io.s2qtech.shenk.sync.PlanImportStatus
 import io.s2qtech.shenk.sync.SyncScheduler
 import io.s2qtech.shenk.sync.WeeklyFeedback
+import java.time.Instant
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
+import java.util.Locale
 import kotlinx.coroutines.launch
 
 private enum class PlanningTab { PLAN, FEEDBACK }
@@ -94,18 +101,13 @@ fun PlanningRoute(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .statusBarsPadding()
-                    .padding(top = 12.dp, start = 10.dp, end = 18.dp),
+                    .statusBarsPadding(),
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "返回")
-                    }
-                    Column(Modifier.weight(1f)) {
-                        Text("计划协作", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.SemiBold)
-                        Text("让高级 AI 管计划，让身刻守住边界", color = MaterialTheme.colorScheme.secondary)
-                    }
-                }
+                SecondarySpaceHeader(
+                    title = "计划",
+                    subtitle = "导入指定计划，生成近期复盘",
+                    onBack = onBack,
+                )
                 PlanningTabs(tab = tab, onSelect = { tab = it })
             }
         },
@@ -207,24 +209,36 @@ fun PlanningRoute(
 
 @Composable
 private fun PlanningTabs(tab: PlanningTab, onSelect: (PlanningTab) -> Unit) {
-    Row(
-        modifier = Modifier.fillMaxWidth().padding(top = 18.dp, bottom = 10.dp),
-        horizontalArrangement = Arrangement.spacedBy(10.dp),
+    Surface(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 10.dp),
+        color = MaterialTheme.colorScheme.surfaceContainer,
+        shape = RoundedCornerShape(24.dp),
     ) {
-        PlanningTab.entries.forEach { item ->
-            val selected = item == tab
-            Surface(
-                onClick = { onSelect(item) },
-                modifier = Modifier.weight(1f).heightIn(min = 48.dp),
-                shape = RoundedCornerShape(18.dp),
-                color = if (selected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant,
-            ) {
-                Box(contentAlignment = Alignment.Center) {
-                    Text(
-                        if (item == PlanningTab.PLAN) "草案" else "复盘",
-                        color = if (selected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.secondary,
-                        fontWeight = FontWeight.SemiBold,
-                    )
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(5.dp),
+            horizontalArrangement = Arrangement.spacedBy(5.dp),
+        ) {
+            PlanningTab.entries.forEach { item ->
+                val selected = item == tab
+                Surface(
+                    onClick = { onSelect(item) },
+                    modifier = Modifier
+                        .weight(1f)
+                        .heightIn(min = 50.dp)
+                        .semantics {
+                            role = Role.Tab
+                            this.selected = selected
+                        },
+                    shape = RoundedCornerShape(19.dp),
+                    color = if (selected) MaterialTheme.colorScheme.primary else Color.Transparent,
+                    contentColor = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Text(
+                            if (item == PlanningTab.PLAN) "导入计划" else "近期复盘",
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                    }
                 }
             }
         }
@@ -246,17 +260,19 @@ private fun PlanInbox(
 ) {
     LazyColumn(
         modifier = modifier.fillMaxSize().navigationBarsPadding(),
-        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 22.dp, vertical = 18.dp),
+        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 20.dp, vertical = 12.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
         item {
-            Text("计划草案收件箱", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold)
-            Text("复制高级 AI 或 Codex 生成的 coach_plan_patch，在这里粘贴、校验并确认生效。", color = MaterialTheme.colorScheme.secondary)
+            SecondarySectionCard {
+                Text("计划草案收件箱", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold)
+                Spacer(Modifier.height(6.dp))
+                Text("粘贴规范化计划草案；通过校验并再次确认后才会写入正式计划。", color = MaterialTheme.colorScheme.secondary)
+            }
         }
         item {
-            HorizontalDivider()
-            Text("手动导入", modifier = Modifier.padding(top = 8.dp), fontWeight = FontWeight.SemiBold)
-            Text("粘贴 coach_plan_patch，校验和确认后才会写入正式计划。", color = MaterialTheme.colorScheme.secondary)
+            Text("粘贴草案", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+            Text("支持只包含 JSON 的内容，也支持包含 JSON 的完整回复。", color = MaterialTheme.colorScheme.secondary)
         }
         item {
             OutlinedTextField(
@@ -317,7 +333,11 @@ private fun PlanInbox(
                 ) {
                     Column(Modifier.weight(1f)) {
                         Text("最近一次导入", fontWeight = FontWeight.Medium)
-                        Text(status.appliedAt.orEmpty(), color = MaterialTheme.colorScheme.secondary, style = MaterialTheme.typography.bodySmall)
+                        Text(
+                            formatPlanAppliedAt(status.appliedAt.orEmpty()),
+                            color = MaterialTheme.colorScheme.secondary,
+                            style = MaterialTheme.typography.bodySmall,
+                        )
                     }
                     TextButton(onClick = onUndo, enabled = !busy, modifier = Modifier.testTag("undo-plan-patch")) {
                         Icon(Icons.Rounded.Refresh, contentDescription = null)
@@ -375,12 +395,12 @@ private fun FeedbackWorkspace(
 ) {
     LazyColumn(
         modifier = modifier.fillMaxSize().navigationBarsPadding(),
-        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 22.dp, vertical = 18.dp),
+        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 20.dp, vertical = 12.dp),
         verticalArrangement = Arrangement.spacedBy(18.dp),
     ) {
         item {
-            Text("周复盘", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold)
-            Text("汇总 14 天训练事实与 30 天身体趋势，复制给健身计划任务做完整复盘。", color = MaterialTheme.colorScheme.secondary)
+            Text("近期复盘资料", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold)
+            Text("整理 14 天训练事实与 30 天身体趋势，供健身计划任务制定后续安排。", color = MaterialTheme.colorScheme.secondary)
         }
         item {
             Surface(
@@ -456,6 +476,12 @@ private fun actionName(action: PatchChangeAction): String = when (action) {
     PatchChangeAction.UPDATE -> "更新"
     PatchChangeAction.DELETE -> "删除"
 }
+
+internal fun formatPlanAppliedAt(raw: String, zoneId: ZoneId = ZoneId.systemDefault()): String =
+    runCatching {
+        DateTimeFormatter.ofPattern("M月d日 HH:mm", Locale.CHINA)
+            .format(Instant.parse(raw).atZone(zoneId))
+    }.getOrElse { raw }
 
 @Composable
 private fun actionColor(action: PatchChangeAction) = when (action) {

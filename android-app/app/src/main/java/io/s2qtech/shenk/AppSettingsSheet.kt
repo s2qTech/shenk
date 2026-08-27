@@ -1,5 +1,6 @@
 package io.s2qtech.shenk
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -11,8 +12,11 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
 import androidx.compose.material.icons.rounded.Alarm
 import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.Storage
@@ -49,12 +53,15 @@ import kotlinx.coroutines.withTimeout
 @Composable
 fun AppSettingsSheet(onReminders: () -> Unit, onAiService: () -> Unit, onBackup: () -> Unit) {
     Column(
-        modifier = Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 22.dp, vertical = 8.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .navigationBarsPadding()
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = 22.dp, vertical = 8.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Text("设置", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.SemiBold)
-        Text("提醒和服务配置集中管理。", color = MaterialTheme.colorScheme.secondary)
-        Spacer(Modifier.height(6.dp))
+        SheetHeader("设置", "提醒、AI 服务与本机数据")
+        Spacer(Modifier.height(2.dp))
         SettingsRow("提醒", "晨起、午间和周复盘", Icons.Rounded.Alarm, onReminders)
         SettingsRow("AI 服务", "DeepSeek V4 Flash · 每日简评", Icons.Rounded.AutoAwesome, onAiService)
         SettingsRow("数据备份", "导出或安全合并业务记录", Icons.Rounded.Storage, onBackup)
@@ -69,18 +76,21 @@ fun DataBackupSheet(
     onImport: () -> Unit,
 ) {
     Column(
-        modifier = Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 22.dp, vertical = 8.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .navigationBarsPadding()
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = 22.dp, vertical = 8.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Text("数据备份", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.SemiBold)
-        Text("通过系统文件选择器保存或恢复完整业务记录。", color = MaterialTheme.colorScheme.secondary)
-        Spacer(Modifier.height(6.dp))
-        Surface(color = MaterialTheme.colorScheme.surfaceVariant, shape = RoundedCornerShape(22.dp)) {
-            Column(Modifier.fillMaxWidth().padding(18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("隐私与恢复规则", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                Text("备份不包含 API Key、云端令牌、迁移码、同步队列或冲突记录。", color = MaterialTheme.colorScheme.secondary)
-                Text("导入只补充缺失记录；同 ID 内容不同时会跳过，绝不覆盖本机现有修改。", color = MaterialTheme.colorScheme.secondary)
-            }
+        SheetHeader("数据备份", "通过系统文件选择器保存或恢复业务记录")
+        Spacer(Modifier.height(2.dp))
+        SecondarySectionCard {
+            Text("隐私与恢复规则", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+            Spacer(Modifier.height(8.dp))
+            Text("备份不包含 API Key、云端令牌、迁移码、同步队列或冲突记录。", color = MaterialTheme.colorScheme.secondary)
+            Spacer(Modifier.height(6.dp))
+            Text("恢复只补充缺失记录；同 ID 内容不同时会跳过，不覆盖本机现有修改。", color = MaterialTheme.colorScheme.secondary)
         }
         Button(
             onClick = onExport,
@@ -98,17 +108,30 @@ fun DataBackupSheet(
 
 @Composable
 private fun SettingsRow(title: String, subtitle: String, icon: androidx.compose.ui.graphics.vector.ImageVector, onClick: () -> Unit) {
-    Surface(onClick = onClick, color = MaterialTheme.colorScheme.surfaceVariant, shape = RoundedCornerShape(22.dp)) {
+    Surface(
+        onClick = onClick,
+        color = MaterialTheme.colorScheme.surface,
+        shape = RoundedCornerShape(24.dp),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+        shadowElevation = 1.dp,
+    ) {
         Row(
-            Modifier.fillMaxWidth().padding(18.dp),
+            Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 15.dp),
             horizontalArrangement = Arrangement.spacedBy(14.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Icon(icon, contentDescription = null)
-            Column {
-                Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                Text(subtitle, color = MaterialTheme.colorScheme.secondary)
+            Surface(
+                color = MaterialTheme.colorScheme.primaryContainer,
+                contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                shape = RoundedCornerShape(15.dp),
+            ) {
+                Icon(icon, contentDescription = null, modifier = Modifier.padding(10.dp).size(22.dp))
             }
+            Column(Modifier.weight(1f)) {
+                Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                Text(subtitle, color = MaterialTheme.colorScheme.secondary, style = MaterialTheme.typography.bodyMedium)
+            }
+            Icon(Icons.AutoMirrored.Rounded.KeyboardArrowRight, contentDescription = null, tint = MaterialTheme.colorScheme.outline)
         }
     }
 }
@@ -130,15 +153,19 @@ fun AiProviderSettingsSheet(repository: DailyReviewRepository, onMessage: (Strin
         editing = !hasKey
     }
 
-    Column(Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 22.dp, vertical = 8.dp)) {
-        Text("AI 服务", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.SemiBold)
-        Text("每日简评由 DeepSeek V4 Flash 生成。", color = MaterialTheme.colorScheme.secondary)
-        Spacer(Modifier.height(20.dp))
-        Surface(color = MaterialTheme.colorScheme.surfaceVariant, shape = RoundedCornerShape(22.dp)) {
-            Column(Modifier.fillMaxWidth().padding(18.dp)) {
-                Text("DeepSeek V4 Flash", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
-                Text(if (hasKey) "已配置，可用于每日简评" else "尚未配置 API Key", color = MaterialTheme.colorScheme.secondary)
-            }
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .navigationBarsPadding()
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = 22.dp, vertical = 8.dp),
+    ) {
+        SheetHeader("AI 服务", "每日简评由 DeepSeek V4 Flash 生成")
+        Spacer(Modifier.height(14.dp))
+        SecondarySectionCard {
+            Text("DeepSeek V4 Flash", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
+            Spacer(Modifier.height(4.dp))
+            Text(if (hasKey) "已配置，可用于每日简评" else "尚未配置 API Key", color = MaterialTheme.colorScheme.secondary)
         }
 
         if (editing) {
@@ -233,5 +260,13 @@ fun AiProviderSettingsSheet(repository: DailyReviewRepository, onMessage: (Strin
             )
         }
         Spacer(Modifier.height(24.dp))
+    }
+}
+
+@Composable
+private fun SheetHeader(title: String, subtitle: String) {
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text(title, style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.SemiBold)
+        Text(subtitle, color = MaterialTheme.colorScheme.secondary, style = MaterialTheme.typography.bodyMedium)
     }
 }

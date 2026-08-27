@@ -12,11 +12,8 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -50,11 +47,11 @@ fun DataScreen(
             .statusBarsPadding()
             .navigationBarsPadding(),
     ) {
-        SpaceHeader("数据", "最近 30 天身体变化", onBack)
+        SecondarySpaceHeader("数据", "最近 30 天身体变化", onBack)
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
-            contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 16.dp, vertical = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+            contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 20.dp, vertical = 10.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
             trends?.let { value ->
                 item { TrendPanel(value.weight, Color(0xFF4F7A61)) }
@@ -67,63 +64,45 @@ fun DataScreen(
 }
 
 @Composable
-private fun SpaceHeader(title: String, subtitle: String, onBack: () -> Unit) {
-    Row(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 14.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Column {
-            Text(title, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.SemiBold)
-            Text(subtitle, color = MaterialTheme.colorScheme.secondary)
-        }
-        TextButton(onClick = onBack, modifier = Modifier.testTag("space-back")) { Text("返回今天") }
-    }
-}
-
-@Composable
 private fun TrendPanel(trend: MetricTrend, color: Color) {
-    Surface(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(20.dp),
-        color = MaterialTheme.colorScheme.surfaceContainerHigh,
-        contentColor = MaterialTheme.colorScheme.onSurface,
-    ) {
-        Column(Modifier.padding(18.dp)) {
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Column {
-                    Text(trend.kind.displayName, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                    Text("一个月", color = MaterialTheme.colorScheme.outline)
-                }
-                Column {
+    SecondarySectionCard {
+        Row(
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.Top,
+        ) {
+            Column {
+                Text(trend.kind.displayName, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
+                Text("30 天趋势", color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.bodySmall)
+            }
+            Column(horizontalAlignment = Alignment.End) {
+                Text(
+                    trend.latest?.let { "%.1f %s".format(it.value, trend.kind.unit) } ?: "未记录",
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                trend.change?.let { change ->
                     Text(
-                        trend.latest?.let { "%.1f %s".format(it.value, trend.kind.unit) } ?: "未记录",
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.SemiBold,
+                        "%+.1f %s".format(change, trend.kind.unit),
+                        color = trend.changeColor(change),
                     )
-                    trend.change?.let { change ->
-                        Text(
-                            "%+.1f %s".format(change, trend.kind.unit),
-                            color = trend.changeColor(change),
-                        )
-                    }
                 }
             }
-            Spacer(Modifier.height(14.dp))
-            if (trend.points.size < 2) {
-                Column(Modifier.fillMaxWidth().height(100.dp), verticalArrangement = Arrangement.Center) {
-                    Text(if (trend.points.isEmpty()) "还没有数据" else "再记录一次后显示变化", color = MaterialTheme.colorScheme.outline)
-                }
-            } else {
-                TrendCanvas(trend, color)
+        }
+        Spacer(Modifier.height(18.dp))
+        if (trend.points.size < 2) {
+            Column(Modifier.fillMaxWidth().height(84.dp), verticalArrangement = Arrangement.Center) {
+                Text(if (trend.points.isEmpty()) "还没有数据" else "再记录一次后显示变化", color = MaterialTheme.colorScheme.outline)
             }
+        } else {
+            TrendCanvas(trend, color)
         }
     }
 }
 
 @Composable
 private fun TrendCanvas(trend: MetricTrend, color: Color) {
-    val surfaceColor = MaterialTheme.colorScheme.surfaceContainerHigh
+    val surfaceColor = MaterialTheme.colorScheme.surface
     Canvas(Modifier.fillMaxWidth().height(120.dp)) {
         val values = trend.points.map { it.value }
         val rawMin = values.min()
@@ -150,19 +129,15 @@ private fun TrendCanvas(trend: MetricTrend, color: Color) {
 
 @Composable
 private fun WaistSummary(trend: MetricTrend) {
-    Surface(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(20.dp),
-        color = MaterialTheme.colorScheme.surfaceContainerHigh,
-        contentColor = MaterialTheme.colorScheme.onSurface,
-    ) {
+    SecondarySectionCard {
         Row(
-            Modifier.padding(18.dp),
+            Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
         ) {
             Column {
-                Text("腰围", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                Text("辅助观察", color = MaterialTheme.colorScheme.outline)
+                Text("腰围", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
+                Text("最近一次记录", color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.bodySmall)
             }
             Text(
                 trend.latest?.let { latest ->
@@ -170,7 +145,7 @@ private fun WaistSummary(trend: MetricTrend) {
                     if (change == null || abs(change) < 0.05) "%.1f cm".format(latest.value)
                     else "%.1f cm  %+.1f".format(latest.value, change)
                 } ?: "未记录",
-                style = MaterialTheme.typography.titleLarge,
+                style = MaterialTheme.typography.headlineSmall,
                 fontWeight = FontWeight.SemiBold,
             )
         }
