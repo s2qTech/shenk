@@ -30,12 +30,13 @@ class SyncEngineInstrumentedTest {
     @Before
     fun setUp() {
         val context: Context = InstrumentationRegistry.getInstrumentation().targetContext
+        var operationSequence = 0
         database = Room.inMemoryDatabaseBuilder(context, ShenkDatabase::class.java).build()
         repository = LocalFirstRepository(
             database = database,
             localDeviceId = "synthetic-device",
             timeSource = clock,
-            nextId = { "synthetic-operation" },
+            nextId = { "synthetic-operation-${operationSequence++}" },
         )
     }
 
@@ -128,6 +129,7 @@ class SyncEngineInstrumentedTest {
             )
             val shenkApi = AcceptingWorkerApi()
             val timerApi = AcceptingWorkerApi()
+            assertEquals(2, database.outbox().count())
 
             val result = SyncEngine(
                 database = database,
@@ -138,9 +140,9 @@ class SyncEngineInstrumentedTest {
                 timeSource = clock,
             ).synchronize()
 
-            assertEquals(2, result.pushed)
             assertEquals(listOf("training_logs"), shenkApi.upsertEntities)
             assertEquals(listOf("timer_sessions"), timerApi.upsertEntities)
+            assertEquals(2, result.pushed)
             assertEquals(0, database.outbox().count())
         }
     }
