@@ -349,10 +349,10 @@ private fun CalendarHeader(
 ) {
     Row(
         modifier = Modifier.fillMaxWidth().padding(start = 20.dp, top = 16.dp, end = 20.dp, bottom = 14.dp),
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text("日历", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.SemiBold)
+        Text("日历", style = MaterialTheme.typography.displaySmall, fontWeight = FontWeight.SemiBold)
         Text(
             "${month.year}年${month.monthValue}月",
             color = MaterialTheme.colorScheme.secondary,
