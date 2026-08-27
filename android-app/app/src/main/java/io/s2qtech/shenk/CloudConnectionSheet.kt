@@ -85,7 +85,13 @@ fun CloudConnectionSheet(
         )
         error?.let {
             Spacer(Modifier.height(8.dp))
-            Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.testTag("cloud-connection-error"))
+            ShenkStatePanel(
+                title = "连接未完成",
+                message = it,
+                tone = if (it.contains("网络") || it.contains("云端")) ShenkStateTone.OFFLINE else ShenkStateTone.ERROR,
+                compact = true,
+                modifier = Modifier.fillMaxWidth().testTag("cloud-connection-error"),
+            )
         }
         Spacer(Modifier.height(14.dp))
         Button(

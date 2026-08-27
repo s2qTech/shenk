@@ -17,10 +17,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -34,6 +32,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -142,7 +141,7 @@ fun DailyReviewSheet(
         )
         Spacer(Modifier.height(5.dp))
         Text(
-            "复盘当天执行，给出后续修正；不会修改正式计划。",
+            "复盘当天执行，指出问题并给出后续修正；不会修改正式计划。",
             color = MaterialTheme.colorScheme.secondary,
             style = MaterialTheme.typography.bodyMedium,
         )
@@ -233,73 +232,56 @@ fun DailyReviewSheet(
         }
 
         if (missing.isNotEmpty()) {
-            ReviewSectionCard(
+            ShenkStatePanel(
                 title = "资料不完整",
-                containerColor = MaterialTheme.colorScheme.tertiaryContainer,
-                contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
-                labelColor = MaterialTheme.colorScheme.tertiary,
-            ) {
-                Text("缺少 ${missing.joinToString("、")}", style = MaterialTheme.typography.bodyLarge)
-                Spacer(Modifier.height(5.dp))
-                Text("仍可按现有事实生成，缺失值不会被当作正常。", style = MaterialTheme.typography.bodyMedium)
-            }
+                message = "缺少 ${missing.joinToString("、")}。仍可按现有事实生成，缺失值不会被当作正常。",
+                tone = ShenkStateTone.WARNING,
+                modifier = Modifier.fillMaxWidth().testTag("daily-review-incomplete"),
+            )
             Spacer(Modifier.height(14.dp))
         }
 
         if (state.review == null && !preparationLoaded) {
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                CircularProgressIndicator(modifier = Modifier.height(22.dp), strokeWidth = 2.dp)
-                Text("正在检查简评条件", color = MaterialTheme.colorScheme.secondary)
-            }
+            ShenkStatePanel(
+                title = "正在检查简评条件",
+                message = "先从本机整理当天记录和近期事实。",
+                tone = ShenkStateTone.PROGRESS,
+                modifier = Modifier.fillMaxWidth().testTag("daily-review-preparing"),
+            )
         } else if (state.review == null && generating) {
-            Surface(
-                color = MaterialTheme.colorScheme.surfaceVariant,
-                shape = RoundedCornerShape(20.dp),
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Row(
-                    modifier = Modifier.padding(18.dp),
-                    horizontalArrangement = Arrangement.spacedBy(14.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    CircularProgressIndicator(modifier = Modifier.height(24.dp), strokeWidth = 2.dp)
-                    Column {
-                        Text("正在生成$reviewLabel", fontWeight = FontWeight.SemiBold)
-                        Text("服务端会继续处理，可以先返回日期详情。", color = MaterialTheme.colorScheme.secondary)
-                    }
-                }
-            }
-        } else if (state.review == null && state.jobState in setOf("RETRY", "FAILED")) {
-            Surface(
-                color = MaterialTheme.colorScheme.surfaceVariant,
-                shape = RoundedCornerShape(20.dp),
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Column(Modifier.padding(18.dp)) {
-                    Text("简评暂未完成", fontWeight = FontWeight.SemiBold)
-                    Text(
-                        dailyReviewFailureMessage(state.jobError, state.jobState == "RETRY"),
-                        color = MaterialTheme.colorScheme.secondary,
-                    )
-                    Spacer(Modifier.height(12.dp))
-                    OutlinedButton(
-                        onClick = {
-                            requestGeneration("已重新开始生成$reviewLabel", "无法重试，请检查网络或 AI 服务")
-                        },
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        Text("立即重试")
-                    }
-                }
-            }
+            ShenkStatePanel(
+                title = "正在生成$reviewLabel",
+                message = "服务端会继续处理，可以先返回日期详情；完成后这里会自动更新。",
+                tone = ShenkStateTone.PROGRESS,
+                modifier = Modifier.fillMaxWidth().testTag("daily-review-generating"),
+            )
+        } else if (state.review == null && state.jobState == "RETRY") {
+            ShenkStatePanel(
+                title = "简评正在等待自动重试",
+                message = dailyReviewFailureMessage(state.jobError, retrying = true),
+                tone = ShenkStateTone.OFFLINE,
+                modifier = Modifier.fillMaxWidth().testTag("daily-review-auto-retry"),
+            )
+        } else if (state.review == null && state.jobState == "FAILED") {
+            ShenkStatePanel(
+                title = "简评生成失败",
+                message = dailyReviewFailureMessage(state.jobError, retrying = false),
+                tone = ShenkStateTone.ERROR,
+                actionLabel = "立即重试",
+                onAction = {
+                    requestGeneration("已重新开始生成$reviewLabel", "无法重试，请检查网络或 AI 服务")
+                },
+                modifier = Modifier.fillMaxWidth().testTag("daily-review-failed"),
+            )
         } else if (state.review == null && !providerReady) {
-            OutlinedButton(onClick = onOpenAiSettings, modifier = Modifier.fillMaxWidth().heightIn(min = 54.dp)) {
-                Text("配置 AI 服务")
-            }
+            ShenkStatePanel(
+                title = "尚未配置 AI 服务",
+                message = "配置并测试 DeepSeek API Key 后，才能生成每日简评。",
+                tone = ShenkStateTone.NEUTRAL,
+                actionLabel = "配置 AI 服务",
+                onAction = onOpenAiSettings,
+                modifier = Modifier.fillMaxWidth().testTag("daily-review-provider-missing"),
+            )
         } else if (state.review == null) {
             Button(
                 onClick = { requestGeneration("正在生成$reviewLabel", "无法生成，请检查 AI 服务配置") },
@@ -320,6 +302,8 @@ internal fun shouldAutoStartDailyReview(
     jobState: String?,
     attempted: Boolean,
 ): Boolean = preparationLoaded && providerReady && missing.isEmpty() && !reviewPresent && jobState == null && !attempted
+
+internal fun dailyReviewAllowsManualRetry(jobState: String?): Boolean = jobState == "FAILED"
 
 internal fun dailyReviewFailureMessage(error: String?, retrying: Boolean): String = when (error) {
     "ai_provider_http_401", "ai_provider_http_403" -> "DeepSeek 拒绝了当前 API Key，请到设置中重新测试或更换。"

@@ -620,7 +620,12 @@ private fun DayDetails(
 ) {
     Column(Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 22.dp, vertical = 8.dp)) {
         if (details == null) {
-            Box(Modifier.fillMaxWidth().height(180.dp), contentAlignment = Alignment.Center) { Text("正在读取…") }
+            ShenkStatePanel(
+                title = "正在读取日期详情",
+                message = "先从本机组合这一天的记录、计划、身体数据与简评。",
+                tone = ShenkStateTone.PROGRESS,
+                modifier = Modifier.fillMaxWidth().testTag("date-details-loading"),
+            )
             return@Column
         }
         Text(
@@ -736,7 +741,10 @@ private fun CalendarReviewSummary(
                 }
                 state.jobState in setOf("RETRY", "FAILED") -> {
                     Spacer(Modifier.height(5.dp))
-                    Text("简评暂未完成，可以重新生成。", color = MaterialTheme.colorScheme.error)
+                    Text(
+                        if (dailyReviewAllowsManualRetry(state.jobState)) "简评生成失败，可以重新尝试。" else "简评正在等待后台自动重试。",
+                        color = if (dailyReviewAllowsManualRetry(state.jobState)) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.secondary,
+                    )
                 }
                 else -> {
                     Spacer(Modifier.height(5.dp))
@@ -748,7 +756,8 @@ private fun CalendarReviewSummary(
             Text(
                 when {
                     review != null -> "查看"
-                    state.jobState in setOf("RETRY", "FAILED") -> "重试"
+                    dailyReviewAllowsManualRetry(state.jobState) -> "重试"
+                    state.jobState == "RETRY" -> "查看"
                     else -> "生成"
                 },
             )

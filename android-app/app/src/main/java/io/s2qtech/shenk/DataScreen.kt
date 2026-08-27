@@ -58,7 +58,14 @@ fun DataScreen(
                 item { TrendPanel(value.bodyFat, Color(0xFFC58645)) }
                 item { TrendPanel(value.muscle, Color(0xFF4C82A6)) }
                 item { WaistSummary(value.waist) }
-            } ?: item { Text("正在读取趋势…", modifier = Modifier.padding(20.dp)) }
+            } ?: item {
+                ShenkStatePanel(
+                    title = "正在读取身体趋势",
+                    message = "先读取本机 30 天记录；如有同步更新，会自动出现在这里。",
+                    tone = ShenkStateTone.PROGRESS,
+                    modifier = Modifier.fillMaxWidth().testTag("data-loading"),
+                )
+            }
         }
     }
 }
@@ -91,9 +98,18 @@ private fun TrendPanel(trend: MetricTrend, color: Color) {
         }
         Spacer(Modifier.height(18.dp))
         if (trend.points.size < 2) {
-            Column(Modifier.fillMaxWidth().height(84.dp), verticalArrangement = Arrangement.Center) {
-                Text(if (trend.points.isEmpty()) "还没有数据" else "再记录一次后显示变化", color = MaterialTheme.colorScheme.outline)
-            }
+            ShenkStatePanel(
+                title = if (trend.points.isEmpty()) "还没有记录" else "已有一次记录",
+                message = if (trend.points.isEmpty()) {
+                    "完成一次晨间测量后，会从本机数据开始绘制趋势。"
+                } else {
+                    "再记录一次后，就能显示这项指标的变化。"
+                },
+                tone = ShenkStateTone.NEUTRAL,
+                compact = true,
+                contained = false,
+                modifier = Modifier.fillMaxWidth().testTag("trend-${trend.kind.name.lowercase()}-empty"),
+            )
         } else {
             TrendCanvas(trend, color)
         }

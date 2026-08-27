@@ -403,20 +403,12 @@ private fun FeedbackWorkspace(
             Text("整理 14 天训练事实与 30 天身体趋势，供健身计划任务制定后续安排。", color = MaterialTheme.colorScheme.secondary)
         }
         item {
-            Surface(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(26.dp),
-                color = MaterialTheme.colorScheme.primaryContainer,
-            ) {
-                Column(Modifier.padding(22.dp)) {
-                    Text(if (latest == null) "还没有本周资料" else "复盘资料已就绪", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold)
-                    Spacer(Modifier.height(8.dp))
-                    Text(
-                        latest?.let { "${it.from} 至 ${it.to}" } ?: "生成不会修改计划，只整理已经记录的事实。",
-                        color = MaterialTheme.colorScheme.onPrimaryContainer,
-                    )
-                }
-            }
+            ShenkStatePanel(
+                title = if (latest == null) "还没有本周资料" else "复盘资料已就绪",
+                message = latest?.let { "${it.from} 至 ${it.to}" } ?: "生成不会修改计划，只整理已经记录的事实。",
+                tone = if (latest == null) ShenkStateTone.NEUTRAL else ShenkStateTone.SUCCESS,
+                modifier = Modifier.fillMaxWidth().testTag(if (latest == null) "weekly-feedback-empty" else "weekly-feedback-ready"),
+            )
         }
         item {
             Button(onClick = onGenerate, enabled = !busy, modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp).testTag("generate-weekly-feedback")) {

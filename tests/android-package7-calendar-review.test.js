@@ -57,7 +57,9 @@ test('a completed daily review hides stale generation and retry state', () => {
   assert.match(sheet, /"PENDING", "RUNNING", "AWAITING_SERVER"/);
   assert.match(today, /"PENDING", "RUNNING", "AWAITING_SERVER"/);
   assert.match(store, /state IN \('PENDING', 'RETRY', 'AWAITING_SERVER'\)/);
-  assert.match(sheet, /else if \(state\.review == null && state\.jobState in setOf\("RETRY", "FAILED"\)\)/);
+  assert.match(sheet, /else if \(state\.review == null && state\.jobState == "RETRY"\)/);
+  assert.match(sheet, /else if \(state\.review == null && state\.jobState == "FAILED"\)/);
+  assert.match(sheet, /dailyReviewAllowsManualRetry\(jobState: String\?\): Boolean = jobState == "FAILED"/);
   assert.match(sheet, /else if \(state\.review == null && !providerReady\)/);
   assert.match(sheet, /else if \(state\.review == null\)/);
 });

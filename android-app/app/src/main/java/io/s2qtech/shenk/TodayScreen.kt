@@ -59,6 +59,8 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import io.s2qtech.shenk.model.GuidanceSource
+import io.s2qtech.shenk.model.EntityOwnership
+import io.s2qtech.shenk.model.SharedRecordKey
 import io.s2qtech.shenk.model.TodayPrimaryAction
 import io.s2qtech.shenk.model.TodayPrimaryActionResolver
 import io.s2qtech.shenk.model.TodayGuidance
@@ -83,7 +85,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
-private enum class TodaySheet { MORNING, PRE_WORKOUT, RECORD_DAY, REMINDERS, CONNECTION, DAILY_REVIEW, SETTINGS, AI_SETTINGS, DATA_BACKUP }
+private enum class TodaySheet { MORNING, PRE_WORKOUT, RECORD_DAY, REMINDERS, CONNECTION, DAILY_REVIEW, SETTINGS, AI_SETTINGS, DATA_BACKUP, SYNC_CONFLICTS }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -103,8 +105,9 @@ fun TodayRoute(
     val snackbar = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
+    val application = context.applicationContext as ShenkApplication
     val dailyReviewRepository = remember(context) {
-        (context.applicationContext as ShenkApplication).dailyReviewRepository
+        application.dailyReviewRepository
     }
     val dailyReviewState by dailyReviewRepository.observe(date).collectAsState(
         initial = io.s2qtech.shenk.sync.DailyReviewState(),
@@ -114,6 +117,8 @@ fun TodayRoute(
     var connectionBusy by remember { mutableStateOf(false) }
     var connectionError by remember { mutableStateOf<String?>(null) }
     var backupBusy by remember { mutableStateOf(false) }
+    val conflicts by application.localFirstRepository.observeConflicts().collectAsState(initial = emptyList())
+    var resolvingConflictKey by remember { mutableStateOf<String?>(null) }
     var reminderSystemRefresh by remember { mutableIntStateOf(0) }
     val businessBackup = remember(context) {
         SafBusinessBackup(
@@ -365,6 +370,8 @@ fun TodayRoute(
                 onReminders = { sheet = TodaySheet.REMINDERS },
                 onAiService = { sheet = TodaySheet.AI_SETTINGS },
                 onBackup = { sheet = TodaySheet.DATA_BACKUP },
+                conflictCount = conflicts.size,
+                onConflicts = { sheet = TodaySheet.SYNC_CONFLICTS },
             )
         }
         TodaySheet.AI_SETTINGS -> ModalBottomSheet(onDismissRequest = { sheet = null }) {
@@ -378,6 +385,46 @@ fun TodayRoute(
                 busy = backupBusy,
                 onExport = { exportBackupLauncher.launch("shenk-business-${LocalDate.now()}.json") },
                 onImport = { importBackupLauncher.launch(arrayOf("application/json", "text/json", "text/plain")) },
+            )
+        }
+        TodaySheet.SYNC_CONFLICTS -> ModalBottomSheet(
+            onDismissRequest = { if (resolvingConflictKey == null) sheet = null },
+        ) {
+            SyncConflictSheet(
+                conflicts = conflicts,
+                resolvingKey = resolvingConflictKey,
+                onKeepLocal = { conflict ->
+                    resolvingConflictKey = conflict.recordKey
+                    scope.launch {
+                        runCatching {
+                            application.localFirstRepository.resolveWithLocal(
+                                SharedRecordKey(conflict.entity, conflict.recordId),
+                                EntityOwnership.ownerOf(conflict.entity),
+                            )
+                            SyncScheduler(context).enqueue()
+                        }.onSuccess {
+                            snackbar.showSnackbar("已保留本机版本，等待重新同步")
+                        }.onFailure {
+                            snackbar.showSnackbar("暂时无法处理，本机和云端版本均已保留")
+                        }
+                        resolvingConflictKey = null
+                    }
+                },
+                onUseCloud = { conflict ->
+                    resolvingConflictKey = conflict.recordKey
+                    scope.launch {
+                        runCatching {
+                            application.localFirstRepository.resolveWithRemote(
+                                SharedRecordKey(conflict.entity, conflict.recordId),
+                            )
+                        }.onSuccess {
+                            snackbar.showSnackbar("已采用云端版本")
+                        }.onFailure {
+                            snackbar.showSnackbar("暂时无法处理，本机和云端版本均已保留")
+                        }
+                        resolvingConflictKey = null
+                    }
+                },
             )
         }
         null -> Unit
@@ -426,15 +473,25 @@ private fun TodayScreen(
             Spacer(Modifier.height(22.dp))
 
             if (!cloudConfigured) {
-                CloudSetupPrompt(onClick = onConnect)
+                ShenkStatePanel(
+                    title = "尚未连接已有数据",
+                    message = "本机仍可正常记录；连接后会取回计划、记录和训练方案。",
+                    tone = ShenkStateTone.NEUTRAL,
+                    actionLabel = "连接",
+                    onAction = onConnect,
+                    modifier = Modifier.fillMaxWidth().testTag("cloud-setup-prompt"),
+                )
                 Spacer(Modifier.height(18.dp))
             }
 
             val guidance = records?.guidance
             if (guidance == null) {
-                Box(Modifier.fillMaxWidth().height(180.dp), contentAlignment = Alignment.Center) {
-                    Text("正在读取今天…", color = MaterialTheme.colorScheme.secondary)
-                }
+                ShenkStatePanel(
+                    title = "正在读取今天",
+                    message = "先从本机组合正式记录、有效计划和可用建议。",
+                    tone = ShenkStateTone.PROGRESS,
+                    modifier = Modifier.fillMaxWidth().testTag("today-loading"),
+                )
             } else {
                 GuidanceBlock(
                     guidance = guidance,
@@ -586,7 +643,7 @@ private fun GuidanceBlock(
                             color = MaterialTheme.colorScheme.secondary,
                         )
                         TextButton(onClick = onDailyReview, modifier = Modifier.align(Alignment.End)) {
-                            Text("查看并重试")
+                            Text(if (dailyReviewAllowsManualRetry(dailyReviewState.jobState)) "查看并重试" else "查看状态")
                         }
                     }
                 }

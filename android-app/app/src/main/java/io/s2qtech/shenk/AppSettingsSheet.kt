@@ -20,6 +20,7 @@ import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
 import androidx.compose.material.icons.rounded.Alarm
 import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.Storage
+import androidx.compose.material.icons.rounded.SyncProblem
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
@@ -51,7 +52,13 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeout
 
 @Composable
-fun AppSettingsSheet(onReminders: () -> Unit, onAiService: () -> Unit, onBackup: () -> Unit) {
+fun AppSettingsSheet(
+    onReminders: () -> Unit,
+    onAiService: () -> Unit,
+    onBackup: () -> Unit,
+    conflictCount: Int = 0,
+    onConflicts: () -> Unit = {},
+) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -65,6 +72,15 @@ fun AppSettingsSheet(onReminders: () -> Unit, onAiService: () -> Unit, onBackup:
         SettingsRow("提醒", "晨起、午间和周复盘", Icons.Rounded.Alarm, onReminders)
         SettingsRow("AI 服务", "DeepSeek V4 Flash · 每日简评", Icons.Rounded.AutoAwesome, onAiService)
         SettingsRow("数据备份", "导出或安全合并业务记录", Icons.Rounded.Storage, onBackup)
+        if (conflictCount > 0) {
+            SettingsRow(
+                "同步冲突",
+                "$conflictCount 条本机与云端修改需要确认",
+                Icons.Rounded.SyncProblem,
+                onConflicts,
+                warning = true,
+            )
+        }
         Spacer(Modifier.height(24.dp))
     }
 }
@@ -90,7 +106,7 @@ fun DataBackupSheet(
             Spacer(Modifier.height(8.dp))
             Text("备份不包含 API Key、云端令牌、迁移码、同步队列或冲突记录。", color = MaterialTheme.colorScheme.secondary)
             Spacer(Modifier.height(6.dp))
-            Text("恢复只补充缺失记录；同 ID 内容不同时会跳过，不覆盖本机现有修改。", color = MaterialTheme.colorScheme.secondary)
+            Text("恢复只补充缺失记录；同 ID 内容不同时会跳过，绝不覆盖本机现有修改。", color = MaterialTheme.colorScheme.secondary)
         }
         Button(
             onClick = onExport,
@@ -107,7 +123,13 @@ fun DataBackupSheet(
 }
 
 @Composable
-private fun SettingsRow(title: String, subtitle: String, icon: androidx.compose.ui.graphics.vector.ImageVector, onClick: () -> Unit) {
+private fun SettingsRow(
+    title: String,
+    subtitle: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    onClick: () -> Unit,
+    warning: Boolean = false,
+) {
     Surface(
         onClick = onClick,
         color = MaterialTheme.colorScheme.surface,
@@ -121,8 +143,8 @@ private fun SettingsRow(title: String, subtitle: String, icon: androidx.compose.
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Surface(
-                color = MaterialTheme.colorScheme.primaryContainer,
-                contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                color = if (warning) MaterialTheme.colorScheme.tertiaryContainer else MaterialTheme.colorScheme.primaryContainer,
+                contentColor = if (warning) MaterialTheme.colorScheme.onTertiaryContainer else MaterialTheme.colorScheme.onPrimaryContainer,
                 shape = RoundedCornerShape(15.dp),
             ) {
                 Icon(icon, contentDescription = null, modifier = Modifier.padding(10.dp).size(22.dp))
@@ -249,14 +271,23 @@ fun AiProviderSettingsSheet(repository: DailyReviewRepository, onMessage: (Strin
         }
 
         status?.let {
-            Text(
-                it,
-                color = when (success) {
-                    true -> MaterialTheme.colorScheme.primary
-                    false -> MaterialTheme.colorScheme.error
-                    null -> MaterialTheme.colorScheme.secondary
+            ShenkStatePanel(
+                title = when {
+                    busy -> "正在测试连接"
+                    success == true -> "连接成功"
+                    success == false -> "连接未完成"
+                    else -> "连接状态"
                 },
-                modifier = Modifier.padding(top = 12.dp),
+                message = it,
+                tone = when {
+                    busy -> ShenkStateTone.PROGRESS
+                    success == true -> ShenkStateTone.SUCCESS
+                    success == false && (it.contains("网络") || it.contains("云端")) -> ShenkStateTone.OFFLINE
+                    success == false -> ShenkStateTone.ERROR
+                    else -> ShenkStateTone.NEUTRAL
+                },
+                compact = true,
+                modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
             )
         }
         Spacer(Modifier.height(24.dp))
@@ -264,7 +295,7 @@ fun AiProviderSettingsSheet(repository: DailyReviewRepository, onMessage: (Strin
 }
 
 @Composable
-private fun SheetHeader(title: String, subtitle: String) {
+internal fun SheetHeader(title: String, subtitle: String) {
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Text(title, style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.SemiBold)
         Text(subtitle, color = MaterialTheme.colorScheme.secondary, style = MaterialTheme.typography.bodyMedium)

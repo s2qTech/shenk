@@ -206,9 +206,16 @@ fun TrainingRoute(
     when (snapshot.state) {
         TimerEngineState.IDLE -> if (library == null) {
             Box(
-                Modifier.fillMaxSize().testTag("training-screen"),
+                Modifier.fillMaxSize().testTag("training-screen").padding(horizontal = 22.dp),
                 contentAlignment = Alignment.Center,
-            ) { Text("正在读取离线方案库…") }
+            ) {
+                ShenkStatePanel(
+                    title = "正在读取方案库",
+                    message = "优先打开本机缓存的可执行方案，暂时不需要等待网络。",
+                    tone = ShenkStateTone.PROGRESS,
+                    modifier = Modifier.testTag("training-loading"),
+                )
+            }
         } else RoutineLibraryScreen(
             library = requireNotNull(library),
             pending = pending,
@@ -382,29 +389,24 @@ private fun RoutineLibraryScreen(
                 }
                 notice?.let { message ->
                     item {
-                        Surface(
-                            color = MaterialTheme.colorScheme.tertiaryContainer,
-                            shape = RoundedCornerShape(18.dp),
+                        ShenkStatePanel(
+                            title = "计划方案暂不可用",
+                            message = message,
+                            tone = ShenkStateTone.OFFLINE,
+                            compact = true,
                             modifier = Modifier.fillMaxWidth(),
-                        ) { Text(message, modifier = Modifier.padding(16.dp)) }
+                        )
                     }
                 }
                 val routines = library.byScene[scene].orEmpty()
                 if (routines.isEmpty()) {
                     item {
-                        Surface(
-                            color = MaterialTheme.colorScheme.surfaceVariant,
-                            shape = RoundedCornerShape(22.dp),
-                            modifier = Modifier.fillMaxWidth(),
-                        ) {
-                            Column(Modifier.padding(24.dp)) {
-                                Text("这个场景还没有可执行方案", style = MaterialTheme.typography.titleLarge)
-                                Text(
-                                    "联网同步后会缓存 AI 管理的现行方案；本地不会用旧写死流程替代。",
-                                    color = MaterialTheme.colorScheme.secondary,
-                                )
-                            }
-                        }
+                        ShenkStatePanel(
+                            title = "这个场景还没有可执行方案",
+                            message = "联网同步后会缓存 AI 管理的现行方案；本地不会用旧流程替代。",
+                            tone = ShenkStateTone.NEUTRAL,
+                            modifier = Modifier.fillMaxWidth().testTag("routine-scene-empty"),
+                        )
                     }
                 } else {
                     items(routines, key = RoutineTemplate::id) { routine ->
@@ -427,9 +429,12 @@ private fun RoutineLibraryScreen(
                 }
                 if (library.rejectedCount > 0) {
                     item {
-                        Text(
-                            "有 ${library.rejectedCount} 个方案缺少权威字段或格式无效，未加入计时器。",
-                            color = MaterialTheme.colorScheme.error,
+                        ShenkStatePanel(
+                            title = "有 ${library.rejectedCount} 个方案未加入计时器",
+                            message = "这些方案缺少权威字段或格式无效，身刻没有猜测其分类或执行方式。",
+                            tone = ShenkStateTone.WARNING,
+                            compact = true,
+                            modifier = Modifier.fillMaxWidth().testTag("routine-rejected-warning"),
                         )
                     }
                 }
