@@ -194,7 +194,7 @@ fun ShenkApp(
                         modifier = Modifier
                             .align(Alignment.TopCenter)
                             .statusBarsPadding()
-                            .padding(top = 10.dp),
+                            .padding(top = 4.dp),
                     )
                 }
             }

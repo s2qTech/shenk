@@ -336,7 +336,7 @@ private fun RoutineLibraryScreen(
                 modifier = Modifier
                     .fillMaxSize()
                     .statusBarsPadding(),
-                contentPadding = PaddingValues(start = 20.dp, top = 10.dp, end = 20.dp, bottom = 18.dp),
+                contentPadding = PaddingValues(start = 20.dp, top = 16.dp, end = 20.dp, bottom = 18.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 item {

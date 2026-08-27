@@ -196,7 +196,7 @@ fun CalendarScreen(
                 modifier = Modifier
                     .align(Alignment.TopEnd)
                     .statusBarsPadding()
-                    .padding(top = 60.dp, end = 18.dp)
+                    .padding(top = 66.dp, end = 18.dp)
                     .testTag("calendar-week-distance"),
                 enter = fadeIn() + scaleIn(initialScale = 0.88f),
                 exit = fadeOut() + scaleOut(targetScale = 0.94f),
@@ -348,7 +348,7 @@ private fun CalendarHeader(
     month: YearMonth,
 ) {
     Row(
-        modifier = Modifier.fillMaxWidth().padding(start = 20.dp, top = 10.dp, end = 20.dp, bottom = 14.dp),
+        modifier = Modifier.fillMaxWidth().padding(start = 20.dp, top = 16.dp, end = 20.dp, bottom = 14.dp),
         horizontalArrangement = Arrangement.spacedBy(12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {

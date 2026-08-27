@@ -408,7 +408,7 @@ private fun TodayScreen(
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
                 .statusBarsPadding()
-                .padding(start = 22.dp, top = 10.dp, end = 22.dp, bottom = 18.dp),
+                .padding(start = 22.dp, top = 16.dp, end = 22.dp, bottom = 18.dp),
         ) {
             Column {
                 Text(
