@@ -232,8 +232,8 @@ The flow starts with a fast `no abnormality` action. Fatigue and pain are distin
 - Current action, remaining time, exercise cues, and warnings are the dominant content.
 - The compact status line shows routine name, current logical-action position, and total remaining time without consuming the hero area.
 - The current action uses a large tabular countdown plus a thin progress indicator. The following-action strip skips prepare, side-switch, and rest implementation fragments and names the next logical exercise.
-- Portrait and landscape use the same hierarchy at different densities. Activity recreation during a running or paused timer must reopen the Training page instead of resetting the primary pager to Today.
-- Pause/resume is the dominant lower-thumb control; previous, next, and stop remain visibly available without becoming equal-weight primary actions.
+- Portrait and landscape use the same hierarchy at different densities. Landscape is a dedicated wide-screen composition: content starts directly below a compact system-icon safety band, the main columns use the full vertical span, and controls move from the bottom edge into a right-side vertical rail. Activity recreation during a running or paused timer must reopen the Training page instead of resetting the primary pager to Today.
+- Pause/resume is the dominant control; previous, next, and stop remain visibly available without becoming equal-weight primary actions. In portrait this control group stays in lower-thumb reach, while landscape prioritizes vertical space and places the group on the right edge.
 - Do not create a custom lock-screen experience. If Android requires a foreground-service notification, keep it minimal and private.
 
 ### Completion

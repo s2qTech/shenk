@@ -716,43 +716,38 @@ private fun ActiveTimerScreen(
     val step = snapshot.currentStep
     val progress = step?.let { 1f - snapshot.currentStepRemainingMillis.toFloat() / (it.seconds * 1000f) } ?: 1f
     val nextLogicalStep = snapshot.nextLogicalStep()
-    Scaffold(
-        modifier = Modifier.testTag("timer-active"),
-        containerColor = MaterialTheme.colorScheme.background,
-        bottomBar = {
-            TimerControlBar(snapshot, onPause, onPrevious, onNext, onStop, onFinish)
-        },
-    ) { padding ->
-        BoxWithConstraints(Modifier.fillMaxSize().padding(padding).statusBarsPadding()) {
-            val landscape = maxWidth > maxHeight
-            if (landscape) {
+    BoxWithConstraints(
+        Modifier
+            .fillMaxSize()
+            .testTag("timer-active"),
+    ) {
+        if (maxWidth > maxHeight) {
+            LandscapeActiveTimerScreen(
+                snapshot = snapshot,
+                progress = progress,
+                step = step,
+                nextLogicalStep = nextLogicalStep,
+                voiceNotice = voiceNotice,
+                onPause = onPause,
+                onPrevious = onPrevious,
+                onNext = onNext,
+                onStop = onStop,
+                onFinish = onFinish,
+            )
+        } else {
+            Scaffold(
+                modifier = Modifier.fillMaxSize(),
+                containerColor = MaterialTheme.colorScheme.background,
+                bottomBar = {
+                    TimerControlBar(snapshot, onPause, onPrevious, onNext, onStop, onFinish)
+                },
+            ) { padding ->
                 Column(
-                    Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 8.dp),
-                    verticalArrangement = Arrangement.spacedBy(9.dp),
-                ) {
-                    TimerTopline(snapshot, Modifier.fillMaxWidth())
-                    Row(
-                        Modifier.fillMaxWidth().weight(1f),
-                        horizontalArrangement = Arrangement.spacedBy(14.dp),
-                    ) {
-                        TimerHero(
-                            snapshot = snapshot,
-                            progress = progress,
-                            modifier = Modifier.weight(1.08f).fillMaxHeight(),
-                            compact = true,
-                        )
-                        Column(
-                            Modifier.weight(0.92f).fillMaxHeight(),
-                            verticalArrangement = Arrangement.spacedBy(9.dp),
-                        ) {
-                            TimerDetails(step, voiceNotice, Modifier.fillMaxWidth().weight(1f))
-                            NextActionStrip(nextLogicalStep, Modifier.fillMaxWidth())
-                        }
-                    }
-                }
-            } else {
-                Column(
-                    Modifier.fillMaxSize().padding(horizontal = 20.dp, vertical = 10.dp),
+                    Modifier
+                        .fillMaxSize()
+                        .padding(padding)
+                        .statusBarsPadding()
+                        .padding(horizontal = 20.dp, vertical = 10.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
                     TimerTopline(snapshot, Modifier.fillMaxWidth())
@@ -762,6 +757,62 @@ private fun ActiveTimerScreen(
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun LandscapeActiveTimerScreen(
+    snapshot: TimerSnapshot,
+    progress: Float,
+    step: RuntimeStep?,
+    nextLogicalStep: RuntimeStep?,
+    voiceNotice: String?,
+    onPause: () -> Unit,
+    onPrevious: () -> Unit,
+    onNext: () -> Unit,
+    onStop: () -> Unit,
+    onFinish: () -> Unit,
+) {
+    Row(
+        Modifier
+            .fillMaxSize()
+            .navigationBarsPadding()
+            .padding(start = 16.dp, top = 26.dp, end = 12.dp, bottom = 10.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Column(
+            Modifier.weight(1f).fillMaxHeight(),
+            verticalArrangement = Arrangement.spacedBy(9.dp),
+        ) {
+            TimerTopline(snapshot, Modifier.fillMaxWidth())
+            Row(
+                Modifier.fillMaxWidth().weight(1f),
+                horizontalArrangement = Arrangement.spacedBy(14.dp),
+            ) {
+                TimerHero(
+                    snapshot = snapshot,
+                    progress = progress,
+                    modifier = Modifier.weight(1.08f).fillMaxHeight(),
+                    compact = true,
+                )
+                Column(
+                    Modifier.weight(0.92f).fillMaxHeight(),
+                    verticalArrangement = Arrangement.spacedBy(9.dp),
+                ) {
+                    TimerDetails(step, voiceNotice, Modifier.fillMaxWidth().weight(1f))
+                    NextActionStrip(nextLogicalStep, Modifier.fillMaxWidth())
+                }
+            }
+        }
+        TimerControlRail(
+            snapshot = snapshot,
+            onPause = onPause,
+            onPrevious = onPrevious,
+            onNext = onNext,
+            onStop = onStop,
+            onFinish = onFinish,
+            modifier = Modifier.width(76.dp).fillMaxHeight(),
+        )
     }
 }
 
@@ -850,6 +901,81 @@ private fun TimerControlBar(
                         Text("继续", maxLines = 1)
                     }
                     else -> Text("补训练记录", maxLines = 1)
+                }
+            }
+            OutlinedIconButton(
+                onClick = onNext,
+                enabled = active,
+                modifier = Modifier.size(52.dp),
+            ) {
+                Icon(Icons.Rounded.SkipNext, contentDescription = "下一个动作")
+            }
+            FilledIconButton(
+                onClick = onStop,
+                enabled = active,
+                modifier = Modifier.size(52.dp),
+            ) {
+                Icon(Icons.Rounded.StopCircle, contentDescription = "结束训练")
+            }
+        }
+    }
+}
+
+@Composable
+private fun TimerControlRail(
+    snapshot: TimerSnapshot,
+    onPause: () -> Unit,
+    onPrevious: () -> Unit,
+    onNext: () -> Unit,
+    onStop: () -> Unit,
+    onFinish: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val active = snapshot.state in ACTIVE_TIMER_STATES
+    val terminal = snapshot.state in TERMINAL_TIMER_STATES
+    Surface(
+        modifier = modifier,
+        tonalElevation = 0.dp,
+        shadowElevation = 3.dp,
+        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.97f),
+        shape = RoundedCornerShape(26.dp),
+    ) {
+        Column(
+            Modifier.fillMaxSize().padding(horizontal = 8.dp, vertical = 10.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.SpaceBetween,
+        ) {
+            OutlinedIconButton(
+                onClick = onPrevious,
+                enabled = active && snapshot.currentStepIndex > 0,
+                modifier = Modifier.size(52.dp),
+            ) {
+                Icon(Icons.Rounded.SkipPrevious, contentDescription = "上一个动作")
+            }
+            Button(
+                onClick = if (terminal) onFinish else onPause,
+                modifier = Modifier.fillMaxWidth().heightIn(min = 94.dp),
+                contentPadding = PaddingValues(horizontal = 4.dp, vertical = 10.dp),
+                shape = RoundedCornerShape(21.dp),
+            ) {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(5.dp),
+                ) {
+                    when (snapshot.state) {
+                        TimerEngineState.RUNNING -> {
+                            Icon(Icons.Rounded.Pause, contentDescription = null)
+                            Text("暂停", maxLines = 1)
+                        }
+                        TimerEngineState.PAUSED -> {
+                            Icon(Icons.Rounded.PlayArrow, contentDescription = null)
+                            Text("继续", maxLines = 1)
+                        }
+                        else -> {
+                            Icon(Icons.Rounded.Check, contentDescription = null)
+                            Text("补记录", maxLines = 1)
+                        }
+                    }
                 }
             }
             OutlinedIconButton(
