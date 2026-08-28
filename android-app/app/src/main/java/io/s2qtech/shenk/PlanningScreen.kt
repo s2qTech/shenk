@@ -13,11 +13,15 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
+import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.ContentCopy
 import androidx.compose.material.icons.rounded.ContentPaste
@@ -72,7 +76,7 @@ import java.time.format.DateTimeFormatter
 import java.util.Locale
 import kotlinx.coroutines.launch
 
-private enum class PlanningTab { PLAN, FEEDBACK }
+private enum class PlanningAction { IMPORT, FEEDBACK }
 
 @Composable
 fun PlanningRoute(
@@ -86,39 +90,33 @@ fun PlanningRoute(
     val snackbar = remember { SnackbarHostState() }
     val importStatus by repository.observeImportStatus().collectAsState(PlanImportStatus(null, false, null))
     val latestFeedback by repository.observeLatestFeedback().collectAsState(null)
-    var tab by remember { mutableStateOf(if (initialFeedback) PlanningTab.FEEDBACK else PlanningTab.PLAN) }
+    var action by remember {
+        mutableStateOf<PlanningAction?>(if (initialFeedback) PlanningAction.FEEDBACK else null)
+    }
     var patchText by remember { mutableStateOf("") }
     var preview by remember { mutableStateOf<PlanPatchPreview?>(null) }
     var busy by remember { mutableStateOf(false) }
     var confirmingDelete by remember { mutableStateOf(false) }
 
-    BackHandler(onBack = onBack)
+    BackHandler {
+        if (action == null) onBack() else action = null
+    }
 
-    Scaffold(
-        modifier = Modifier.testTag("planning-screen"),
-        snackbarHost = { SnackbarHost(snackbar) },
-        topBar = {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .statusBarsPadding(),
-            ) {
-                SecondarySpaceHeader(
-                    title = "计划",
-                    subtitle = "导入指定计划，生成近期复盘",
-                    onBack = onBack,
-                )
-                PlanningTabs(tab = tab, onSelect = { tab = it })
-            }
-        },
-    ) { padding ->
-        when (tab) {
-            PlanningTab.PLAN -> PlanInbox(
-                modifier = Modifier.padding(padding),
+    Box(
+        modifier = Modifier.fillMaxSize().testTag("planning-screen"),
+    ) {
+        when (action) {
+            null -> PlanningActionChooser(
+                onImport = { action = PlanningAction.IMPORT },
+                onFeedback = { action = PlanningAction.FEEDBACK },
+            )
+            PlanningAction.IMPORT -> PlanInbox(
+                modifier = Modifier,
                 patchText = patchText,
                 preview = preview,
                 status = importStatus,
                 busy = busy,
+                onBack = { action = null },
                 onTextChange = {
                     patchText = it
                     preview = null
@@ -156,10 +154,11 @@ fun PlanningRoute(
                     }
                 },
             )
-            PlanningTab.FEEDBACK -> FeedbackWorkspace(
-                modifier = Modifier.padding(padding),
+            PlanningAction.FEEDBACK -> FeedbackWorkspace(
+                modifier = Modifier,
                 latest = latestFeedback,
                 busy = busy,
+                onBack = { action = null },
                 onGenerate = {
                     scope.launch {
                         busy = true
@@ -182,6 +181,7 @@ fun PlanningRoute(
                 },
             )
         }
+        SnackbarHost(snackbar, modifier = Modifier.align(Alignment.BottomCenter))
     }
 
     if (confirmingDelete) {
@@ -208,39 +208,73 @@ fun PlanningRoute(
 }
 
 @Composable
-private fun PlanningTabs(tab: PlanningTab, onSelect: (PlanningTab) -> Unit) {
+private fun PlanningActionChooser(
+    onImport: () -> Unit,
+    onFeedback: () -> Unit,
+) {
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = androidx.compose.foundation.layout.PaddingValues(
+            start = 22.dp,
+            top = 2.dp,
+            end = 22.dp,
+            bottom = 28.dp,
+        ),
+        verticalArrangement = Arrangement.spacedBy(18.dp),
+    ) {
+        item { SheetHeader("计划", "导入指定计划，或生成近期复盘资料。") }
+        item {
+            PlanActionRow(
+                icon = { Icon(Icons.Rounded.ContentPaste, contentDescription = null) },
+                title = "导入指定计划",
+                subtitle = "粘贴并校验计划内容",
+                onClick = onImport,
+                testTag = "open-plan-import",
+            )
+        }
+        item {
+            PlanActionRow(
+                icon = { Icon(Icons.Rounded.AutoAwesome, contentDescription = null) },
+                title = "生成近期复盘",
+                subtitle = "整理近期执行与身体反馈",
+                onClick = onFeedback,
+                testTag = "open-plan-feedback",
+            )
+        }
+    }
+}
+
+@Composable
+private fun PlanActionRow(
+    icon: @Composable () -> Unit,
+    title: String,
+    subtitle: String,
+    onClick: () -> Unit,
+    testTag: String,
+) {
     Surface(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 10.dp),
-        color = MaterialTheme.colorScheme.surfaceContainer,
-        shape = RoundedCornerShape(24.dp),
+        onClick = onClick,
+        modifier = Modifier.fillMaxWidth().heightIn(min = 72.dp).testTag(testTag),
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        shape = RoundedCornerShape(18.dp),
+        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
     ) {
         Row(
-            modifier = Modifier.fillMaxWidth().padding(5.dp),
-            horizontalArrangement = Arrangement.spacedBy(5.dp),
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 14.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            PlanningTab.entries.forEach { item ->
-                val selected = item == tab
-                Surface(
-                    onClick = { onSelect(item) },
-                    modifier = Modifier
-                        .weight(1f)
-                        .heightIn(min = 50.dp)
-                        .semantics {
-                            role = Role.Tab
-                            this.selected = selected
-                        },
-                    shape = RoundedCornerShape(19.dp),
-                    color = if (selected) MaterialTheme.colorScheme.primary else Color.Transparent,
-                    contentColor = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
-                ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Text(
-                            if (item == PlanningTab.PLAN) "导入计划" else "近期复盘",
-                            fontWeight = FontWeight.SemiBold,
-                        )
-                    }
-                }
+            Surface(
+                modifier = Modifier.size(34.dp),
+                shape = RoundedCornerShape(12.dp),
+                color = MaterialTheme.colorScheme.primaryContainer,
+                contentColor = MaterialTheme.colorScheme.primary,
+            ) { Box(contentAlignment = Alignment.Center) { icon() } }
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.secondary)
             }
+            Icon(Icons.AutoMirrored.Rounded.KeyboardArrowRight, contentDescription = null)
         }
     }
 }
@@ -252,6 +286,7 @@ private fun PlanInbox(
     preview: PlanPatchPreview?,
     status: PlanImportStatus,
     busy: Boolean,
+    onBack: () -> Unit,
     onTextChange: (String) -> Unit,
     onPaste: () -> Unit,
     onValidate: () -> Unit,
@@ -259,28 +294,24 @@ private fun PlanInbox(
     onUndo: () -> Unit,
 ) {
     LazyColumn(
-        modifier = modifier.fillMaxSize().navigationBarsPadding(),
-        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 20.dp, vertical = 12.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
+        modifier = modifier.fillMaxSize(),
+        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 22.dp, vertical = 2.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
         item {
-            SecondarySectionCard {
-                Text("计划草案收件箱", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold)
-                Spacer(Modifier.height(6.dp))
-                Text("粘贴规范化计划草案；通过校验并再次确认后才会写入正式计划。", color = MaterialTheme.colorScheme.secondary)
-            }
-        }
-        item {
-            Text("粘贴草案", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-            Text("支持只包含 JSON 的内容，也支持包含 JSON 的完整回复。", color = MaterialTheme.colorScheme.secondary)
+            PlanningSubpageHeader(
+                title = "导入指定计划",
+                subtitle = "粘贴高级 AI 返回的计划内容。身刻会先完整校验并展示变更预览，不会直接覆盖当前计划。",
+                onBack = onBack,
+            )
         }
         item {
             OutlinedTextField(
                 value = patchText,
                 onValueChange = onTextChange,
-                modifier = Modifier.fillMaxWidth().height(210.dp).testTag("plan-patch-input"),
+                modifier = Modifier.fillMaxWidth().height(126.dp).testTag("plan-patch-input"),
                 label = { Text("计划草案") },
-                placeholder = { Text("粘贴高级 AI 或 Codex 生成的 JSON，也可粘贴包含 JSON 的完整回复") },
+                placeholder = { Text("在这里粘贴计划内容……") },
             )
         }
         item {
@@ -346,6 +377,23 @@ private fun PlanInbox(
                 }
             }
         }
+        item { Spacer(Modifier.height(22.dp)) }
+    }
+}
+
+@Composable
+private fun PlanningSubpageHeader(
+    title: String,
+    subtitle: String,
+    onBack: () -> Unit,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(7.dp)) {
+        TextButton(onClick = onBack, modifier = Modifier.padding(start = (-12).dp)) {
+            Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = null)
+            Text("返回计划")
+        }
+        Text(title, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold)
+        Text(subtitle, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.secondary)
     }
 }
 
@@ -390,17 +438,21 @@ private fun FeedbackWorkspace(
     modifier: Modifier,
     latest: WeeklyFeedback?,
     busy: Boolean,
+    onBack: () -> Unit,
     onGenerate: () -> Unit,
     onCopy: () -> Unit,
 ) {
     LazyColumn(
-        modifier = modifier.fillMaxSize().navigationBarsPadding(),
-        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 20.dp, vertical = 12.dp),
-        verticalArrangement = Arrangement.spacedBy(18.dp),
+        modifier = modifier.fillMaxSize(),
+        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 22.dp, vertical = 2.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
         item {
-            Text("近期复盘资料", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold)
-            Text("整理 14 天训练事实与 30 天身体趋势，供健身计划任务制定后续安排。", color = MaterialTheme.colorScheme.secondary)
+            PlanningSubpageHeader(
+                title = "生成近期复盘",
+                subtitle = "汇总最近训练执行、晨检、疼痛与恢复趋势，生成可交给高级 AI 的规范化复盘资料。",
+                onBack = onBack,
+            )
         }
         item {
             ShenkStatePanel(
@@ -428,6 +480,7 @@ private fun FeedbackWorkspace(
                 Text("资料包含训练、计时、身体趋势、疼痛变化与当前计划版本；缺失值仍保持缺失。", color = MaterialTheme.colorScheme.secondary)
             }
         }
+        item { Spacer(Modifier.height(22.dp)) }
     }
 }
 

@@ -6,14 +6,26 @@ import android.content.pm.PackageManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.ArrowForward
+import androidx.compose.material.icons.automirrored.rounded.DirectionsRun
+import androidx.compose.material.icons.automirrored.rounded.DirectionsWalk
 import androidx.compose.material.icons.automirrored.rounded.ShowChart
+import androidx.compose.material.icons.rounded.Bedtime
 import androidx.compose.material.icons.rounded.AutoAwesome
+import androidx.compose.material.icons.rounded.Bolt
+import androidx.compose.material.icons.rounded.FitnessCenter
 import androidx.compose.material.icons.rounded.Settings
+import androidx.compose.material.icons.rounded.SelfImprovement
+import androidx.compose.material.icons.rounded.WaterDrop
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
@@ -53,9 +65,17 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import io.s2qtech.shenk.model.GuidanceSource
@@ -455,12 +475,12 @@ private fun TodayScreen(
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
                 .statusBarsPadding()
-                .padding(start = 22.dp, top = 16.dp, end = 22.dp, bottom = 18.dp),
+                .padding(start = 18.dp, top = 18.dp, end = 18.dp, bottom = 18.dp),
         ) {
             Column {
                 Text(
                     text = "今天",
-                    style = MaterialTheme.typography.displaySmall,
+                    style = MaterialTheme.typography.headlineLarge,
                     fontWeight = FontWeight.SemiBold,
                 )
                 Spacer(Modifier.height(5.dp))
@@ -470,7 +490,7 @@ private fun TodayScreen(
                     style = MaterialTheme.typography.bodyLarge,
                 )
             }
-            Spacer(Modifier.height(22.dp))
+            Spacer(Modifier.height(16.dp))
 
             if (!cloudConfigured) {
                 ShenkStatePanel(
@@ -495,20 +515,21 @@ private fun TodayScreen(
             } else {
                 GuidanceBlock(
                     guidance = guidance,
-                    dailyReviewState = dailyReviewState,
                     onTraining = onTraining,
                     onRecordDay = onRecordDay,
-                    onDailyReview = onDailyReview,
                 )
             }
-            Spacer(Modifier.height(26.dp))
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-            Spacer(Modifier.height(20.dp))
+            Spacer(Modifier.height(24.dp))
 
             MorningStatusSection(
                 records = records,
                 onMorning = onMorning,
                 onPreWorkout = onPreWorkout,
+            )
+            Spacer(Modifier.height(22.dp))
+            CoachReviewSection(
+                state = dailyReviewState,
+                onOpen = onDailyReview,
             )
             Spacer(Modifier.height(24.dp))
         }
@@ -549,11 +570,10 @@ private fun TodayDestinationBar(
 @Composable
 private fun GuidanceBlock(
     guidance: io.s2qtech.shenk.model.TodayGuidance,
-    dailyReviewState: io.s2qtech.shenk.sync.DailyReviewState,
     onTraining: () -> Unit,
     onRecordDay: () -> Unit,
-    onDailyReview: () -> Unit,
 ) {
+    val darkTheme = isSystemInDarkTheme()
     val source = when (guidance.source) {
         GuidanceSource.ACTUAL -> "今日已完成"
         GuidanceSource.FORMAL_PLAN -> "今日计划"
@@ -561,97 +581,179 @@ private fun GuidanceBlock(
     }
     Surface(
         modifier = Modifier.fillMaxWidth(),
-        color = when (guidance.source) {
-            GuidanceSource.ACTUAL -> MaterialTheme.colorScheme.primaryContainer
-            GuidanceSource.FORMAL_PLAN -> MaterialTheme.colorScheme.secondaryContainer
-            GuidanceSource.LOCAL_SUGGESTION -> MaterialTheme.colorScheme.tertiaryContainer
-        },
-        shape = RoundedCornerShape(26.dp),
-        shadowElevation = 2.dp,
+        color = Color.Transparent,
+        shape = RoundedCornerShape(28.dp),
+        shadowElevation = 1.dp,
         tonalElevation = 1.dp,
         border = androidx.compose.foundation.BorderStroke(
             1.dp,
             MaterialTheme.colorScheme.primary.copy(alpha = 0.07f),
         ),
     ) {
-        Column(Modifier.fillMaxWidth().padding(horizontal = 22.dp, vertical = 21.dp)) {
-            Text(source, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.secondary)
-            Spacer(Modifier.height(9.dp))
-            Text(guidance.title, style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.SemiBold)
-            guidance.estimatedMinutes?.let {
-                Spacer(Modifier.height(3.dp))
-                Text("约 $it 分钟", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.secondary)
-            }
-            guidance.note?.takeIf { it.isNotBlank() }?.let {
-                Spacer(Modifier.height(12.dp))
-                Text(it, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-            when (TodayPrimaryActionResolver.resolve(guidance)) {
-                TodayPrimaryAction.NONE -> Unit
-                TodayPrimaryAction.OPEN_TIMER -> {
-                    Spacer(Modifier.height(18.dp))
-                    Button(
-                        onClick = onTraining,
-                        modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp).testTag("today-open-training"),
-                    ) { Text("进入训练") }
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .background(
+                    Brush.linearGradient(
+                        listOf(
+                            MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.92f),
+                            MaterialTheme.colorScheme.surfaceContainerLow.copy(alpha = 0.98f),
+                        ),
+                    ),
+                ),
+        ) {
+            Image(
+                painter = painterResource(R.drawable.today_path),
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                alignment = Alignment.TopEnd,
+                modifier = Modifier
+                    .matchParentSize()
+                    .alpha(if (darkTheme) 0.08f else 0.45f),
+            )
+            Column(Modifier.fillMaxWidth().padding(20.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(9.dp)) {
+                    Surface(modifier = Modifier.size(7.dp), color = MaterialTheme.colorScheme.primary, shape = RoundedCornerShape(50)) {}
+                    Text(source, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
                 }
-                TodayPrimaryAction.RECORD_DAY -> {
-                    Spacer(Modifier.height(18.dp))
-                    Button(
-                        onClick = onRecordDay,
-                        modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp).testTag("today-record-day"),
-                    ) { Text("填写今日情况") }
+                Spacer(Modifier.height(8.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        guidance.title,
+                        modifier = Modifier.weight(1f),
+                        style = MaterialTheme.typography.headlineMedium,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                    Surface(
+                        modifier = Modifier.size(46.dp),
+                        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.72f),
+                        shape = RoundedCornerShape(17.dp),
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(guidanceIcon(guidance.trainingType), contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                        }
+                    }
+                }
+                guidance.estimatedMinutes?.let {
+                    Spacer(Modifier.height(3.dp))
+                    Text(
+                        if (it <= 0) "不安排训练" else "约 $it 分钟",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.secondary,
+                    )
+                }
+                guidance.note?.takeIf { it.isNotBlank() }?.let {
+                    Spacer(Modifier.height(12.dp))
+                    Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                when (TodayPrimaryActionResolver.resolve(guidance)) {
+                    TodayPrimaryAction.NONE -> Unit
+                    TodayPrimaryAction.OPEN_TIMER -> {
+                        Spacer(Modifier.height(17.dp))
+                        TodayGuidanceButton("进入训练", onTraining, "today-open-training")
+                    }
+                    TodayPrimaryAction.RECORD_DAY -> {
+                        Spacer(Modifier.height(17.dp))
+                        TodayGuidanceButton("记录今日情况", onRecordDay, "today-record-day")
+                    }
                 }
             }
+        }
+    }
+}
 
-            when {
-                dailyReviewState.review != null -> {
-                    val review = requireNotNull(dailyReviewState.review)
-                    Spacer(Modifier.height(22.dp))
-                    HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f))
-                    Spacer(Modifier.height(18.dp))
-                    Text("教练简评", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.secondary)
-                    Spacer(Modifier.height(6.dp))
-                    Text(review.conclusion, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                    TextButton(onClick = onDailyReview, modifier = Modifier.align(Alignment.End)) {
-                        Text("查看完整简评")
-                    }
-                }
-                dailyReviewState.jobState in setOf("PENDING", "RUNNING", "AWAITING_SERVER") -> {
-                    Spacer(Modifier.height(22.dp))
-                    HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f))
-                    Spacer(Modifier.height(16.dp))
-                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                        CircularProgressIndicator(modifier = Modifier.size(22.dp), strokeWidth = 2.dp)
-                        Column {
-                            Text("正在生成今日简评", fontWeight = FontWeight.SemiBold)
-                            Text("完成后会自动出现在这里", color = MaterialTheme.colorScheme.secondary)
-                        }
-                    }
-                }
-                dailyReviewState.jobState in setOf("RETRY", "FAILED") -> {
-                    Spacer(Modifier.height(22.dp))
-                    HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f))
-                    Spacer(Modifier.height(16.dp))
-                    Column {
-                        Text("简评暂未完成", fontWeight = FontWeight.SemiBold)
+@Composable
+private fun TodayGuidanceButton(label: String, onClick: () -> Unit, testTag: String) {
+    Button(
+        onClick = onClick,
+        modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp).testTag(testTag),
+        shape = RoundedCornerShape(19.dp),
+    ) {
+        Box(Modifier.fillMaxWidth()) {
+            Text(label, modifier = Modifier.align(Alignment.Center), fontWeight = FontWeight.SemiBold)
+            Icon(
+                Icons.AutoMirrored.Rounded.ArrowForward,
+                contentDescription = null,
+                modifier = Modifier.align(Alignment.CenterEnd).size(20.dp),
+            )
+        }
+    }
+}
+
+private fun guidanceIcon(type: String): ImageVector = when (type) {
+    "strength", "travel_strength" -> Icons.Rounded.FitnessCenter
+    "quality_walk" -> Icons.AutoMirrored.Rounded.DirectionsRun
+    "easy_walk" -> Icons.AutoMirrored.Rounded.DirectionsWalk
+    "rest" -> Icons.Rounded.Bedtime
+    else -> Icons.Rounded.SelfImprovement
+}
+
+@Composable
+internal fun CoachReviewSection(
+    state: io.s2qtech.shenk.sync.DailyReviewState,
+    onOpen: () -> Unit,
+) {
+    Column(Modifier.fillMaxWidth().testTag("today-coach-review")) {
+        Text("教练简评", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
+        Spacer(Modifier.height(12.dp))
+        when {
+            state.review != null -> {
+                val review = requireNotNull(state.review)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalAlignment = Alignment.Bottom,
+                ) {
+                    Column(Modifier.weight(1f)) {
                         Text(
-                            dailyReviewFailureMessage(
-                                dailyReviewState.jobError,
-                                dailyReviewState.jobState == "RETRY",
-                            ),
-                            color = MaterialTheme.colorScheme.secondary,
+                            review.conclusion,
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
-                        TextButton(onClick = onDailyReview, modifier = Modifier.align(Alignment.End)) {
-                            Text(if (dailyReviewAllowsManualRetry(dailyReviewState.jobState)) "查看并重试" else "查看状态")
+                        Spacer(Modifier.height(5.dp))
+                        TextButton(
+                            onClick = onOpen,
+                            contentPadding = PaddingValues(horizontal = 0.dp, vertical = 8.dp),
+                        ) {
+                            Text("查看完整简评")
+                            Icon(Icons.AutoMirrored.Rounded.ArrowForward, contentDescription = null, modifier = Modifier.size(18.dp))
                         }
                     }
+                    DeepSeekCoachIdentity(title = "DeepSeek 简评", compact = true, subtitle = null)
                 }
-                else -> {
-                    Spacer(Modifier.height(14.dp))
-                    TextButton(onClick = onDailyReview, modifier = Modifier.align(Alignment.End)) {
-                        Text("生成今日简评")
+            }
+            state.jobState in setOf("PENDING", "RUNNING", "AWAITING_SERVER") -> {
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                    CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                    Column {
+                        Text("正在生成今日简评", fontWeight = FontWeight.SemiBold)
+                        Text("完成后会自动出现在这里", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.secondary)
                     }
+                }
+            }
+            state.jobState in setOf("RETRY", "FAILED") -> {
+                Text("简评暂未完成", fontWeight = FontWeight.SemiBold)
+                Text(
+                    dailyReviewFailureMessage(state.jobError, state.jobState == "RETRY"),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.secondary,
+                )
+                TextButton(onClick = onOpen, modifier = Modifier.align(Alignment.End)) {
+                    Text(if (dailyReviewAllowsManualRetry(state.jobState)) "查看并重试" else "查看状态")
+                }
+            }
+            else -> {
+                Text(
+                    "记录今天真实发生的活动和身体感受后，可以生成简评。",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.secondary,
+                )
+                TextButton(onClick = onOpen, modifier = Modifier.align(Alignment.End)) {
+                    Text("生成今日简评")
                 }
             }
         }
@@ -706,7 +808,7 @@ private fun MorningStatusSection(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column {
-            Text("晨起状态", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold)
+            Text("身体状态", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
             Text(
                 if (records?.morning == null) "今天还没有记录" else "今天身体的起点",
                 color = MaterialTheme.colorScheme.secondary,
@@ -735,46 +837,70 @@ private fun MorningStatusSection(
     } else {
         val state = records.effectiveStatus
         val largeText = LocalDensity.current.fontScale >= 1.3f
+        val firstPain = state.pain?.maxByOrNull { it.severity }
         FlowRow(
             Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
-            maxItemsInEachRow = if (largeText) 1 else 3,
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+            maxItemsInEachRow = if (largeText) 1 else 4,
         ) {
             StatusValue(
                 label = "睡眠",
                 value = state.sleepDurationMinutes?.let(::formatSleep) ?: "未记录",
-                modifier = (if (largeText) Modifier.fillMaxWidth() else Modifier.weight(1.2f))
-                    .heightIn(min = 76.dp),
+                modifier = (if (largeText) Modifier.fillMaxWidth() else Modifier.weight(1f)).heightIn(min = 72.dp),
+                icon = Icons.Rounded.Bedtime,
+                iconColor = MaterialTheme.colorScheme.primary,
+                showDivider = !largeText,
             )
             StatusValue(
                 label = "精力",
                 value = state.energy?.let { "$it/5" } ?: "未记录",
-                modifier = (if (largeText) Modifier.fillMaxWidth() else Modifier.weight(1f))
-                    .heightIn(min = 76.dp),
+                modifier = (if (largeText) Modifier.fillMaxWidth() else Modifier.weight(1f)).heightIn(min = 72.dp),
                 emphasis = statusColor(state.energy, higherIsBetter = true),
+                icon = Icons.Rounded.Bolt,
+                iconColor = Color(0xFF93AD45),
+                showDivider = !largeText,
             )
             StatusValue(
                 label = "疲劳",
                 value = state.fatigue?.let { "$it/5" } ?: "未记录",
-                modifier = (if (largeText) Modifier.fillMaxWidth() else Modifier.weight(1f))
-                    .heightIn(min = 76.dp),
+                modifier = (if (largeText) Modifier.fillMaxWidth() else Modifier.weight(1f)).heightIn(min = 72.dp),
                 emphasis = statusColor(state.fatigue, higherIsBetter = false),
+                icon = Icons.Rounded.WaterDrop,
+                iconColor = MaterialTheme.colorScheme.error,
+                showDivider = !largeText,
+            )
+            StatusValue(
+                label = firstPain?.region?.displayName ?: "身体感受",
+                value = firstPain?.let { "${it.severity}/5" } ?: when (state.pain) {
+                    null -> "未记录"
+                    else -> "正常"
+                },
+                modifier = (if (largeText) Modifier.fillMaxWidth() else Modifier.weight(1f)).heightIn(min = 72.dp),
+                emphasis = if (firstPain != null) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
+                icon = Icons.AutoMirrored.Rounded.DirectionsWalk,
+                iconColor = MaterialTheme.colorScheme.error,
             )
         }
-        Spacer(Modifier.height(14.dp))
         val pain = state.pain
         val painText = when {
             pain == null -> "身体感受未记录"
             pain.isEmpty() -> "身体没有疼痛异常"
             else -> pain.joinToString("、") { "${it.region.displayName} ${it.severity}/5" }
         }
-        Text("身体感受", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.outline)
-        Text(
-            painText,
-            style = MaterialTheme.typography.titleMedium,
-            color = if (pain?.isNotEmpty() == true) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
-        )
+        Spacer(Modifier.height(12.dp))
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            color = MaterialTheme.colorScheme.surfaceContainerLow,
+            shape = RoundedCornerShape(14.dp),
+        ) {
+            Text(
+                painText,
+                modifier = Modifier.padding(horizontal = 14.dp, vertical = 11.dp),
+                style = MaterialTheme.typography.bodySmall,
+                color = if (pain?.isNotEmpty() == true) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.secondary,
+            )
+        }
     }
     records?.metric?.takeIf { it.hasMeasurements }?.let { metric ->
         Spacer(Modifier.height(14.dp))
@@ -810,12 +936,32 @@ private fun StatusValue(
     value: String,
     modifier: Modifier = Modifier,
     emphasis: androidx.compose.ui.graphics.Color = MaterialTheme.colorScheme.onSurface,
+    icon: ImageVector,
+    iconColor: Color,
+    showDivider: Boolean = false,
 ) {
-    Surface(modifier = modifier, color = MaterialTheme.colorScheme.surfaceVariant, shape = RoundedCornerShape(18.dp)) {
-        Column(Modifier.padding(horizontal = 14.dp, vertical = 13.dp)) {
-            Text(value, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold, color = emphasis)
-            Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.outline)
-        }
+    val dividerColor = MaterialTheme.colorScheme.outlineVariant
+    Column(
+        modifier = modifier
+            .drawBehind {
+                if (showDivider) {
+                    drawLine(
+                        color = dividerColor,
+                        start = Offset(size.width, 4.dp.toPx()),
+                        end = Offset(size.width, size.height - 4.dp.toPx()),
+                        strokeWidth = 1.dp.toPx(),
+                    )
+                }
+            }
+            .padding(horizontal = 5.dp, vertical = 3.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
+    ) {
+        Icon(icon, contentDescription = null, modifier = Modifier.size(20.dp), tint = iconColor)
+        Spacer(Modifier.height(9.dp))
+        Text(value, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, color = emphasis)
+        Spacer(Modifier.height(5.dp))
+        Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
     }
 }
 

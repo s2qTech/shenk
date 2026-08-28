@@ -148,28 +148,16 @@ fun DailyReviewSheet(
         Spacer(Modifier.height(20.dp))
 
         state.review?.let { review ->
-            ReviewSectionCard(
-                title = "今日评价",
-                containerColor = MaterialTheme.colorScheme.primaryContainer,
-                contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-            ) {
-                Text(
-                    review.conclusion,
-                    style = MaterialTheme.typography.headlineSmall,
-                    fontWeight = FontWeight.SemiBold,
-                )
-            }
+            DeepSeekCoachIdentity(title = review.conclusion)
 
             if (review.assessment.isNotBlank()) {
-                Spacer(Modifier.height(12.dp))
-                ReviewSectionCard(title = "复盘分析") {
+                ReviewTextSection(title = "复盘分析") {
                     Text(review.assessment, style = MaterialTheme.typography.bodyLarge)
                 }
             }
 
             review.localSuggestion?.let { suggestion ->
-                Spacer(Modifier.height(12.dp))
-                ReviewSectionCard(title = "本地建议") {
+                ReviewTextSection(title = "本地建议") {
                     Text(
                         buildString {
                             append(suggestion.title)
@@ -192,8 +180,7 @@ fun DailyReviewSheet(
             }
 
             if (review.actions.isNotEmpty()) {
-                Spacer(Modifier.height(12.dp))
-                ReviewSectionCard(title = "接下来怎么做") {
+                ReviewTextSection(title = "接下来怎么做") {
                     review.actions.forEachIndexed { index, action ->
                         NumberedReviewLine(index + 1, action)
                     }
@@ -201,28 +188,24 @@ fun DailyReviewSheet(
             }
 
             if (review.cautions.isNotEmpty()) {
-                Spacer(Modifier.height(12.dp))
-                ReviewSectionCard(
+                ReviewTextSection(
                     title = "需要留意",
-                    containerColor = MaterialTheme.colorScheme.errorContainer,
-                    contentColor = MaterialTheme.colorScheme.onErrorContainer,
-                    labelColor = MaterialTheme.colorScheme.error,
+                    titleColor = MaterialTheme.colorScheme.error,
                 ) {
-                    review.cautions.forEach { ReviewFactLine(it) }
+                    review.cautions.forEach { ReviewFactLine(it, color = MaterialTheme.colorScheme.error) }
                 }
             }
 
             if (review.evidence.isNotEmpty()) {
-                Spacer(Modifier.height(12.dp))
-                ReviewSectionCard(
+                ReviewTextSection(
                     title = "判断依据",
-                    containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                    titleColor = MaterialTheme.colorScheme.outline,
                 ) {
                     review.evidence.forEach { ReviewFactLine(humanizeDailyReviewEvidence(it), subdued = true) }
                 }
             }
 
-            Spacer(Modifier.height(12.dp))
+            Spacer(Modifier.height(18.dp))
             Text(
                 "第 ${review.version} 版 · DeepSeek V4 Flash",
                 style = MaterialTheme.typography.labelMedium,
@@ -291,6 +274,28 @@ fun DailyReviewSheet(
             }
         }
         Spacer(Modifier.height(24.dp))
+    }
+}
+
+@Composable
+private fun ReviewTextSection(
+    title: String,
+    titleColor: Color = MaterialTheme.colorScheme.onSurface,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    Spacer(Modifier.height(20.dp))
+    androidx.compose.material3.HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+    Spacer(Modifier.height(18.dp))
+    Column(Modifier.fillMaxWidth()) {
+        Text(
+            title,
+            modifier = Modifier.semantics { heading() },
+            color = titleColor,
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.SemiBold,
+        )
+        Spacer(Modifier.height(8.dp))
+        content()
     }
 }
 
@@ -373,17 +378,30 @@ private fun NumberedReviewLine(number: Int, text: String) {
 }
 
 @Composable
-private fun ReviewFactLine(text: String, subdued: Boolean = false) {
+private fun ReviewFactLine(
+    text: String,
+    subdued: Boolean = false,
+    color: Color = Color.Unspecified,
+) {
     Row(
         modifier = Modifier.fillMaxWidth().padding(top = 5.dp, bottom = 5.dp),
         horizontalArrangement = Arrangement.spacedBy(10.dp),
         verticalAlignment = Alignment.Top,
     ) {
-        Text("•", modifier = Modifier.width(10.dp), color = if (subdued) MaterialTheme.colorScheme.outline else Color.Unspecified)
+        val resolvedColor = when {
+            color != Color.Unspecified -> color
+            subdued -> MaterialTheme.colorScheme.outline
+            else -> Color.Unspecified
+        }
+        Text("•", modifier = Modifier.width(10.dp), color = resolvedColor)
         Text(
             text,
             modifier = Modifier.weight(1f),
-            color = if (subdued) MaterialTheme.colorScheme.secondary else Color.Unspecified,
+            color = when {
+                color != Color.Unspecified -> color
+                subdued -> MaterialTheme.colorScheme.secondary
+                else -> Color.Unspecified
+            },
             style = MaterialTheme.typography.bodyLarge,
         )
     }

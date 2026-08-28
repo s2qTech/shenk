@@ -14,10 +14,13 @@ import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipeLeft
 import androidx.compose.ui.test.swipeRight
 import androidx.compose.ui.semantics.SemanticsActions
+import androidx.activity.compose.setContent
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import io.s2qtech.shenk.model.RoutineScene
 import io.s2qtech.shenk.model.SharedEntityOwner
 import io.s2qtech.shenk.model.SharedRecord
+import io.s2qtech.shenk.sync.DailyReview
+import io.s2qtech.shenk.sync.DailyReviewState
 import io.s2qtech.shenk.timer.TimerEngineState
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
@@ -37,10 +40,42 @@ class MainActivityTest {
     val composeRule = createAndroidComposeRule<MainActivity>()
 
     @Test
+    fun completedCoachReviewWithShortConclusionRendersWithoutInvalidPadding() {
+        val review = DailyReview(
+            id = "review-test",
+            date = "2026-08-28",
+            version = 1,
+            status = "completed",
+            conclusion = "今天恢复良好。",
+            assessment = "训练执行稳定。",
+            actions = listOf("保持当前节奏"),
+            evidence = listOf("晨起状态完整"),
+            cautions = emptyList(),
+            localSuggestion = null,
+            inputDigest = "test",
+            provider = "deepseek",
+            model = "deepseek-v4-flash",
+            generatedAt = "2026-08-28T12:00:00Z",
+        )
+
+        composeRule.activity.setContent {
+            ShenkTheme {
+                CoachReviewSection(
+                    state = DailyReviewState(review = review),
+                    onOpen = {},
+                )
+            }
+        }
+
+        composeRule.onNodeWithText("今天恢复良好。").assertIsDisplayed()
+        composeRule.onNodeWithText("查看完整简评").assertIsDisplayed()
+    }
+
+    @Test
     fun todayOpensOfflineAndMorningWorkspaceIsReachable() {
         composeRule.onNodeWithTag("today-screen").assertIsDisplayed()
         composeRule.onNodeWithTag("cloud-setup-prompt").assertIsDisplayed()
-        composeRule.onNodeWithText("晨起状态").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithText("身体状态").performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithTag("morning-action").performClick()
         composeRule.onNodeWithText("今天身体怎么样？").assertIsDisplayed()
         composeRule.onNodeWithText("保存晨起状态").performScrollTo().assertIsDisplayed()
@@ -185,6 +220,8 @@ class MainActivityTest {
         composeRule.onNodeWithTag("today-destination-bar").assertIsDisplayed()
         composeRule.onNodeWithTag("today-open-planning").assertIsDisplayed().performClick()
         composeRule.onNodeWithTag("planning-screen").assertIsDisplayed()
+        composeRule.onNodeWithTag("open-plan-feedback").assertIsDisplayed()
+        composeRule.onNodeWithTag("open-plan-import").assertIsDisplayed().performClick()
         composeRule.onNodeWithTag("plan-patch-input").assertIsDisplayed()
     }
 
@@ -193,6 +230,9 @@ class MainActivityTest {
         composeRule.onNodeWithTag("today-destination-bar").assertIsDisplayed()
         composeRule.onNodeWithTag("today-open-data").assertIsDisplayed().performClick()
         composeRule.onNodeWithTag("data-screen").assertIsDisplayed()
+        composeRule.onNodeWithTag("data-metric-weight").assertIsDisplayed()
+        composeRule.onNodeWithTag("data-metric-body_fat").assertIsDisplayed().performClick()
+        composeRule.onNodeWithTag("body-metric-chart").assertIsDisplayed()
     }
 
     @Test
@@ -218,6 +258,7 @@ class MainActivityTest {
         }
 
         composeRule.onNodeWithTag("today-open-planning").performClick()
+        composeRule.onNodeWithTag("open-plan-import").performClick()
         composeRule.onNodeWithTag("plan-patch-input").assertIsDisplayed()
         assertTrue(
             composeRule.onAllNodesWithTag("pending-plan-synthetic-pending-patch")

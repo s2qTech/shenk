@@ -4,11 +4,14 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -47,6 +50,7 @@ data class TrainingLaunchRequest(
     val guidance: TodayGuidance?,
 )
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ShenkApp(
     todayRepository: TodayRecordRepository,
@@ -108,97 +112,108 @@ fun ShenkApp(
     }
 
     Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
-        when (secondary) {
-            SecondarySpace.DATA -> DataScreen(
-                repository = calendarRepository,
-                onBack = { secondary = null },
-            )
-            SecondarySpace.PLANNING -> PlanningRoute(
-                repository = planCollaborationRepository,
-                initialFeedback = pendingFeedback,
-                onBack = {
-                    pendingFeedback = false
-                    secondary = null
-                },
-            )
-            null -> {
-                HorizontalPager(
-                    state = pager,
-                    beyondViewportPageCount = PRIMARY_PAGE_RETENTION_RADIUS,
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .background(MaterialTheme.colorScheme.background)
-                        .semantics {
-                            stateDescription = when (pager.currentPage) {
-                                CALENDAR_PAGE -> "日历，第 1 页，共 3 页"
-                                TODAY_PAGE -> "今天，第 2 页，共 3 页"
-                                else -> "训练，第 3 页，共 3 页"
-                            }
-                            customActions = buildList {
-                                if (pager.currentPage != CALENDAR_PAGE) {
-                                    add(CustomAccessibilityAction("转到日历") {
-                                        scope.launch { pager.animatePrimaryPage(CALENDAR_PAGE) }
-                                        true
-                                    })
-                                }
-                                if (pager.currentPage != TODAY_PAGE) {
-                                    add(CustomAccessibilityAction("转到今天") {
-                                        scope.launch { pager.animatePrimaryPage(TODAY_PAGE) }
-                                        true
-                                    })
-                                }
-                                if (pager.currentPage != TRAINING_PAGE) {
-                                    add(CustomAccessibilityAction("转到训练") {
-                                        scope.launch { pager.animatePrimaryPage(TRAINING_PAGE) }
-                                        true
-                                    })
-                                }
-                            }
+        HorizontalPager(
+            state = pager,
+            beyondViewportPageCount = PRIMARY_PAGE_RETENTION_RADIUS,
+            modifier = Modifier
+                .fillMaxSize()
+                .background(MaterialTheme.colorScheme.background)
+                .semantics {
+                    stateDescription = when (pager.currentPage) {
+                        CALENDAR_PAGE -> "日历，第 1 页，共 3 页"
+                        TODAY_PAGE -> "今天，第 2 页，共 3 页"
+                        else -> "训练，第 3 页，共 3 页"
+                    }
+                    customActions = buildList {
+                        if (pager.currentPage != CALENDAR_PAGE) {
+                            add(CustomAccessibilityAction("转到日历") {
+                                scope.launch { pager.animatePrimaryPage(CALENDAR_PAGE) }
+                                true
+                            })
                         }
-                        .testTag("primary-pager"),
-                ) { page ->
-                    PrimaryPageSlot(page = page) {
-                        when (page) {
-                            CALENDAR_PAGE -> CalendarScreen(
-                                repository = calendarRepository,
-                                onReady = { primaryPagesReady[CALENDAR_PAGE] = true },
-                            )
-                            TODAY_PAGE -> TodayRoute(
-                                repository = todayRepository,
-                                recordRepository = calendarRepository,
-                                reminderStore = reminderStore,
-                                cloudConnectionManager = cloudConnectionManager,
-                                onReady = { primaryPagesReady[TODAY_PAGE] = true },
-                                onData = { secondary = SecondarySpace.DATA },
-                                onPlanning = { secondary = SecondarySpace.PLANNING },
-                                onTraining = { guidance ->
-                                    trainingLaunch = TrainingLaunchRequest(LocalDate.now(), guidance)
-                                    scope.launch { pager.animatePrimaryPage(2) }
-                                },
-                            )
-                            TRAINING_PAGE -> TrainingRoute(
-                                routineRepository = routineLibraryRepository,
-                                sessionRepository = timerSessionRepository,
-                                recordRepository = calendarRepository,
-                                coordinator = coordinator,
-                                launchRequest = trainingLaunch,
-                                onLaunchConsumed = { trainingLaunch = null },
-                                onReady = { primaryPagesReady[TRAINING_PAGE] = true },
-                            )
+                        if (pager.currentPage != TODAY_PAGE) {
+                            add(CustomAccessibilityAction("转到今天") {
+                                scope.launch { pager.animatePrimaryPage(TODAY_PAGE) }
+                                true
+                            })
+                        }
+                        if (pager.currentPage != TRAINING_PAGE) {
+                            add(CustomAccessibilityAction("转到训练") {
+                                scope.launch { pager.animatePrimaryPage(TRAINING_PAGE) }
+                                true
+                            })
                         }
                     }
                 }
-                if (timerEngineState == TimerEngineState.IDLE || pager.settledPage != TRAINING_PAGE) {
-                    PagerDrivenPrimaryPageIndicator(
-                        pagerState = pager,
-                        modifier = Modifier
-                            .align(Alignment.TopCenter)
-                            .statusBarsPadding()
-                            .padding(top = 4.dp),
+                .testTag("primary-pager"),
+        ) { page ->
+            PrimaryPageSlot(page = page) {
+                when (page) {
+                    CALENDAR_PAGE -> CalendarScreen(
+                        repository = calendarRepository,
+                        onReady = { primaryPagesReady[CALENDAR_PAGE] = true },
+                    )
+                    TODAY_PAGE -> TodayRoute(
+                        repository = todayRepository,
+                        recordRepository = calendarRepository,
+                        reminderStore = reminderStore,
+                        cloudConnectionManager = cloudConnectionManager,
+                        onReady = { primaryPagesReady[TODAY_PAGE] = true },
+                        onData = { secondary = SecondarySpace.DATA },
+                        onPlanning = { secondary = SecondarySpace.PLANNING },
+                        onTraining = { guidance ->
+                            trainingLaunch = TrainingLaunchRequest(LocalDate.now(), guidance)
+                            scope.launch { pager.animatePrimaryPage(2) }
+                        },
+                    )
+                    TRAINING_PAGE -> TrainingRoute(
+                        routineRepository = routineLibraryRepository,
+                        sessionRepository = timerSessionRepository,
+                        recordRepository = calendarRepository,
+                        coordinator = coordinator,
+                        launchRequest = trainingLaunch,
+                        onLaunchConsumed = { trainingLaunch = null },
+                        onReady = { primaryPagesReady[TRAINING_PAGE] = true },
                     )
                 }
             }
         }
+        if (timerEngineState == TimerEngineState.IDLE || pager.settledPage != TRAINING_PAGE) {
+            PagerDrivenPrimaryPageIndicator(
+                pagerState = pager,
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .statusBarsPadding()
+                    .padding(top = 4.dp),
+            )
+        }
+    }
+
+    when (secondary) {
+        SecondarySpace.DATA -> ModalBottomSheet(onDismissRequest = { secondary = null }) {
+            DataScreen(
+                repository = calendarRepository,
+                modifier = Modifier.fillMaxHeight(0.82f),
+            )
+        }
+        SecondarySpace.PLANNING -> ModalBottomSheet(
+            onDismissRequest = {
+                pendingFeedback = false
+                secondary = null
+            },
+        ) {
+            Box(Modifier.fillMaxHeight(0.68f)) {
+                PlanningRoute(
+                    repository = planCollaborationRepository,
+                    initialFeedback = pendingFeedback,
+                    onBack = {
+                        pendingFeedback = false
+                        secondary = null
+                    },
+                )
+            }
+        }
+        null -> Unit
     }
 }
 

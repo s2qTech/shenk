@@ -1,6 +1,5 @@
 package io.s2qtech.shenk
 
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -13,7 +12,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
@@ -24,6 +22,7 @@ import androidx.compose.material.icons.rounded.SyncProblem
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -130,31 +129,32 @@ private fun SettingsRow(
     onClick: () -> Unit,
     warning: Boolean = false,
 ) {
-    Surface(
-        onClick = onClick,
-        color = MaterialTheme.colorScheme.surface,
-        shape = RoundedCornerShape(24.dp),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-        shadowElevation = 1.dp,
-    ) {
-        Row(
-            Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 15.dp),
-            horizontalArrangement = Arrangement.spacedBy(14.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Surface(
-                color = if (warning) MaterialTheme.colorScheme.tertiaryContainer else MaterialTheme.colorScheme.primaryContainer,
-                contentColor = if (warning) MaterialTheme.colorScheme.onTertiaryContainer else MaterialTheme.colorScheme.onPrimaryContainer,
-                shape = RoundedCornerShape(15.dp),
+    Column {
+        Surface(onClick = onClick, color = MaterialTheme.colorScheme.surface.copy(alpha = 0f)) {
+            Row(
+                Modifier.fillMaxWidth().heightIn(min = 64.dp).padding(horizontal = 2.dp, vertical = 12.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.CenterVertically,
             ) {
-                Icon(icon, contentDescription = null, modifier = Modifier.padding(10.dp).size(22.dp))
+                Icon(
+                    icon,
+                    contentDescription = null,
+                    modifier = Modifier.size(21.dp),
+                    tint = if (warning) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
+                )
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        title,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = if (warning) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
+                    )
+                    Text(subtitle, color = MaterialTheme.colorScheme.secondary, style = MaterialTheme.typography.bodySmall)
+                }
+                Icon(Icons.AutoMirrored.Rounded.KeyboardArrowRight, contentDescription = null, tint = MaterialTheme.colorScheme.outline)
             }
-            Column(Modifier.weight(1f)) {
-                Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                Text(subtitle, color = MaterialTheme.colorScheme.secondary, style = MaterialTheme.typography.bodyMedium)
-            }
-            Icon(Icons.AutoMirrored.Rounded.KeyboardArrowRight, contentDescription = null, tint = MaterialTheme.colorScheme.outline)
         }
+        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
     }
 }
 
@@ -184,11 +184,10 @@ fun AiProviderSettingsSheet(repository: DailyReviewRepository, onMessage: (Strin
     ) {
         SheetHeader("AI 服务", "每日简评由 DeepSeek V4 Flash 生成")
         Spacer(Modifier.height(14.dp))
-        SecondarySectionCard {
-            Text("DeepSeek V4 Flash", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
-            Spacer(Modifier.height(4.dp))
-            Text(if (hasKey) "已配置，可用于每日简评" else "尚未配置 API Key", color = MaterialTheme.colorScheme.secondary)
-        }
+        DeepSeekCoachIdentity(
+            title = "DeepSeek V4 Flash",
+            subtitle = if (hasKey) "已配置，可用于每日简评" else "尚未配置 API Key",
+        )
 
         if (editing) {
             Spacer(Modifier.height(16.dp))
