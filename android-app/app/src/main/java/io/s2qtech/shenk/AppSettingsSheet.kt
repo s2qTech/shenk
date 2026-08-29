@@ -14,7 +14,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
 import androidx.compose.material.icons.rounded.Alarm
 import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.Storage
@@ -22,7 +21,6 @@ import androidx.compose.material.icons.rounded.SyncProblem
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -68,15 +66,16 @@ fun AppSettingsSheet(
     ) {
         SheetHeader("设置", "提醒、AI 服务与本机数据")
         Spacer(Modifier.height(2.dp))
-        SettingsRow("提醒", "晨起、午间和周复盘", Icons.Rounded.Alarm, onReminders)
-        SettingsRow("AI 服务", "DeepSeek V4 Flash · 每日简评", Icons.Rounded.AutoAwesome, onAiService)
-        SettingsRow("数据备份", "导出或安全合并业务记录", Icons.Rounded.Storage, onBackup)
+        SecondaryActionRow(Icons.Rounded.Alarm, "提醒", "晨起、午间和周复盘", onReminders, testTag = "settings-reminders")
+        SecondaryActionRow(Icons.Rounded.AutoAwesome, "AI 服务", "DeepSeek V4 Flash · 每日简评", onAiService, testTag = "settings-ai")
+        SecondaryActionRow(Icons.Rounded.Storage, "数据备份", "导出或安全合并业务记录", onBackup, testTag = "settings-backup")
         if (conflictCount > 0) {
-            SettingsRow(
-                "同步冲突",
-                "$conflictCount 条本机与云端修改需要确认",
-                Icons.Rounded.SyncProblem,
-                onConflicts,
+            SecondaryActionRow(
+                icon = Icons.Rounded.SyncProblem,
+                title = "同步冲突",
+                subtitle = "$conflictCount 条本机与云端修改需要确认",
+                onClick = onConflicts,
+                testTag = "settings-conflicts",
                 warning = true,
             )
         }
@@ -118,43 +117,6 @@ fun DataBackupSheet(
             modifier = Modifier.fillMaxWidth().heightIn(min = 54.dp),
         ) { Text("从 JSON 安全恢复") }
         Spacer(Modifier.height(24.dp))
-    }
-}
-
-@Composable
-private fun SettingsRow(
-    title: String,
-    subtitle: String,
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
-    onClick: () -> Unit,
-    warning: Boolean = false,
-) {
-    Column {
-        Surface(onClick = onClick, color = MaterialTheme.colorScheme.surface.copy(alpha = 0f)) {
-            Row(
-                Modifier.fillMaxWidth().heightIn(min = 64.dp).padding(horizontal = 2.dp, vertical = 12.dp),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Icon(
-                    icon,
-                    contentDescription = null,
-                    modifier = Modifier.size(21.dp),
-                    tint = if (warning) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
-                )
-                Column(Modifier.weight(1f)) {
-                    Text(
-                        title,
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold,
-                        color = if (warning) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
-                    )
-                    Text(subtitle, color = MaterialTheme.colorScheme.secondary, style = MaterialTheme.typography.bodySmall)
-                }
-                Icon(Icons.AutoMirrored.Rounded.KeyboardArrowRight, contentDescription = null, tint = MaterialTheme.colorScheme.outline)
-            }
-        }
-        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
     }
 }
 

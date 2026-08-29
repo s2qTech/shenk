@@ -6,6 +6,7 @@ import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollToIndex
 import androidx.compose.ui.test.performScrollTo
@@ -22,6 +23,9 @@ import io.s2qtech.shenk.model.SharedRecord
 import io.s2qtech.shenk.sync.DailyReview
 import io.s2qtech.shenk.sync.DailyReviewState
 import io.s2qtech.shenk.timer.TimerEngineState
+import io.s2qtech.shenk.timer.RuntimePart
+import io.s2qtech.shenk.timer.RuntimeStep
+import io.s2qtech.shenk.timer.TimerSnapshot
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
@@ -76,6 +80,7 @@ class MainActivityTest {
         composeRule.onNodeWithTag("today-screen").assertIsDisplayed()
         composeRule.onNodeWithTag("cloud-setup-prompt").assertIsDisplayed()
         composeRule.onNodeWithText("身体状态").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithTag("morning-status-values").assertIsDisplayed()
         composeRule.onNodeWithTag("morning-action").performClick()
         composeRule.onNodeWithText("今天身体怎么样？").assertIsDisplayed()
         composeRule.onNodeWithText("保存晨起状态").performScrollTo().assertIsDisplayed()
@@ -233,6 +238,75 @@ class MainActivityTest {
         composeRule.onNodeWithTag("data-metric-weight").assertIsDisplayed()
         composeRule.onNodeWithTag("data-metric-body_fat").assertIsDisplayed().performClick()
         composeRule.onNodeWithTag("body-metric-chart").assertIsDisplayed()
+        val screenBottom = composeRule.onRoot().getUnclippedBoundsInRoot().bottom
+        val chartBottom = composeRule.onNodeWithTag("body-metric-chart").getUnclippedBoundsInRoot().bottom
+        assertTrue(chartBottom <= screenBottom)
+    }
+
+    @Test
+    fun settingsAndPlanningUseTheSameSecondaryActionAnatomy() {
+        composeRule.onNodeWithTag("today-open-settings").assertIsDisplayed().performClick()
+        composeRule.onNodeWithTag("settings-reminders").assertIsDisplayed()
+        composeRule.onNodeWithTag("settings-ai").assertIsDisplayed()
+        composeRule.onNodeWithTag("settings-backup").assertIsDisplayed()
+    }
+
+    @Test
+    fun landscapeTimerKeepsUpcomingActionWithTheLeftTaskColumn() {
+        val snapshot = TimerSnapshot(
+            state = TimerEngineState.RUNNING,
+            steps = listOf(
+                RuntimeStep(
+                    runtimeIndex = 0,
+                    logicalIndex = 0,
+                    sourceStepId = "current",
+                    name = "原地慢走",
+                    phase = null,
+                    seconds = 120,
+                    part = RuntimePart.ACTION,
+                    speechText = "原地慢走",
+                    cues = listOf("小步轻落地，手臂自然摆。", "身体慢慢热起来，不追出汗。"),
+                    warnings = listOf("不要高抬腿。", "小腿不适时更要轻。"),
+                    breath = "自然呼吸，能轻松说话。",
+                ),
+                RuntimeStep(
+                    runtimeIndex = 1,
+                    logicalIndex = 1,
+                    sourceStepId = "next",
+                    name = "肩膀绕圈",
+                    phase = null,
+                    seconds = 50,
+                    part = RuntimePart.ACTION,
+                    speechText = "肩膀绕圈",
+                    cues = emptyList(),
+                    warnings = emptyList(),
+                    breath = null,
+                ),
+            ),
+            currentStepRemainingMillis = 95_000,
+        )
+        composeRule.activity.setContent {
+            ShenkTheme {
+                LandscapeActiveTimerScreen(
+                    snapshot = snapshot,
+                    progress = 0.2f,
+                    step = snapshot.currentStep,
+                    nextLogicalStep = snapshot.nextLogicalStep(),
+                    voiceNotice = null,
+                    onPause = {},
+                    onPrevious = {},
+                    onNext = {},
+                    onStop = {},
+                    onFinish = {},
+                )
+            }
+        }
+        val hero = composeRule.onNodeWithTag("timer-hero").getUnclippedBoundsInRoot()
+        val upcoming = composeRule.onNodeWithTag("timer-next-action").getUnclippedBoundsInRoot()
+        val details = composeRule.onNodeWithTag("timer-details").getUnclippedBoundsInRoot()
+        assertTrue(upcoming.left < details.left)
+        assertTrue(upcoming.right <= details.left)
+        assertEquals(hero.left.value, upcoming.left.value, 1f)
     }
 
     @Test

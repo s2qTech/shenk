@@ -822,85 +822,75 @@ private fun MorningStatusSection(
     }
     Spacer(Modifier.height(16.dp))
 
-    if (records?.morning == null) {
-        Surface(
-            modifier = Modifier.fillMaxWidth(),
-            color = MaterialTheme.colorScheme.surfaceVariant,
-            shape = RoundedCornerShape(20.dp),
-        ) {
-            Column(Modifier.padding(18.dp)) {
-                Text("睡眠、精力、疲劳与身体感受", style = MaterialTheme.typography.titleMedium)
-                Spacer(Modifier.height(4.dp))
-                Text("不确定的项目可以跳过，缺失值不会被当作正常。", color = MaterialTheme.colorScheme.secondary)
-            }
-        }
-    } else {
-        val state = records.effectiveStatus
-        val largeText = LocalDensity.current.fontScale >= 1.3f
-        val firstPain = state.pain?.maxByOrNull { it.severity }
-        FlowRow(
-            Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-            maxItemsInEachRow = if (largeText) 1 else 4,
-        ) {
-            StatusValue(
-                label = "睡眠",
-                value = state.sleepDurationMinutes?.let(::formatSleep) ?: "未记录",
-                modifier = (if (largeText) Modifier.fillMaxWidth() else Modifier.weight(1f)).heightIn(min = 72.dp),
-                icon = Icons.Rounded.Bedtime,
-                iconColor = MaterialTheme.colorScheme.primary,
-                showDivider = !largeText,
-            )
-            StatusValue(
-                label = "精力",
-                value = state.energy?.let { "$it/5" } ?: "未记录",
-                modifier = (if (largeText) Modifier.fillMaxWidth() else Modifier.weight(1f)).heightIn(min = 72.dp),
-                emphasis = statusColor(state.energy, higherIsBetter = true),
-                icon = Icons.Rounded.Bolt,
-                iconColor = Color(0xFF93AD45),
-                showDivider = !largeText,
-            )
-            StatusValue(
-                label = "疲劳",
-                value = state.fatigue?.let { "$it/5" } ?: "未记录",
-                modifier = (if (largeText) Modifier.fillMaxWidth() else Modifier.weight(1f)).heightIn(min = 72.dp),
-                emphasis = statusColor(state.fatigue, higherIsBetter = false),
-                icon = Icons.Rounded.WaterDrop,
-                iconColor = MaterialTheme.colorScheme.error,
-                showDivider = !largeText,
-            )
-            StatusValue(
-                label = firstPain?.region?.displayName ?: "身体感受",
-                value = firstPain?.let { "${it.severity}/5" } ?: when (state.pain) {
-                    null -> "未记录"
-                    else -> "正常"
-                },
-                modifier = (if (largeText) Modifier.fillMaxWidth() else Modifier.weight(1f)).heightIn(min = 72.dp),
-                emphasis = if (firstPain != null) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
-                icon = Icons.AutoMirrored.Rounded.DirectionsWalk,
-                iconColor = MaterialTheme.colorScheme.error,
-            )
-        }
-        val pain = state.pain
-        val painText = when {
-            pain == null -> "身体感受未记录"
-            pain.isEmpty() -> "身体没有疼痛异常"
-            else -> pain.joinToString("、") { "${it.region.displayName} ${it.severity}/5" }
-        }
-        Spacer(Modifier.height(12.dp))
-        Surface(
-            modifier = Modifier.fillMaxWidth(),
-            color = MaterialTheme.colorScheme.surfaceContainerLow,
-            shape = RoundedCornerShape(14.dp),
-        ) {
-            Text(
-                painText,
-                modifier = Modifier.padding(horizontal = 14.dp, vertical = 11.dp),
-                style = MaterialTheme.typography.bodySmall,
-                color = if (pain?.isNotEmpty() == true) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.secondary,
-            )
-        }
+    val state = records?.effectiveStatus
+    val largeText = LocalDensity.current.fontScale >= 1.3f
+    val firstPain = state?.pain?.maxByOrNull { it.severity }
+    FlowRow(
+        Modifier.fillMaxWidth().testTag("morning-status-values"),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+        maxItemsInEachRow = if (largeText) 1 else 4,
+    ) {
+        StatusValue(
+            label = "睡眠",
+            value = state?.sleepDurationMinutes?.let(::formatSleep) ?: "未记录",
+            modifier = (if (largeText) Modifier.fillMaxWidth() else Modifier.weight(1f)).heightIn(min = 72.dp),
+            icon = Icons.Rounded.Bedtime,
+            iconColor = MaterialTheme.colorScheme.primary,
+            showDivider = !largeText,
+        )
+        StatusValue(
+            label = "精力",
+            value = state?.energy?.let { "$it/5" } ?: "未记录",
+            modifier = (if (largeText) Modifier.fillMaxWidth() else Modifier.weight(1f)).heightIn(min = 72.dp),
+            emphasis = statusColor(state?.energy, higherIsBetter = true),
+            icon = Icons.Rounded.Bolt,
+            iconColor = Color(0xFF93AD45),
+            showDivider = !largeText,
+        )
+        StatusValue(
+            label = "疲劳",
+            value = state?.fatigue?.let { "$it/5" } ?: "未记录",
+            modifier = (if (largeText) Modifier.fillMaxWidth() else Modifier.weight(1f)).heightIn(min = 72.dp),
+            emphasis = statusColor(state?.fatigue, higherIsBetter = false),
+            icon = Icons.Rounded.WaterDrop,
+            iconColor = MaterialTheme.colorScheme.error,
+            showDivider = !largeText,
+        )
+        StatusValue(
+            label = firstPain?.region?.displayName ?: "身体感受",
+            value = firstPain?.let { "${it.severity}/5" } ?: when (state?.pain) {
+                null -> "未记录"
+                else -> "正常"
+            },
+            modifier = (if (largeText) Modifier.fillMaxWidth() else Modifier.weight(1f)).heightIn(min = 72.dp),
+            emphasis = when {
+                firstPain != null -> MaterialTheme.colorScheme.error
+                state?.pain != null -> MaterialTheme.colorScheme.primary
+                else -> MaterialTheme.colorScheme.onSurface
+            },
+            icon = Icons.AutoMirrored.Rounded.DirectionsWalk,
+            iconColor = if (firstPain != null) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
+        )
+    }
+    val pain = state?.pain
+    val painText = when {
+        pain == null -> "身体感受未记录；不确定的项目可以跳过"
+        pain.isEmpty() -> "身体没有疼痛异常"
+        else -> pain.joinToString("、") { "${it.region.displayName} ${it.severity}/5" }
+    }
+    Spacer(Modifier.height(12.dp))
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        shape = RoundedCornerShape(14.dp),
+    ) {
+        Text(
+            painText,
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 11.dp),
+            style = MaterialTheme.typography.bodySmall,
+            color = if (pain?.isNotEmpty() == true) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.secondary,
+        )
     }
     records?.metric?.takeIf { it.hasMeasurements }?.let { metric ->
         Spacer(Modifier.height(14.dp))

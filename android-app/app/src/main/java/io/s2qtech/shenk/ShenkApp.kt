@@ -12,6 +12,7 @@ import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -75,6 +76,7 @@ fun ShenkApp(
     }.collectAsState(initial = initialTimerEngineState)
     val pager = rememberPagerState(initialPage = initialPrimaryPage, pageCount = { 3 })
     val scope = rememberCoroutineScope()
+    val dataSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     var secondary by remember { mutableStateOf<SecondarySpace?>(null) }
     var trainingLaunch by remember { mutableStateOf<TrainingLaunchRequest?>(null) }
     var pendingFeedback by remember { mutableStateOf(false) }
@@ -190,10 +192,12 @@ fun ShenkApp(
     }
 
     when (secondary) {
-        SecondarySpace.DATA -> ModalBottomSheet(onDismissRequest = { secondary = null }) {
+        SecondarySpace.DATA -> ModalBottomSheet(
+            onDismissRequest = { secondary = null },
+            sheetState = dataSheetState,
+        ) {
             DataScreen(
                 repository = calendarRepository,
-                modifier = Modifier.fillMaxHeight(0.82f),
             )
         }
         SecondarySpace.PLANNING -> ModalBottomSheet(

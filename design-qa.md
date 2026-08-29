@@ -46,3 +46,14 @@ Reference appears on the left and native Android implementation on the right. Th
 ## Final result
 
 passed
+
+## 2026-08-29 structural follow-up
+
+The next real-device review found four cross-surface layout problems rather than isolated decoration defects:
+
+1. Landscape timer guidance and the upcoming action shared the narrow right column while the left task column ended early. The upcoming-action strip now stays with the current-action hero on the left; the right column is reserved for cues and warnings.
+2. Today used a four-part scan row after a morning record but replaced it with an unrelated explanatory card before recording. Both states now use the same four-part anatomy and preserve explicit `未记录` values.
+3. Plan used bordered action cards while Settings used transparent divided rows. Both now reuse `SecondaryActionRow`, including the same icon container, type hierarchy, outline, radius, and direction affordance.
+4. Data combined a partially expanded sheet with a forced `82%` content height. The sheet now skips the partial state and its scrollable content wraps to the chart instead of filling a fixed tall region.
+
+Automated verification passed `:app:testDebugUnitTest`, `:app:lintDebug`, and `:app:compileDebugAndroidTestKotlin`. The focused Compose checks cover the Today status skeleton, Settings action destinations, Data chart visibility on first open, and the landscape timer's left/right information grouping. Xiaomi 14 same-certificate installation preserved the original 2026-08-12 first-install identity. Real-device comparison confirmed the shared Today skeleton, matching Plan/Settings action-card anatomy, and a fully visible Data chart on first open without dragging or the previous blank tail. The device's rotation setting remained unchanged and no user business record was created, edited, or deleted. The newly packaged isolated instrumentation APK could not execute against the installed private build because the sandbox could not read the private signing certificate; the test source compiled, while the production surfaces were verified manually on the connected device.

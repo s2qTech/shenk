@@ -224,8 +224,8 @@ private fun PlanningActionChooser(
     ) {
         item { SheetHeader("计划", "导入指定计划，或生成近期复盘资料。") }
         item {
-            PlanActionRow(
-                icon = { Icon(Icons.Rounded.ContentPaste, contentDescription = null) },
+            SecondaryActionRow(
+                icon = Icons.Rounded.ContentPaste,
                 title = "导入指定计划",
                 subtitle = "粘贴并校验计划内容",
                 onClick = onImport,
@@ -233,48 +233,13 @@ private fun PlanningActionChooser(
             )
         }
         item {
-            PlanActionRow(
-                icon = { Icon(Icons.Rounded.AutoAwesome, contentDescription = null) },
+            SecondaryActionRow(
+                icon = Icons.Rounded.AutoAwesome,
                 title = "生成近期复盘",
                 subtitle = "整理近期执行与身体反馈",
                 onClick = onFeedback,
                 testTag = "open-plan-feedback",
             )
-        }
-    }
-}
-
-@Composable
-private fun PlanActionRow(
-    icon: @Composable () -> Unit,
-    title: String,
-    subtitle: String,
-    onClick: () -> Unit,
-    testTag: String,
-) {
-    Surface(
-        onClick = onClick,
-        modifier = Modifier.fillMaxWidth().heightIn(min = 72.dp).testTag(testTag),
-        color = MaterialTheme.colorScheme.surfaceContainerLow,
-        shape = RoundedCornerShape(18.dp),
-        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 14.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Surface(
-                modifier = Modifier.size(34.dp),
-                shape = RoundedCornerShape(12.dp),
-                color = MaterialTheme.colorScheme.primaryContainer,
-                contentColor = MaterialTheme.colorScheme.primary,
-            ) { Box(contentAlignment = Alignment.Center) { icon() } }
-            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.secondary)
-            }
-            Icon(Icons.AutoMirrored.Rounded.KeyboardArrowRight, contentDescription = null)
         }
     }
 }

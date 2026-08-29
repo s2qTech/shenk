@@ -9,7 +9,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -50,32 +51,26 @@ fun DataScreen(
     val trends by repository.observeBodyTrends(today).collectAsState(initial = null)
     var selectedKind by remember { mutableStateOf(MetricKind.WEIGHT) }
 
-    LazyColumn(
+    Column(
         modifier = modifier
-            .fillMaxSize()
+            .fillMaxWidth()
+            .verticalScroll(rememberScrollState())
+            .padding(start = 22.dp, top = 2.dp, end = 22.dp, bottom = 28.dp)
             .testTag("data-screen"),
-        contentPadding = androidx.compose.foundation.layout.PaddingValues(
-            start = 22.dp,
-            top = 2.dp,
-            end = 22.dp,
-            bottom = 28.dp,
-        ),
         verticalArrangement = Arrangement.spacedBy(18.dp),
     ) {
-        item { SheetHeader("数据", "查看体重、体脂、肌肉和腰围的时间线图。") }
-        item { MetricTabs(selected = selectedKind, onSelect = { selectedKind = it }) }
-        item {
-            val value = trends
-            if (value == null) {
-                ShenkStatePanel(
-                    title = "正在读取身体趋势",
-                    message = "先读取本机 30 天记录；如有同步更新，会自动出现在这里。",
-                    tone = ShenkStateTone.PROGRESS,
-                    modifier = Modifier.fillMaxWidth().testTag("data-loading"),
-                )
-            } else {
-                BodyMetricChart(value.trend(selectedKind), selectedKind.chartColor())
-            }
+        SheetHeader("数据", "查看体重、体脂、肌肉和腰围的时间线图。")
+        MetricTabs(selected = selectedKind, onSelect = { selectedKind = it })
+        val value = trends
+        if (value == null) {
+            ShenkStatePanel(
+                title = "正在读取身体趋势",
+                message = "先读取本机 30 天记录；如有同步更新，会自动出现在这里。",
+                tone = ShenkStateTone.PROGRESS,
+                modifier = Modifier.fillMaxWidth().testTag("data-loading"),
+            )
+        } else {
+            BodyMetricChart(value.trend(selectedKind), selectedKind.chartColor())
         }
     }
 }

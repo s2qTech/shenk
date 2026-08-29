@@ -764,7 +764,7 @@ private fun ActiveTimerScreen(
 }
 
 @Composable
-private fun LandscapeActiveTimerScreen(
+internal fun LandscapeActiveTimerScreen(
     snapshot: TimerSnapshot,
     progress: Float,
     step: RuntimeStep?,
@@ -792,19 +792,23 @@ private fun LandscapeActiveTimerScreen(
                 Modifier.fillMaxWidth().weight(1f),
                 horizontalArrangement = Arrangement.spacedBy(14.dp),
             ) {
-                TimerHero(
-                    snapshot = snapshot,
-                    progress = progress,
-                    modifier = Modifier.weight(1.08f).fillMaxHeight(),
-                    compact = true,
-                )
                 Column(
-                    Modifier.weight(0.92f).fillMaxHeight(),
+                    Modifier.weight(1.06f).fillMaxHeight(),
                     verticalArrangement = Arrangement.spacedBy(9.dp),
                 ) {
-                    TimerDetails(step, voiceNotice, Modifier.fillMaxWidth().weight(1f))
+                    TimerHero(
+                        snapshot = snapshot,
+                        progress = progress,
+                        modifier = Modifier.fillMaxWidth().weight(1f),
+                        compact = true,
+                    )
                     NextActionStrip(nextLogicalStep, Modifier.fillMaxWidth())
                 }
+                TimerDetails(
+                    step = step,
+                    voiceNotice = voiceNotice,
+                    modifier = Modifier.weight(0.94f).fillMaxHeight(),
+                )
             }
         }
         TimerControlRail(
@@ -1006,7 +1010,7 @@ private fun TimerHero(
     modifier: Modifier,
     compact: Boolean = false,
 ) {
-    Surface(modifier = modifier, color = MaterialTheme.colorScheme.background, shape = RoundedCornerShape(0.dp)) {
+    Surface(modifier = modifier.testTag("timer-hero"), color = MaterialTheme.colorScheme.background, shape = RoundedCornerShape(0.dp)) {
         Column(
             Modifier.fillMaxWidth().padding(horizontal = 5.dp, vertical = if (compact) 2.dp else 8.dp),
         ) {
@@ -1073,7 +1077,7 @@ private fun TimerHero(
 @Composable
 private fun NextActionStrip(next: RuntimeStep?, modifier: Modifier) {
     Surface(
-        modifier = modifier,
+        modifier = modifier.testTag("timer-next-action"),
         color = MaterialTheme.colorScheme.surface,
         shape = RoundedCornerShape(18.dp),
         border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.08f)),
@@ -1113,7 +1117,7 @@ private fun TimerDetails(step: RuntimeStep?, voiceNotice: String?, modifier: Mod
     val breath = step?.breath?.takeIf(String::isNotBlank)
     val warnings = step?.warnings.orEmpty()
     Surface(
-        modifier = modifier,
+        modifier = modifier.testTag("timer-details"),
         color = MaterialTheme.colorScheme.surface.copy(alpha = 0.7f),
         shape = RoundedCornerShape(20.dp),
     ) {
