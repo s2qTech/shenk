@@ -228,6 +228,9 @@ class MainActivityTest {
         composeRule.onNodeWithTag("open-plan-feedback").assertIsDisplayed()
         composeRule.onNodeWithTag("open-plan-import").assertIsDisplayed().performClick()
         composeRule.onNodeWithTag("plan-patch-input").assertIsDisplayed()
+        composeRule.onNodeWithTag("planning-subpage-back").assertIsDisplayed().performClick()
+        composeRule.onNodeWithTag("open-plan-feedback").assertIsDisplayed().performClick()
+        composeRule.onNodeWithTag("generate-weekly-feedback").assertIsDisplayed()
     }
 
     @Test

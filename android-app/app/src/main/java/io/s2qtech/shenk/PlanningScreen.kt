@@ -353,7 +353,11 @@ private fun PlanningSubpageHeader(
     onBack: () -> Unit,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(7.dp)) {
-        TextButton(onClick = onBack, modifier = Modifier.padding(start = (-12).dp)) {
+        TextButton(
+            onClick = onBack,
+            modifier = Modifier.testTag("planning-subpage-back"),
+            contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 0.dp, vertical = 8.dp),
+        ) {
             Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = null)
             Text("返回计划")
         }
