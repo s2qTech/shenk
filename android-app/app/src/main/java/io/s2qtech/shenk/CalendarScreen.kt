@@ -26,10 +26,12 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExtendedFloatingActionButton
@@ -38,7 +40,6 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarDuration
@@ -244,7 +245,7 @@ fun CalendarScreen(
     selectedDate?.let { date ->
         val details by repository.observeDay(date).collectAsState(initial = null)
         val reviewState by dailyReviewRepository.observe(date).collectAsState(initial = DailyReviewState())
-        ModalBottomSheet(
+        ShenkModalBottomSheet(
             onDismissRequest = {
                 selectedDate = null
                 editing = null
@@ -618,7 +619,13 @@ private fun DayDetails(
     onCreate: () -> Unit,
     onOpenReview: () -> Unit,
 ) {
-    Column(Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 22.dp, vertical = 8.dp)) {
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .navigationBarsPadding()
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = 22.dp, vertical = 8.dp),
+    ) {
         if (details == null) {
             ShenkStatePanel(
                 title = "正在读取日期详情",

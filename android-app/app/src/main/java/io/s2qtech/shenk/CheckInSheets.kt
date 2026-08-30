@@ -27,7 +27,6 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
@@ -238,7 +237,7 @@ fun MorningCheckInSheet(
             DurationField.SLEEP -> sleepMinutes ?: 8 * 60
             DurationField.DEEP_SLEEP -> deepSleepMinutes ?: minOf(2 * 60, sleepMinutes ?: 2 * 60)
         }
-        ModalBottomSheet(onDismissRequest = { activeDuration = null }) {
+        ShenkModalBottomSheet(onDismissRequest = { activeDuration = null }) {
             DurationWheelEditor(
                 label = if (field == DurationField.SLEEP) "睡眠时长" else "深睡时长",
                 valueMinutes = duration,
@@ -275,7 +274,7 @@ fun MorningCheckInSheet(
             MeasurementField.MUSCLE -> muscle ?: latest?.muscleKg ?: config.defaultValue
             MeasurementField.WAIST -> waist ?: latest?.waistCm ?: config.defaultValue
         }
-        ModalBottomSheet(onDismissRequest = { activeMeasurement = null }) {
+        ShenkModalBottomSheet(onDismissRequest = { activeMeasurement = null }) {
             MeasurementWheelEditor(
                 config = config,
                 value = current,

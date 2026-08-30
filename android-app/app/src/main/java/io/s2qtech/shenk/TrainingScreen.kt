@@ -47,7 +47,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedIconButton
 import androidx.compose.material3.OutlinedTextField
@@ -1182,7 +1181,7 @@ private fun PostWorkoutSheet(
     val title = session.routineSnapshot["title"]?.jsonPrimitive?.content ?: "训练"
     val completedActions = session.stepResults.count { it.completed }
     val totalActions = session.stepResults.size
-    ModalBottomSheet(
+    ShenkModalBottomSheet(
         onDismissRequest = onDismiss,
         containerColor = MaterialTheme.colorScheme.background,
     ) {

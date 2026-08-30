@@ -15,6 +15,7 @@ import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipeLeft
 import androidx.compose.ui.test.swipeRight
 import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.unit.dp
 import androidx.activity.compose.setContent
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import io.s2qtech.shenk.model.RoutineScene
@@ -224,6 +225,11 @@ class MainActivityTest {
     fun planCollaborationIsReachableFromToday() {
         composeRule.onNodeWithTag("today-destination-bar").assertIsDisplayed()
         composeRule.onNodeWithTag("today-open-planning").assertIsDisplayed().performClick()
+        val rootBounds = composeRule.onRoot().getUnclippedBoundsInRoot()
+        val sheetBounds = composeRule.onNodeWithTag("shenk-sheet-content").getUnclippedBoundsInRoot()
+        val rootHeight = rootBounds.bottom - rootBounds.top
+        val sheetHeight = sheetBounds.bottom - sheetBounds.top
+        assertTrue(sheetHeight <= rootHeight * (2f / 3f) + 1.dp)
         composeRule.onNodeWithTag("planning-screen").assertIsDisplayed()
         composeRule.onNodeWithTag("open-plan-feedback").assertIsDisplayed()
         composeRule.onNodeWithTag("open-plan-import").assertIsDisplayed().performClick()

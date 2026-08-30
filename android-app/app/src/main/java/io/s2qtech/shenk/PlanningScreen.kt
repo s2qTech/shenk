@@ -7,17 +7,14 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBarsPadding
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
@@ -103,7 +100,7 @@ fun PlanningRoute(
     }
 
     Box(
-        modifier = Modifier.fillMaxSize().testTag("planning-screen"),
+        modifier = Modifier.fillMaxWidth().testTag("planning-screen"),
     ) {
         when (action) {
             null -> PlanningActionChooser(
@@ -212,35 +209,28 @@ private fun PlanningActionChooser(
     onImport: () -> Unit,
     onFeedback: () -> Unit,
 ) {
-    LazyColumn(
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = androidx.compose.foundation.layout.PaddingValues(
-            start = 22.dp,
-            top = 2.dp,
-            end = 22.dp,
-            bottom = 28.dp,
-        ),
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .verticalScroll(rememberScrollState())
+            .padding(start = 22.dp, top = 2.dp, end = 22.dp, bottom = 28.dp),
         verticalArrangement = Arrangement.spacedBy(18.dp),
     ) {
-        item { SheetHeader("计划", "导入指定计划，或生成近期复盘资料。") }
-        item {
-            SecondaryActionRow(
-                icon = Icons.Rounded.ContentPaste,
-                title = "导入指定计划",
-                subtitle = "粘贴并校验计划内容",
-                onClick = onImport,
-                testTag = "open-plan-import",
-            )
-        }
-        item {
-            SecondaryActionRow(
-                icon = Icons.Rounded.AutoAwesome,
-                title = "生成近期复盘",
-                subtitle = "整理近期执行与身体反馈",
-                onClick = onFeedback,
-                testTag = "open-plan-feedback",
-            )
-        }
+        SheetHeader("计划", "导入指定计划，或生成近期复盘资料。")
+        SecondaryActionRow(
+            icon = Icons.Rounded.ContentPaste,
+            title = "导入指定计划",
+            subtitle = "粘贴并校验计划内容",
+            onClick = onImport,
+            testTag = "open-plan-import",
+        )
+        SecondaryActionRow(
+            icon = Icons.Rounded.AutoAwesome,
+            title = "生成近期复盘",
+            subtitle = "整理近期执行与身体反馈",
+            onClick = onFeedback,
+            testTag = "open-plan-feedback",
+        )
     }
 }
 
@@ -258,47 +248,41 @@ private fun PlanInbox(
     onApply: () -> Unit,
     onUndo: () -> Unit,
 ) {
-    LazyColumn(
-        modifier = modifier.fillMaxSize(),
-        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 22.dp, vertical = 2.dp),
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = 22.dp, vertical = 2.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
-        item {
-            PlanningSubpageHeader(
-                title = "导入指定计划",
-                subtitle = "粘贴高级 AI 返回的计划内容。身刻会先完整校验并展示变更预览，不会直接覆盖当前计划。",
-                onBack = onBack,
-            )
-        }
-        item {
-            OutlinedTextField(
-                value = patchText,
-                onValueChange = onTextChange,
-                modifier = Modifier.fillMaxWidth().height(126.dp).testTag("plan-patch-input"),
-                label = { Text("计划草案") },
-                placeholder = { Text("在这里粘贴计划内容……") },
-            )
-        }
-        item {
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                OutlinedButton(onClick = onPaste, modifier = Modifier.weight(1f)) {
-                    Icon(Icons.Rounded.ContentPaste, contentDescription = null)
-                    Spacer(Modifier.padding(3.dp))
-                    Text("粘贴")
-                }
-                Button(onClick = onValidate, enabled = patchText.isNotBlank() && !busy, modifier = Modifier.weight(1f).testTag("validate-plan-patch")) {
-                    Text("校验草案")
-                }
+        PlanningSubpageHeader(
+            title = "导入指定计划",
+            subtitle = "粘贴高级 AI 返回的计划内容。身刻会先完整校验并展示变更预览，不会直接覆盖当前计划。",
+            onBack = onBack,
+        )
+        OutlinedTextField(
+            value = patchText,
+            onValueChange = onTextChange,
+            modifier = Modifier.fillMaxWidth().height(126.dp).testTag("plan-patch-input"),
+            label = { Text("计划草案") },
+            placeholder = { Text("在这里粘贴计划内容……") },
+        )
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            OutlinedButton(onClick = onPaste, modifier = Modifier.weight(1f)) {
+                Icon(Icons.Rounded.ContentPaste, contentDescription = null)
+                Spacer(Modifier.padding(3.dp))
+                Text("粘贴")
+            }
+            Button(onClick = onValidate, enabled = patchText.isNotBlank() && !busy, modifier = Modifier.weight(1f).testTag("validate-plan-patch")) {
+                Text("校验草案")
             }
         }
         preview?.let { result ->
-            item { PreviewSummary(result) }
-            if (result.errors.isNotEmpty()) {
-                items(result.errors) { error -> MessageLine(error, error = true) }
-            }
-            items(result.warnings) { warning -> MessageLine(warning, error = false) }
+            PreviewSummary(result)
+            result.errors.forEach { error -> MessageLine(error, error = true) }
+            result.warnings.forEach { warning -> MessageLine(warning, error = false) }
             if (result.valid) {
-                items(result.changes, key = { "${it.entity}:${it.id}" }) { change ->
+                result.changes.forEach { change ->
                     Row(
                         modifier = Modifier.fillMaxWidth().padding(vertical = 5.dp),
                         verticalAlignment = Alignment.CenterVertically,
@@ -311,38 +295,34 @@ private fun PlanInbox(
                         Text(actionName(change.action), color = actionColor(change.action))
                     }
                 }
-                item {
-                    Button(onClick = onApply, enabled = !busy, modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp).testTag("apply-plan-patch")) {
-                        if (busy) CircularProgressIndicator(Modifier.height(22.dp), strokeWidth = 2.dp)
-                        else Text(if (result.deleted > 0) "确认变更" else "应用草案")
-                    }
+                Button(onClick = onApply, enabled = !busy, modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp).testTag("apply-plan-patch")) {
+                    if (busy) CircularProgressIndicator(Modifier.height(22.dp), strokeWidth = 2.dp)
+                    else Text(if (result.deleted > 0) "确认变更" else "应用草案")
                 }
             }
         }
         if (status.canUndo) {
-            item {
-                HorizontalDivider()
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Column(Modifier.weight(1f)) {
-                        Text("最近一次导入", fontWeight = FontWeight.Medium)
-                        Text(
-                            formatPlanAppliedAt(status.appliedAt.orEmpty()),
-                            color = MaterialTheme.colorScheme.secondary,
-                            style = MaterialTheme.typography.bodySmall,
-                        )
-                    }
-                    TextButton(onClick = onUndo, enabled = !busy, modifier = Modifier.testTag("undo-plan-patch")) {
-                        Icon(Icons.Rounded.Refresh, contentDescription = null)
-                        Text("撤销")
-                    }
+            HorizontalDivider()
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text("最近一次导入", fontWeight = FontWeight.Medium)
+                    Text(
+                        formatPlanAppliedAt(status.appliedAt.orEmpty()),
+                        color = MaterialTheme.colorScheme.secondary,
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
+                TextButton(onClick = onUndo, enabled = !busy, modifier = Modifier.testTag("undo-plan-patch")) {
+                    Icon(Icons.Rounded.Refresh, contentDescription = null)
+                    Text("撤销")
                 }
             }
         }
-        item { Spacer(Modifier.height(22.dp)) }
+        Spacer(Modifier.height(22.dp))
     }
 }
 
@@ -411,45 +391,37 @@ private fun FeedbackWorkspace(
     onGenerate: () -> Unit,
     onCopy: () -> Unit,
 ) {
-    LazyColumn(
-        modifier = modifier.fillMaxSize(),
-        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 22.dp, vertical = 2.dp),
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = 22.dp, vertical = 2.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
-        item {
-            PlanningSubpageHeader(
-                title = "生成近期复盘",
-                subtitle = "汇总最近训练执行、晨检、疼痛与恢复趋势，生成可交给高级 AI 的规范化复盘资料。",
-                onBack = onBack,
-            )
-        }
-        item {
-            ShenkStatePanel(
-                title = if (latest == null) "还没有本周资料" else "复盘资料已就绪",
-                message = latest?.let { "${it.from} 至 ${it.to}" } ?: "生成不会修改计划，只整理已经记录的事实。",
-                tone = if (latest == null) ShenkStateTone.NEUTRAL else ShenkStateTone.SUCCESS,
-                modifier = Modifier.fillMaxWidth().testTag(if (latest == null) "weekly-feedback-empty" else "weekly-feedback-ready"),
-            )
-        }
-        item {
-            Button(onClick = onGenerate, enabled = !busy, modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp).testTag("generate-weekly-feedback")) {
-                if (busy) CircularProgressIndicator(Modifier.height(22.dp), strokeWidth = 2.dp)
-                else Text(if (latest == null) "生成复盘资料" else "重新生成")
-            }
+        PlanningSubpageHeader(
+            title = "生成近期复盘",
+            subtitle = "汇总最近训练执行、晨检、疼痛与恢复趋势，生成可交给高级 AI 的规范化复盘资料。",
+            onBack = onBack,
+        )
+        ShenkStatePanel(
+            title = if (latest == null) "还没有本周资料" else "复盘资料已就绪",
+            message = latest?.let { "${it.from} 至 ${it.to}" } ?: "生成不会修改计划，只整理已经记录的事实。",
+            tone = if (latest == null) ShenkStateTone.NEUTRAL else ShenkStateTone.SUCCESS,
+            modifier = Modifier.fillMaxWidth().testTag(if (latest == null) "weekly-feedback-empty" else "weekly-feedback-ready"),
+        )
+        Button(onClick = onGenerate, enabled = !busy, modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp).testTag("generate-weekly-feedback")) {
+            if (busy) CircularProgressIndicator(Modifier.height(22.dp), strokeWidth = 2.dp)
+            else Text(if (latest == null) "生成复盘资料" else "重新生成")
         }
         if (latest != null) {
-            item {
-                FilledTonalButton(onClick = onCopy, modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp).testTag("copy-weekly-feedback")) {
-                    Icon(Icons.Rounded.ContentCopy, contentDescription = null)
-                    Spacer(Modifier.padding(4.dp))
-                    Text("复制复盘资料")
-                }
+            FilledTonalButton(onClick = onCopy, modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp).testTag("copy-weekly-feedback")) {
+                Icon(Icons.Rounded.ContentCopy, contentDescription = null)
+                Spacer(Modifier.padding(4.dp))
+                Text("复制复盘资料")
             }
-            item {
-                Text("资料包含训练、计时、身体趋势、疼痛变化与当前计划版本；缺失值仍保持缺失。", color = MaterialTheme.colorScheme.secondary)
-            }
+            Text("资料包含训练、计时、身体趋势、疼痛变化与当前计划版本；缺失值仍保持缺失。", color = MaterialTheme.colorScheme.secondary)
         }
-        item { Spacer(Modifier.height(22.dp)) }
+        Spacer(Modifier.height(22.dp))
     }
 }
 

@@ -4,15 +4,11 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -51,7 +47,6 @@ data class TrainingLaunchRequest(
     val guidance: TodayGuidance?,
 )
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ShenkApp(
     todayRepository: TodayRecordRepository,
@@ -76,7 +71,6 @@ fun ShenkApp(
     }.collectAsState(initial = initialTimerEngineState)
     val pager = rememberPagerState(initialPage = initialPrimaryPage, pageCount = { 3 })
     val scope = rememberCoroutineScope()
-    val dataSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     var secondary by remember { mutableStateOf<SecondarySpace?>(null) }
     var trainingLaunch by remember { mutableStateOf<TrainingLaunchRequest?>(null) }
     var pendingFeedback by remember { mutableStateOf(false) }
@@ -192,30 +186,27 @@ fun ShenkApp(
     }
 
     when (secondary) {
-        SecondarySpace.DATA -> ModalBottomSheet(
+        SecondarySpace.DATA -> ShenkModalBottomSheet(
             onDismissRequest = { secondary = null },
-            sheetState = dataSheetState,
         ) {
             DataScreen(
                 repository = calendarRepository,
             )
         }
-        SecondarySpace.PLANNING -> ModalBottomSheet(
+        SecondarySpace.PLANNING -> ShenkModalBottomSheet(
             onDismissRequest = {
                 pendingFeedback = false
                 secondary = null
             },
         ) {
-            Box(Modifier.fillMaxHeight(0.68f)) {
-                PlanningRoute(
-                    repository = planCollaborationRepository,
-                    initialFeedback = pendingFeedback,
-                    onBack = {
-                        pendingFeedback = false
-                        secondary = null
-                    },
-                )
-            }
+            PlanningRoute(
+                repository = planCollaborationRepository,
+                initialFeedback = pendingFeedback,
+                onBack = {
+                    pendingFeedback = false
+                    secondary = null
+                },
+            )
         }
         null -> Unit
     }

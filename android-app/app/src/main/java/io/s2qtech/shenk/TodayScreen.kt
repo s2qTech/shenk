@@ -46,7 +46,6 @@ import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -231,7 +230,7 @@ fun TodayRoute(
     }
 
     when (sheet) {
-        TodaySheet.MORNING -> ModalBottomSheet(onDismissRequest = { sheet = null }) {
+        TodaySheet.MORNING -> ShenkModalBottomSheet(onDismissRequest = { sheet = null }) {
             MorningCheckInSheet(
                 date = date,
                 existing = records,
@@ -252,7 +251,7 @@ fun TodayRoute(
                 },
             )
         }
-        TodaySheet.PRE_WORKOUT -> ModalBottomSheet(onDismissRequest = { sheet = null }) {
+        TodaySheet.PRE_WORKOUT -> ShenkModalBottomSheet(onDismissRequest = { sheet = null }) {
             PreWorkoutSheet(
                 date = date,
                 morning = records?.morning,
@@ -274,7 +273,7 @@ fun TodayRoute(
                 },
             )
         }
-        TodaySheet.REMINDERS -> ModalBottomSheet(onDismissRequest = { sheet = null }) {
+        TodaySheet.REMINDERS -> ShenkModalBottomSheet(onDismissRequest = { sheet = null }) {
             val reminderSystemStatus = remember(reminderSystemRefresh) {
                 readReminderSystemStatus(context)
             }
@@ -311,7 +310,7 @@ fun TodayRoute(
                 },
             )
         }
-        TodaySheet.RECORD_DAY -> ModalBottomSheet(onDismissRequest = { sheet = null }) {
+        TodaySheet.RECORD_DAY -> ShenkModalBottomSheet(onDismissRequest = { sheet = null }) {
             TrainingLogEditorSheet(
                 date = date,
                 existing = null,
@@ -333,7 +332,7 @@ fun TodayRoute(
                 },
             )
         }
-        TodaySheet.CONNECTION -> ModalBottomSheet(onDismissRequest = { if (!connectionBusy) sheet = null }) {
+        TodaySheet.CONNECTION -> ShenkModalBottomSheet(onDismissRequest = { if (!connectionBusy) sheet = null }) {
             CloudConnectionSheet(
                 state = connection,
                 busy = connectionBusy,
@@ -375,7 +374,7 @@ fun TodayRoute(
                 },
             )
         }
-        TodaySheet.DAILY_REVIEW -> ModalBottomSheet(onDismissRequest = { sheet = null }) {
+        TodaySheet.DAILY_REVIEW -> ShenkModalBottomSheet(onDismissRequest = { sheet = null }) {
             DailyReviewSheet(
                 date = date,
                 repository = dailyReviewRepository,
@@ -385,7 +384,7 @@ fun TodayRoute(
                 onMessage = { message -> scope.launch { snackbar.showSnackbar(message) } },
             )
         }
-        TodaySheet.SETTINGS -> ModalBottomSheet(onDismissRequest = { sheet = null }) {
+        TodaySheet.SETTINGS -> ShenkModalBottomSheet(onDismissRequest = { sheet = null }) {
             AppSettingsSheet(
                 onReminders = { sheet = TodaySheet.REMINDERS },
                 onAiService = { sheet = TodaySheet.AI_SETTINGS },
@@ -394,20 +393,20 @@ fun TodayRoute(
                 onConflicts = { sheet = TodaySheet.SYNC_CONFLICTS },
             )
         }
-        TodaySheet.AI_SETTINGS -> ModalBottomSheet(onDismissRequest = { sheet = null }) {
+        TodaySheet.AI_SETTINGS -> ShenkModalBottomSheet(onDismissRequest = { sheet = null }) {
             AiProviderSettingsSheet(
                 repository = dailyReviewRepository,
                 onMessage = { message -> scope.launch { snackbar.showSnackbar(message) } },
             )
         }
-        TodaySheet.DATA_BACKUP -> ModalBottomSheet(onDismissRequest = { if (!backupBusy) sheet = null }) {
+        TodaySheet.DATA_BACKUP -> ShenkModalBottomSheet(onDismissRequest = { if (!backupBusy) sheet = null }) {
             DataBackupSheet(
                 busy = backupBusy,
                 onExport = { exportBackupLauncher.launch("shenk-business-${LocalDate.now()}.json") },
                 onImport = { importBackupLauncher.launch(arrayOf("application/json", "text/json", "text/plain")) },
             )
         }
-        TodaySheet.SYNC_CONFLICTS -> ModalBottomSheet(
+        TodaySheet.SYNC_CONFLICTS -> ShenkModalBottomSheet(
             onDismissRequest = { if (resolvingConflictKey == null) sheet = null },
         ) {
             SyncConflictSheet(
