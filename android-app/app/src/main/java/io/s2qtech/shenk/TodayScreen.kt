@@ -44,6 +44,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
@@ -893,26 +894,23 @@ private fun MorningStatusSection(
             iconColor = if (firstPain != null) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
         )
     }
-    val pain = state?.pain
-    val painText = when {
-        pain == null -> "身体感受未记录；不确定的项目可以跳过"
-        pain.isEmpty() -> "身体没有疼痛异常"
-        else -> pain.joinToString("、") { "${it.region.displayName} ${it.severity}/5" }
+    state?.pain?.takeIf { it.isNotEmpty() }?.let { pain ->
+        Spacer(Modifier.height(12.dp))
+        Surface(
+            modifier = Modifier.fillMaxWidth().testTag("morning-pain-alert"),
+            color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.38f),
+            shape = RoundedCornerShape(14.dp),
+        ) {
+            Text(
+                "需要留意 · ${pain.joinToString("、") { "${it.region.displayName} ${it.severity}/5" }}",
+                modifier = Modifier.padding(horizontal = 14.dp, vertical = 11.dp),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.error,
+            )
+        }
     }
-    Spacer(Modifier.height(12.dp))
-    Surface(
-        modifier = Modifier.fillMaxWidth(),
-        color = MaterialTheme.colorScheme.surfaceContainerLow,
-        shape = RoundedCornerShape(14.dp),
-    ) {
-        Text(
-            painText,
-            modifier = Modifier.padding(horizontal = 14.dp, vertical = 11.dp),
-            style = MaterialTheme.typography.bodySmall,
-            color = if (pain?.isNotEmpty() == true) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.secondary,
-        )
-    }
-    records?.metric?.takeIf { it.hasMeasurements }?.let { metric ->
+    val measurements = records?.metric?.takeIf { it.hasMeasurements }
+    measurements?.let { metric ->
         Spacer(Modifier.height(14.dp))
         val values = buildList {
             metric.weightKg?.let { add("体重" to "%.1f kg".format(it)) }
@@ -920,14 +918,26 @@ private fun MorningStatusSection(
             metric.muscleKg?.let { add("肌肉" to "%.1f kg".format(it)) }
             metric.waistCm?.let { add("腰围" to "%.1f cm".format(it)) }
         }
-        MorningMeasurementSummary(values = values, largeText = largeText)
+        MorningMeasurementSummary(
+            values = values,
+            largeText = largeText,
+            preWorkoutRecorded = records.preWorkout != null,
+            onPreWorkout = onPreWorkout,
+        )
     }
-    if (records?.morning != null) {
-        Spacer(Modifier.height(6.dp))
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-            TextButton(onClick = onPreWorkout) {
-                Text(if (records.preWorkout == null) "训练前有变化" else "调整训练前状态")
-            }
+    if (records?.morning != null && measurements == null) {
+        Spacer(Modifier.height(14.dp))
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            color = MaterialTheme.colorScheme.surfaceContainerLow,
+            shape = RoundedCornerShape(18.dp),
+            border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+        ) {
+            PreWorkoutActionRow(
+                recorded = records.preWorkout != null,
+                onClick = onPreWorkout,
+                modifier = Modifier.padding(horizontal = 15.dp, vertical = 4.dp),
+            )
         }
     }
 }
@@ -937,6 +947,8 @@ private fun MorningStatusSection(
 private fun MorningMeasurementSummary(
     values: List<Pair<String, String>>,
     largeText: Boolean,
+    preWorkoutRecorded: Boolean,
+    onPreWorkout: () -> Unit,
 ) {
     Surface(
         modifier = Modifier.fillMaxWidth().testTag("morning-measurements-summary"),
@@ -991,6 +1003,59 @@ private fun MorningMeasurementSummary(
                         Text(value, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                     }
                 }
+            }
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+            PreWorkoutActionRow(
+                recorded = preWorkoutRecorded,
+                onClick = onPreWorkout,
+            )
+        }
+    }
+}
+
+@Composable
+private fun PreWorkoutActionRow(
+    recorded: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Surface(
+        onClick = onClick,
+        modifier = modifier
+            .fillMaxWidth()
+            .heightIn(min = 52.dp)
+            .testTag("pre-workout-action"),
+        color = Color.Transparent,
+        shape = RoundedCornerShape(14.dp),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 5.dp, vertical = 6.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(Modifier.weight(1f)) {
+                Text("训练前状态", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                Text(
+                    if (recorded) "已补充训练前的身体变化" else "身体有变化时在这里补充",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.secondary,
+                )
+            }
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(5.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    if (recorded) "修改" else "记录",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+                Icon(
+                    Icons.AutoMirrored.Rounded.ArrowForward,
+                    contentDescription = null,
+                    modifier = Modifier.size(18.dp),
+                    tint = MaterialTheme.colorScheme.primary,
+                )
             }
         }
     }

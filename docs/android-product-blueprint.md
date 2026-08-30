@@ -119,6 +119,7 @@ Today is one adaptable canvas rather than a dashboard of nested cards.
 - The record/adjust command is the only prominent action in the morning area. Trend, pre-workout delta, and reminder actions remain visually subordinate.
 - Body trends use the single fixed Data destination; the morning measurement summary does not add a second inline trend link.
 - When measurements exist, they form one intentional third-level summary inside the body-status section: a labelled measurement header plus compact values. They must not fall back to an unframed concatenated text line that looks detached from the status hierarchy.
+- The four-part body-status row is authoritative for normal and missing pain state, so Today does not repeat `正常`, `未记录`, or an equivalent sentence beneath it. Actual pain remains visible as a deliberate warning. The optional pre-workout update is a secondary action row attached to the morning-measurement card (or its own compact card when there are no measurements), never a floating text link between sections.
 
 ### Daytime State
 
