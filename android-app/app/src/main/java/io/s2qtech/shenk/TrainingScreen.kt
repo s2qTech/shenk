@@ -7,12 +7,10 @@ import android.view.WindowManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.snap
-import androidx.compose.animation.core.spring
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -29,12 +27,16 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.PagerState
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.AlertDialog
@@ -73,7 +75,6 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
@@ -81,12 +82,17 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.customActions
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -111,6 +117,7 @@ import io.s2qtech.shenk.timer.RuntimeStep
 import io.s2qtech.shenk.timer.TimerSnapshot
 import io.s2qtech.shenk.timer.expandRoutine
 import java.util.UUID
+import kotlin.math.abs
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.jsonPrimitive
 
@@ -123,6 +130,7 @@ fun TrainingRoute(
     coordinator: NativeTimerCoordinator,
     launchRequest: TrainingLaunchRequest?,
     onLaunchConsumed: () -> Unit,
+    onReturnToToday: () -> Unit,
     onReady: () -> Unit = {},
 ) {
     val library by routineRepository.observeLibrary().collectAsState(initial = null)
@@ -244,6 +252,7 @@ fun TrainingRoute(
                     }
                 }
             },
+            onReturnToToday = onReturnToToday,
         )
         TimerEngineState.PREVIEW -> RoutinePreviewScreen(
             snapshot = snapshot,
@@ -295,7 +304,7 @@ fun TrainingRoute(
 }
 
 @Composable
-private fun RoutineLibraryScreen(
+internal fun RoutineLibraryScreen(
     library: RoutineLibrary,
     pending: List<PendingTimerCompletion>,
     preferredScene: RoutineScene?,
@@ -304,140 +313,68 @@ private fun RoutineLibraryScreen(
     onPending: (PendingTimerCompletion) -> Unit,
     onIgnorePending: (PendingTimerCompletion) -> Unit,
     onDeleteRoutine: (RoutineTemplate) -> Unit,
+    onReturnToToday: () -> Unit,
 ) {
-    var scene by remember(preferredScene) { mutableStateOf(preferredScene ?: RoutineScene.HOME) }
+    val scenes = RoutineScene.entries
+    val scope = rememberCoroutineScope()
+    val scenePager = rememberPagerState(
+        initialPage = (preferredScene ?: RoutineScene.HOME).ordinal,
+        pageCount = { scenes.size },
+    )
     var routinePendingDelete by remember { mutableStateOf<RoutineTemplate?>(null) }
-    var revealedRoutineId by remember { mutableStateOf<String?>(null) }
+
+    LaunchedEffect(preferredScene) {
+        preferredScene?.let { scenePager.scrollToPage(it.ordinal) }
+    }
     LaunchedEffect(library.routines) {
-        if (library.byScene[scene].isNullOrEmpty()) {
-            scene = RoutineScene.entries.firstOrNull { library.byScene[it].orEmpty().isNotEmpty() } ?: scene
+        val visibleScene = scenes[scenePager.currentPage]
+        if (library.byScene[visibleScene].isNullOrEmpty()) {
+            scenes.firstOrNull { library.byScene[it].orEmpty().isNotEmpty() }
+                ?.let { scenePager.scrollToPage(it.ordinal) }
         }
     }
+
     Scaffold(
-        modifier = Modifier
-            .fillMaxSize()
-            .testTag("training-screen"),
+        modifier = Modifier.fillMaxSize().testTag("training-screen"),
         containerColor = MaterialTheme.colorScheme.background,
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         bottomBar = {
-            ThumbActionDock(
-                actions = RoutineScene.entries.map { value ->
-                    ThumbAction(
-                        label = value.displayName,
-                        onClick = { scene = value },
-                        testTag = "scene-${value.name.lowercase()}",
-                        selected = value == scene,
-                    )
-                },
+            TrainingSceneDock(
+                pagerState = scenePager,
+                scenes = scenes,
+                onSelect = { page -> scope.launch { scenePager.animateScrollToPage(page) } },
                 modifier = Modifier.testTag("training-scene-dock"),
             )
         },
     ) { scaffoldPadding ->
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(scaffoldPadding),
-        ) {
-            LazyColumn(
+        Column(Modifier.fillMaxSize().padding(scaffoldPadding)) {
+            Column(
                 modifier = Modifier
-                    .fillMaxSize()
-                    .statusBarsPadding(),
-                contentPadding = PaddingValues(start = 20.dp, top = 16.dp, end = 20.dp, bottom = 18.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
+                    .fillMaxWidth()
+                    .statusBarsPadding()
+                    .padding(start = 20.dp, top = 16.dp, end = 20.dp, bottom = 4.dp),
             ) {
-                item {
-                    Column {
-                        Text("训练", style = MaterialTheme.typography.displaySmall, fontWeight = FontWeight.SemiBold)
-                        Spacer(Modifier.height(5.dp))
-                        Text(
-                            "选择今天要执行的流程",
-                            color = MaterialTheme.colorScheme.secondary,
-                            style = MaterialTheme.typography.bodyLarge,
-                        )
-                    }
-                }
-                if (pending.isNotEmpty()) {
-                    item {
-                        Text("待补训练记录", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                    }
-                    items(pending.take(3), key = { it.session.id }) { item ->
-                        Surface(
-                            modifier = Modifier.fillMaxWidth(),
-                            color = MaterialTheme.colorScheme.tertiaryContainer,
-                            shape = RoundedCornerShape(18.dp),
-                        ) {
-                            Row(
-                                Modifier.padding(horizontal = 18.dp, vertical = 12.dp),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically,
-                            ) {
-                                Column(Modifier.weight(1f)) {
-                                    Text(item.routineTitle, fontWeight = FontWeight.SemiBold)
-                                    Text(
-                                        "${item.session.date} · ${formatDuration(item.session.actualSeconds)}",
-                                        color = MaterialTheme.colorScheme.secondary,
-                                    )
-                                }
-                                Row {
-                                    TextButton(onClick = { onIgnorePending(item) }) { Text("忽略") }
-                                    TextButton(onClick = { onPending(item) }) { Text("补记录") }
-                                }
-                            }
-                        }
-                    }
-                }
-                notice?.let { message ->
-                    item {
-                        ShenkStatePanel(
-                            title = "计划方案暂不可用",
-                            message = message,
-                            tone = ShenkStateTone.OFFLINE,
-                            compact = true,
-                            modifier = Modifier.fillMaxWidth(),
-                        )
-                    }
-                }
-                val routines = library.byScene[scene].orEmpty()
-                if (routines.isEmpty()) {
-                    item {
-                        ShenkStatePanel(
-                            title = "这个场景还没有可执行方案",
-                            message = "联网同步后会缓存 AI 管理的现行方案；本地不会用旧流程替代。",
-                            tone = ShenkStateTone.NEUTRAL,
-                            modifier = Modifier.fillMaxWidth().testTag("routine-scene-empty"),
-                        )
-                    }
-                } else {
-                    items(routines, key = RoutineTemplate::id) { routine ->
-                        val expandedSeconds = expandRoutine(routine).sumOf { it.seconds }
-                        SwipeRevealRoutineCard(
-                            routine = routine,
-                            expandedSeconds = expandedSeconds,
-                            revealed = revealedRoutineId == routine.id,
-                            onReveal = { revealedRoutineId = routine.id },
-                            onClose = {
-                                if (revealedRoutineId == routine.id) revealedRoutineId = null
-                            },
-                            onSelect = { onSelect(routine) },
-                            onDelete = {
-                                revealedRoutineId = null
-                                routinePendingDelete = routine
-                            },
-                        )
-                    }
-                }
-                if (library.rejectedCount > 0) {
-                    item {
-                        ShenkStatePanel(
-                            title = "有 ${library.rejectedCount} 个方案未加入计时器",
-                            message = "这些方案缺少权威字段或格式无效，身刻没有猜测其分类或执行方式。",
-                            tone = ShenkStateTone.WARNING,
-                            compact = true,
-                            modifier = Modifier.fillMaxWidth().testTag("routine-rejected-warning"),
-                        )
-                    }
-                }
+                Text("训练", style = MaterialTheme.typography.displaySmall, fontWeight = FontWeight.SemiBold)
+                Spacer(Modifier.height(5.dp))
+                Text(
+                    "选择今天要执行的流程",
+                    color = MaterialTheme.colorScheme.secondary,
+                    style = MaterialTheme.typography.bodyLarge,
+                )
             }
+            TrainingScenePager(
+                pagerState = scenePager,
+                scenes = scenes,
+                library = library,
+                pending = pending,
+                notice = notice,
+                onSelect = onSelect,
+                onPending = onPending,
+                onIgnorePending = onIgnorePending,
+                onDelete = { routinePendingDelete = it },
+                onReturnToToday = onReturnToToday,
+                modifier = Modifier.weight(1f),
+            )
         }
     }
 
@@ -445,9 +382,7 @@ private fun RoutineLibraryScreen(
         AlertDialog(
             onDismissRequest = { routinePendingDelete = null },
             title = { Text("删除“${routine.title}”？") },
-            text = {
-                Text("删除后，该方案会从本机和同步设备的计时器中移除。已经完成的训练和计时记录会保留。")
-            },
+            text = { Text("删除后，该方案会从本机和同步设备的计时器中移除。已经完成的训练和计时记录会保留。") },
             confirmButton = {
                 TextButton(
                     onClick = {
@@ -465,112 +400,265 @@ private fun RoutineLibraryScreen(
 }
 
 @Composable
-private fun SwipeRevealRoutineCard(
-    routine: RoutineTemplate,
-    expandedSeconds: Int,
-    revealed: Boolean,
-    onReveal: () -> Unit,
-    onClose: () -> Unit,
-    onSelect: () -> Unit,
-    onDelete: () -> Unit,
+private fun TrainingScenePager(
+    pagerState: PagerState,
+    scenes: List<RoutineScene>,
+    library: RoutineLibrary,
+    pending: List<PendingTimerCompletion>,
+    notice: String?,
+    onSelect: (RoutineTemplate) -> Unit,
+    onPending: (PendingTimerCompletion) -> Unit,
+    onIgnorePending: (PendingTimerCompletion) -> Unit,
+    onDelete: (RoutineTemplate) -> Unit,
+    onReturnToToday: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
-    val actionWidth = 88.dp
-    val actionWidthPx = with(LocalDensity.current) { actionWidth.toPx() }
-    var dragOffset by remember(routine.id) { mutableFloatStateOf(0f) }
-    var dragging by remember(routine.id) { mutableStateOf(false) }
-    val visibleOffset by animateFloatAsState(
-        targetValue = dragOffset,
-        animationSpec = if (dragging) snap() else spring(stiffness = Spring.StiffnessMediumLow),
-        label = "routine-swipe-offset",
-    )
-
-    LaunchedEffect(revealed, actionWidthPx) {
-        if (!dragging) dragOffset = if (revealed) -actionWidthPx else 0f
-    }
-
-    Box(
-        modifier = Modifier
+    HorizontalPager(
+        state = pagerState,
+        modifier = modifier
             .fillMaxWidth()
-            .heightIn(min = 88.dp)
-            .clip(RoundedCornerShape(24.dp)),
+            .pointerInput(pagerState, scenes.size) {
+                val returnThreshold = 56.dp.toPx()
+                awaitEachGesture {
+                    val startPage = pagerState.currentPage
+                    val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+                    var horizontal = 0f
+                    var vertical = 0f
+                    var pressed = true
+                    while (pressed) {
+                        val event = awaitPointerEvent(PointerEventPass.Initial)
+                        val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                        val delta = change.positionChange()
+                        horizontal += delta.x
+                        vertical += delta.y
+                        pressed = change.pressed
+                    }
+                    if (
+                        startPage == RoutineScene.HOME.ordinal &&
+                        horizontal > returnThreshold &&
+                        abs(horizontal) > abs(vertical) * 1.2f
+                    ) {
+                        onReturnToToday()
+                    }
+                }
+            }
+            .testTag("training-scene-pager"),
+        beyondViewportPageCount = 1,
+    ) { page ->
+        val scene = scenes[page]
+        RoutineScenePage(
+            scene = scene,
+            routines = library.byScene[scene].orEmpty(),
+            pending = pending,
+            notice = notice,
+            rejectedCount = library.rejectedCount,
+            onSelect = onSelect,
+            onPending = onPending,
+            onIgnorePending = onIgnorePending,
+            onDelete = onDelete,
+        )
+    }
+}
+
+@Composable
+private fun RoutineScenePage(
+    scene: RoutineScene,
+    routines: List<RoutineTemplate>,
+    pending: List<PendingTimerCompletion>,
+    notice: String?,
+    rejectedCount: Int,
+    onSelect: (RoutineTemplate) -> Unit,
+    onPending: (PendingTimerCompletion) -> Unit,
+    onIgnorePending: (PendingTimerCompletion) -> Unit,
+    onDelete: (RoutineTemplate) -> Unit,
+) {
+    LazyColumn(
+        modifier = Modifier.fillMaxSize().testTag("training-scene-${scene.name.lowercase()}"),
+        contentPadding = PaddingValues(start = 20.dp, top = 12.dp, end = 20.dp, bottom = 18.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Surface(
-            modifier = Modifier.matchParentSize(),
-            color = MaterialTheme.colorScheme.errorContainer,
-        ) {
-            Box(contentAlignment = Alignment.CenterEnd) {
-                IconButton(
-                    onClick = onDelete,
-                    modifier = Modifier
-                        .width(actionWidth)
-                        .testTag("delete-routine-${routine.id}"),
+        if (pending.isNotEmpty()) {
+            item {
+                Text("待补训练记录", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+            }
+            items(pending.take(3), key = { "${scene.name}-${it.session.id}" }) { item ->
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    color = MaterialTheme.colorScheme.tertiaryContainer,
+                    shape = RoundedCornerShape(18.dp),
                 ) {
-                    Icon(
-                        imageVector = Icons.Rounded.DeleteOutline,
-                        contentDescription = "删除${routine.title}",
-                        tint = MaterialTheme.colorScheme.onErrorContainer,
-                    )
+                    Row(
+                        Modifier.padding(horizontal = 18.dp, vertical = 12.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Column(Modifier.weight(1f)) {
+                            Text(item.routineTitle, fontWeight = FontWeight.SemiBold)
+                            Text(
+                                "${item.session.date} · ${formatDuration(item.session.actualSeconds)}",
+                                color = MaterialTheme.colorScheme.secondary,
+                            )
+                        }
+                        Row {
+                            TextButton(onClick = { onIgnorePending(item) }) { Text("忽略") }
+                            TextButton(onClick = { onPending(item) }) { Text("补记录") }
+                        }
+                    }
                 }
             }
         }
-        Surface(
-            modifier = Modifier
-                .fillMaxWidth()
-                .graphicsLayer { translationX = visibleOffset }
-                .semantics {
-                    customActions = listOf(
-                        CustomAccessibilityAction("删除${routine.title}") {
-                            onDelete()
-                            true
-                        },
-                    )
-                }
-                .pointerInput(routine.id, actionWidthPx) {
-                    detectHorizontalDragGestures(
-                        onDragStart = {
-                            dragging = true
-                            onReveal()
-                        },
-                        onDragCancel = {
-                            dragging = false
-                            dragOffset = if (revealed) -actionWidthPx else 0f
-                        },
-                        onDragEnd = {
-                            dragging = false
-                            if (dragOffset <= -actionWidthPx * 0.45f) {
-                                dragOffset = -actionWidthPx
-                                onReveal()
-                            } else {
-                                dragOffset = 0f
-                                onClose()
-                            }
-                        },
-                    ) { change, amount ->
-                        change.consume()
-                        dragOffset = (dragOffset + amount).coerceIn(-actionWidthPx, 0f)
-                    }
-                }
-                .clickable {
-                    if (revealed || dragOffset < 0f) {
-                        dragOffset = 0f
-                        onClose()
-                    } else {
-                        onSelect()
-                    }
-                }
-                .testTag("routine-${routine.id}"),
-            color = MaterialTheme.colorScheme.surface,
-            tonalElevation = 0.dp,
-            shadowElevation = 1.dp,
-            shape = RoundedCornerShape(24.dp),
-            border = androidx.compose.foundation.BorderStroke(
-                1.dp,
-                MaterialTheme.colorScheme.primary.copy(alpha = 0.07f),
-            ),
+        notice?.let { message ->
+            item {
+                ShenkStatePanel(
+                    title = "计划方案暂不可用",
+                    message = message,
+                    tone = ShenkStateTone.OFFLINE,
+                    compact = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+        }
+        if (routines.isEmpty()) {
+            item {
+                ShenkStatePanel(
+                    title = "这个场景还没有可执行方案",
+                    message = "联网同步后会缓存 AI 管理的现行方案；本地不会用旧流程替代。",
+                    tone = ShenkStateTone.NEUTRAL,
+                    modifier = Modifier.fillMaxWidth().testTag("routine-scene-empty-${scene.name.lowercase()}"),
+                )
+            }
+        } else {
+            items(routines, key = RoutineTemplate::id) { routine ->
+                RoutineListCard(
+                    routine = routine,
+                    expandedSeconds = remember(routine) { expandRoutine(routine).sumOf { it.seconds } },
+                    onSelect = { onSelect(routine) },
+                    onDelete = { onDelete(routine) },
+                )
+            }
+        }
+        if (rejectedCount > 0) {
+            item {
+                ShenkStatePanel(
+                    title = "有 $rejectedCount 个方案未加入计时器",
+                    message = "这些方案缺少权威字段或格式无效，身刻没有猜测其分类或执行方式。",
+                    tone = ShenkStateTone.WARNING,
+                    compact = true,
+                    modifier = Modifier.fillMaxWidth().testTag("routine-rejected-warning"),
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun RoutineListCard(
+    routine: RoutineTemplate,
+    expandedSeconds: Int,
+    onSelect: () -> Unit,
+    onDelete: () -> Unit,
+) {
+    Surface(
+        onClick = onSelect,
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(min = 88.dp)
+            .semantics {
+                customActions = listOf(
+                    CustomAccessibilityAction("删除${routine.title}") {
+                        onDelete()
+                        true
+                    },
+                )
+            }
+            .testTag("routine-${routine.id}"),
+        color = MaterialTheme.colorScheme.surface,
+        tonalElevation = 0.dp,
+        shadowElevation = 1.dp,
+        shape = RoundedCornerShape(24.dp),
+        border = androidx.compose.foundation.BorderStroke(
+            1.dp,
+            MaterialTheme.colorScheme.primary.copy(alpha = 0.07f),
+        ),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(start = 20.dp, top = 13.dp, end = 8.dp, bottom = 13.dp),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            Column(Modifier.padding(horizontal = 20.dp, vertical = 17.dp)) {
+            Column(Modifier.weight(1f)) {
                 Text(routine.title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
                 Text("${formatDuration(expandedSeconds)} · ${routine.steps.size} 个动作", color = MaterialTheme.colorScheme.secondary)
+            }
+            IconButton(
+                onClick = onDelete,
+                modifier = Modifier.testTag("delete-routine-${routine.id}"),
+            ) {
+                Icon(
+                    imageVector = Icons.Rounded.DeleteOutline,
+                    contentDescription = "删除${routine.title}",
+                    tint = MaterialTheme.colorScheme.secondary,
+                )
+            }
+            Icon(
+                Icons.AutoMirrored.Rounded.KeyboardArrowRight,
+                contentDescription = "打开${routine.title}",
+                tint = MaterialTheme.colorScheme.primary,
+            )
+        }
+    }
+}
+
+@Composable
+private fun TrainingSceneDock(
+    pagerState: PagerState,
+    scenes: List<RoutineScene>,
+    onSelect: (Int) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Surface(
+        modifier = modifier
+            .fillMaxWidth()
+            .navigationBarsPadding()
+            .padding(horizontal = 18.dp, vertical = 10.dp),
+        color = MaterialTheme.colorScheme.surfaceContainer,
+        shape = RoundedCornerShape(25.dp),
+        tonalElevation = 1.dp,
+        shadowElevation = 5.dp,
+    ) {
+        BoxWithConstraints(Modifier.fillMaxWidth().padding(6.dp)) {
+            val tabWidth = maxWidth / scenes.size
+            val indicatorPosition = (pagerState.currentPage + pagerState.currentPageOffsetFraction)
+                .coerceIn(0f, (scenes.size - 1).toFloat())
+            Box(
+                modifier = Modifier
+                    .offset(x = tabWidth * indicatorPosition)
+                    .fillMaxWidth(1f / scenes.size)
+                    .height(52.dp)
+                    .background(MaterialTheme.colorScheme.primary, RoundedCornerShape(20.dp)),
+            )
+            Row(Modifier.fillMaxWidth()) {
+                scenes.forEachIndexed { index, scene ->
+                    val activeAmount = (1f - abs(indicatorPosition - index)).coerceIn(0f, 1f)
+                    val labelColor = lerp(
+                        MaterialTheme.colorScheme.onSurfaceVariant,
+                        MaterialTheme.colorScheme.onPrimary,
+                        activeAmount,
+                    )
+                    Box(
+                        contentAlignment = Alignment.Center,
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(52.dp)
+                            .clickable(role = Role.Tab) { onSelect(index) }
+                            .semantics {
+                                role = Role.Tab
+                                selected = pagerState.currentPage == index
+                            }
+                            .testTag("scene-${scene.name.lowercase()}"),
+                    ) {
+                        Text(scene.displayName, color = labelColor, fontWeight = FontWeight.Medium)
+                    }
+                }
             }
         }
     }

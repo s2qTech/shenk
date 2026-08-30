@@ -23,8 +23,10 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import io.s2qtech.shenk.model.RoutineScene
 import io.s2qtech.shenk.model.SharedEntityOwner
 import io.s2qtech.shenk.model.SharedRecord
+import io.s2qtech.shenk.model.decodeRoutineTemplate
 import io.s2qtech.shenk.sync.DailyReview
 import io.s2qtech.shenk.sync.DailyReviewState
+import io.s2qtech.shenk.sync.RoutineLibrary
 import io.s2qtech.shenk.timer.TimerEngineState
 import io.s2qtech.shenk.timer.RuntimePart
 import io.s2qtech.shenk.timer.RuntimeStep
@@ -144,6 +146,46 @@ class MainActivityTest {
         }
         composeRule.waitForIdle()
         composeRule.onNodeWithTag("today-screen").assertIsDisplayed()
+    }
+
+    @Test
+    fun trainingScenesSwipeWithTabsAndHomeBoundaryReturnsToToday() {
+        val library = RoutineLibrary(
+            byScene = RoutineScene.entries.associateWith { scene ->
+                listOf(testRoutine("scene-${scene.name.lowercase()}", "${scene.displayName}方案", scene))
+            },
+            rejectedCount = 0,
+        )
+        var returnedToToday = false
+        composeRule.activity.setContent {
+            ShenkTheme {
+                RoutineLibraryScreen(
+                    library = library,
+                    pending = emptyList(),
+                    preferredScene = RoutineScene.HOME,
+                    notice = null,
+                    onSelect = {},
+                    onPending = {},
+                    onIgnorePending = {},
+                    onDeleteRoutine = {},
+                    onReturnToToday = { returnedToToday = true },
+                )
+            }
+        }
+
+        composeRule.onNodeWithTag("scene-home").assertIsSelected()
+        composeRule.onNodeWithTag("routine-scene-home").assertIsDisplayed()
+        composeRule.onNodeWithTag("training-scene-pager").performTouchInput { swipeLeft() }
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag("scene-walk").assertIsSelected()
+        composeRule.onNodeWithTag("routine-scene-walk").assertIsDisplayed()
+
+        composeRule.onNodeWithTag("training-scene-pager").performTouchInput { swipeRight() }
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag("scene-home").assertIsSelected()
+        composeRule.onNodeWithTag("training-scene-pager").performTouchInput { swipeRight() }
+        composeRule.waitForIdle()
+        composeRule.runOnIdle { assertTrue(returnedToToday) }
     }
 
     @Test
@@ -440,4 +482,32 @@ class MainActivityTest {
           }]
         }
     """.trimIndent()
+
+    private fun testRoutine(id: String, title: String, scene: RoutineScene) = decodeRoutineTemplate(
+        SharedRecord.create(
+            entity = "routine_templates",
+            id = id,
+            data = buildJsonObject {
+                put("id", JsonPrimitive(id))
+                put("title", JsonPrimitive(title))
+                put("version", JsonPrimitive("1"))
+                put("trainingType", JsonPrimitive("strength"))
+                put("scene", JsonPrimitive(scene.name.lowercase()))
+                put("role", JsonPrimitive("main"))
+                put("lifecycle", JsonPrimitive("published"))
+                put("estimatedMinutes", JsonPrimitive(12))
+                put("timerVisible", JsonPrimitive(true))
+                put("calendarVisible", JsonPrimitive(true))
+                put("countsTowardTraining", JsonPrimitive(true))
+                put("steps", buildJsonArray {
+                    add(buildJsonObject {
+                        put("stepId", JsonPrimitive("$id-step"))
+                        put("name", JsonPrimitive("测试动作"))
+                        put("durationSeconds", JsonPrimitive(60))
+                    })
+                })
+            },
+            contractVersion = "2.0",
+        ),
+    ).routine ?: error("测试方案必须有效")
 }
