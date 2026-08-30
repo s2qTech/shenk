@@ -52,7 +52,6 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -684,6 +683,28 @@ private fun TodayGuidanceButton(label: String, onClick: () -> Unit, testTag: Str
     }
 }
 
+@Composable
+private fun TodaySecondaryActionButton(
+    label: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    FilledTonalButton(
+        onClick = onClick,
+        modifier = modifier.heightIn(min = 48.dp),
+        shape = RoundedCornerShape(16.dp),
+        contentPadding = PaddingValues(horizontal = 15.dp, vertical = 10.dp),
+    ) {
+        Text(label, fontWeight = FontWeight.SemiBold)
+        Spacer(Modifier.size(6.dp))
+        Icon(
+            Icons.AutoMirrored.Rounded.ArrowForward,
+            contentDescription = null,
+            modifier = Modifier.size(18.dp),
+        )
+    }
+}
+
 private fun guidanceIcon(type: String): ImageVector = when (type) {
     "strength", "travel_strength" -> Icons.Rounded.FitnessCenter
     "quality_walk" -> Icons.AutoMirrored.Rounded.DirectionsRun
@@ -722,14 +743,11 @@ internal fun CoachReviewSection(
                             style = MaterialTheme.typography.bodyLarge,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
-                        TextButton(
+                        TodaySecondaryActionButton(
+                            label = "查看完整简评",
                             onClick = onOpen,
                             modifier = Modifier.align(Alignment.End),
-                            contentPadding = PaddingValues(horizontal = 0.dp, vertical = 8.dp),
-                        ) {
-                            Text("查看完整简评")
-                            Icon(Icons.AutoMirrored.Rounded.ArrowForward, contentDescription = null, modifier = Modifier.size(18.dp))
-                        }
+                        )
                     }
                     state.jobState in setOf("PENDING", "RUNNING", "AWAITING_SERVER") -> {
                         Row(
@@ -755,9 +773,11 @@ internal fun CoachReviewSection(
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.secondary,
                         )
-                        TextButton(onClick = onOpen, modifier = Modifier.align(Alignment.End)) {
-                            Text(if (dailyReviewAllowsManualRetry(state.jobState)) "查看并重试" else "查看状态")
-                        }
+                        TodaySecondaryActionButton(
+                            label = if (dailyReviewAllowsManualRetry(state.jobState)) "查看并重试" else "查看状态",
+                            onClick = onOpen,
+                            modifier = Modifier.align(Alignment.End),
+                        )
                     }
                     else -> {
                         DeepSeekCoachIdentity(
@@ -769,11 +789,11 @@ internal fun CoachReviewSection(
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.secondary,
                         )
-                        FilledTonalButton(onClick = onOpen, modifier = Modifier.align(Alignment.End)) {
-                            Text("生成今日简评")
-                            Spacer(Modifier.size(6.dp))
-                            Icon(Icons.AutoMirrored.Rounded.ArrowForward, contentDescription = null, modifier = Modifier.size(18.dp))
-                        }
+                        TodaySecondaryActionButton(
+                            label = "生成今日简评",
+                            onClick = onOpen,
+                            modifier = Modifier.align(Alignment.End),
+                        )
                     }
                 }
             }
@@ -845,10 +865,11 @@ private fun MorningStatusSection(
                 style = MaterialTheme.typography.bodyMedium,
             )
         }
-        FilledTonalButton(
+        TodaySecondaryActionButton(
+            label = if (records?.morning == null) "记录" else "修改",
             onClick = onMorning,
             modifier = Modifier.testTag("morning-action"),
-        ) { Text(if (records?.morning == null) "记录" else "修改") }
+        )
     }
     Spacer(Modifier.height(16.dp))
 
@@ -1018,45 +1039,27 @@ private fun PreWorkoutActionRow(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Surface(
-        onClick = onClick,
+    Row(
         modifier = modifier
             .fillMaxWidth()
             .heightIn(min = 52.dp)
-            .testTag("pre-workout-action"),
-        color = Color.Transparent,
-        shape = RoundedCornerShape(14.dp),
+            .padding(horizontal = 5.dp, vertical = 6.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 5.dp, vertical = 6.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Column(Modifier.weight(1f)) {
-                Text("训练前状态", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
-                Text(
-                    if (recorded) "已补充训练前的身体变化" else "身体有变化时在这里补充",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.secondary,
-                )
-            }
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(5.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(
-                    if (recorded) "修改" else "记录",
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.primary,
-                )
-                Icon(
-                    Icons.AutoMirrored.Rounded.ArrowForward,
-                    contentDescription = null,
-                    modifier = Modifier.size(18.dp),
-                    tint = MaterialTheme.colorScheme.primary,
-                )
-            }
+        Column(Modifier.weight(1f)) {
+            Text("训练前状态", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+            Text(
+                if (recorded) "已补充训练前的身体变化" else "身体有变化时在这里补充",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.secondary,
+            )
         }
+        TodaySecondaryActionButton(
+            label = if (recorded) "修改" else "记录",
+            onClick = onClick,
+            modifier = Modifier.testTag("pre-workout-action"),
+        )
     }
 }
 
