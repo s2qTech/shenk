@@ -13,6 +13,7 @@ import androidx.compose.ui.test.performScrollToIndex
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.swipeDown
 import androidx.compose.ui.test.swipeLeft
 import androidx.compose.ui.test.swipeRight
 import androidx.compose.ui.semantics.SemanticsActions
@@ -245,6 +246,7 @@ class MainActivityTest {
         composeRule.onNodeWithTag("today-destination-bar").assertIsDisplayed()
         composeRule.onNodeWithTag("today-open-data").assertIsDisplayed().performClick()
         composeRule.onNodeWithTag("data-screen").assertIsDisplayed()
+        composeRule.onNodeWithTag("shenk-sheet-drag-handle").assertIsDisplayed()
         composeRule.onNodeWithTag("data-metric-weight").assertIsDisplayed()
         composeRule.onNodeWithTag("data-metric-body_fat").assertIsDisplayed().performClick()
         composeRule.waitForIdle()
@@ -257,6 +259,10 @@ class MainActivityTest {
         val screenBottom = composeRule.onRoot().getUnclippedBoundsInRoot().bottom
         val chartBottom = composeRule.onNodeWithTag("body-metric-chart-muscle").getUnclippedBoundsInRoot().bottom
         assertTrue(chartBottom <= screenBottom)
+        composeRule.onNodeWithTag("data-metric-pager").performTouchInput { swipeDown() }
+        composeRule.waitUntil(timeoutMillis = 5_000) {
+            composeRule.onAllNodesWithTag("data-screen").fetchSemanticsNodes().isEmpty()
+        }
     }
 
     @Test
