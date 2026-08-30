@@ -7,12 +7,9 @@ import android.view.WindowManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.snap
-import androidx.compose.animation.core.spring
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -35,6 +32,8 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.AlertDialog
@@ -73,7 +72,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.key
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
@@ -81,7 +80,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
@@ -111,6 +112,7 @@ import io.s2qtech.shenk.timer.RuntimeStep
 import io.s2qtech.shenk.timer.TimerSnapshot
 import io.s2qtech.shenk.timer.expandRoutine
 import java.util.UUID
+import kotlin.math.abs
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.jsonPrimitive
 
@@ -123,6 +125,7 @@ fun TrainingRoute(
     coordinator: NativeTimerCoordinator,
     launchRequest: TrainingLaunchRequest?,
     onLaunchConsumed: () -> Unit,
+    onReturnToToday: () -> Unit,
     onReady: () -> Unit = {},
 ) {
     val library by routineRepository.observeLibrary().collectAsState(initial = null)
@@ -244,6 +247,7 @@ fun TrainingRoute(
                     }
                 }
             },
+            onReturnToToday = onReturnToToday,
         )
         TimerEngineState.PREVIEW -> RoutinePreviewScreen(
             snapshot = snapshot,
@@ -304,15 +308,16 @@ private fun RoutineLibraryScreen(
     onPending: (PendingTimerCompletion) -> Unit,
     onIgnorePending: (PendingTimerCompletion) -> Unit,
     onDeleteRoutine: (RoutineTemplate) -> Unit,
+    onReturnToToday: () -> Unit,
 ) {
     var scene by remember(preferredScene) { mutableStateOf(preferredScene ?: RoutineScene.HOME) }
     var routinePendingDelete by remember { mutableStateOf<RoutineTemplate?>(null) }
-    var revealedRoutineId by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(library.routines) {
         if (library.byScene[scene].isNullOrEmpty()) {
             scene = RoutineScene.entries.firstOrNull { library.byScene[it].orEmpty().isNotEmpty() } ?: scene
         }
     }
+    val routines = library.byScene[scene].orEmpty()
     Scaffold(
         modifier = Modifier
             .fillMaxSize()
@@ -397,7 +402,6 @@ private fun RoutineLibraryScreen(
                         )
                     }
                 }
-                val routines = library.byScene[scene].orEmpty()
                 if (routines.isEmpty()) {
                     item {
                         ShenkStatePanel(
@@ -408,22 +412,15 @@ private fun RoutineLibraryScreen(
                         )
                     }
                 } else {
-                    items(routines, key = RoutineTemplate::id) { routine ->
-                        val expandedSeconds = expandRoutine(routine).sumOf { it.seconds }
-                        SwipeRevealRoutineCard(
-                            routine = routine,
-                            expandedSeconds = expandedSeconds,
-                            revealed = revealedRoutineId == routine.id,
-                            onReveal = { revealedRoutineId = routine.id },
-                            onClose = {
-                                if (revealedRoutineId == routine.id) revealedRoutineId = null
-                            },
-                            onSelect = { onSelect(routine) },
-                            onDelete = {
-                                revealedRoutineId = null
-                                routinePendingDelete = routine
-                            },
-                        )
+                    item(key = "routine-pager-${scene.name}") {
+                        key(scene) {
+                            RoutinePlanPager(
+                                routines = routines,
+                                onSelect = onSelect,
+                                onDelete = { routinePendingDelete = it },
+                                onReturnToToday = onReturnToToday,
+                            )
+                        }
                     }
                 }
                 if (library.rejectedCount > 0) {
@@ -465,112 +462,168 @@ private fun RoutineLibraryScreen(
 }
 
 @Composable
-private fun SwipeRevealRoutineCard(
+internal fun RoutinePlanPager(
+    routines: List<RoutineTemplate>,
+    onSelect: (RoutineTemplate) -> Unit,
+    onDelete: (RoutineTemplate) -> Unit,
+    onReturnToToday: () -> Unit,
+) {
+    val pagerState = rememberPagerState(pageCount = { routines.size })
+    val returnThreshold = with(LocalDensity.current) { 56.dp.toPx() }
+
+    Column(
+        verticalArrangement = Arrangement.spacedBy(9.dp),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        HorizontalPager(
+            state = pagerState,
+            pageSpacing = 12.dp,
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(286.dp)
+                .pointerInput(routines.firstOrNull()?.id, returnThreshold) {
+                    awaitEachGesture {
+                        val startPage = pagerState.currentPage
+                        val down = awaitFirstDown(
+                            requireUnconsumed = false,
+                            pass = PointerEventPass.Initial,
+                        )
+                        var horizontal = 0f
+                        var vertical = 0f
+                        var pressed = true
+                        while (pressed) {
+                            val event = awaitPointerEvent(PointerEventPass.Initial)
+                            val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                            val delta = change.positionChange()
+                            horizontal += delta.x
+                            vertical += delta.y
+                            pressed = change.pressed
+                        }
+                        if (
+                            startPage == 0 &&
+                            horizontal > returnThreshold &&
+                            abs(horizontal) > abs(vertical) * 1.2f
+                        ) {
+                            onReturnToToday()
+                        }
+                    }
+                }
+                .testTag("training-routine-pager"),
+        ) { page ->
+            val routine = routines[page]
+            RoutinePageCard(
+                routine = routine,
+                expandedSeconds = remember(routine) {
+                    expandRoutine(routine).sumOf { it.seconds }
+                },
+                onSelect = { onSelect(routine) },
+                onDelete = { onDelete(routine) },
+            )
+        }
+        if (routines.size > 1) {
+            Text(
+                text = "左右滑动选择方案  ·  ${pagerState.currentPage + 1} / ${routines.size}",
+                modifier = Modifier
+                    .align(Alignment.CenterHorizontally)
+                    .testTag("training-routine-position"),
+                color = MaterialTheme.colorScheme.secondary,
+                style = MaterialTheme.typography.labelLarge,
+            )
+        }
+    }
+}
+
+@Composable
+private fun RoutinePageCard(
     routine: RoutineTemplate,
     expandedSeconds: Int,
-    revealed: Boolean,
-    onReveal: () -> Unit,
-    onClose: () -> Unit,
     onSelect: () -> Unit,
     onDelete: () -> Unit,
 ) {
-    val actionWidth = 88.dp
-    val actionWidthPx = with(LocalDensity.current) { actionWidth.toPx() }
-    var dragOffset by remember(routine.id) { mutableFloatStateOf(0f) }
-    var dragging by remember(routine.id) { mutableStateOf(false) }
-    val visibleOffset by animateFloatAsState(
-        targetValue = dragOffset,
-        animationSpec = if (dragging) snap() else spring(stiffness = Spring.StiffnessMediumLow),
-        label = "routine-swipe-offset",
-    )
-
-    LaunchedEffect(revealed, actionWidthPx) {
-        if (!dragging) dragOffset = if (revealed) -actionWidthPx else 0f
-    }
-
-    Box(
+    Surface(
+        onClick = onSelect,
         modifier = Modifier
             .fillMaxWidth()
-            .heightIn(min = 88.dp)
-            .clip(RoundedCornerShape(24.dp)),
+            .fillMaxHeight()
+            .semantics {
+                customActions = listOf(
+                    CustomAccessibilityAction("删除${routine.title}") {
+                        onDelete()
+                        true
+                    },
+                )
+            }
+            .testTag("routine-${routine.id}"),
+        color = MaterialTheme.colorScheme.surface,
+        tonalElevation = 0.dp,
+        shadowElevation = 1.dp,
+        shape = RoundedCornerShape(24.dp),
+        border = androidx.compose.foundation.BorderStroke(
+            1.dp,
+            MaterialTheme.colorScheme.primary.copy(alpha = 0.07f),
+        ),
     ) {
-        Surface(
-            modifier = Modifier.matchParentSize(),
-            color = MaterialTheme.colorScheme.errorContainer,
+        Column(
+            modifier = Modifier.fillMaxSize().padding(start = 20.dp, top = 16.dp, end = 10.dp, bottom = 15.dp),
         ) {
-            Box(contentAlignment = Alignment.CenterEnd) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        routine.title,
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.SemiBold,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        "${formatDuration(expandedSeconds)} · ${routine.steps.size} 个动作",
+                        color = MaterialTheme.colorScheme.secondary,
+                    )
+                }
                 IconButton(
                     onClick = onDelete,
-                    modifier = Modifier
-                        .width(actionWidth)
-                        .testTag("delete-routine-${routine.id}"),
+                    modifier = Modifier.testTag("delete-routine-${routine.id}"),
                 ) {
                     Icon(
                         imageVector = Icons.Rounded.DeleteOutline,
                         contentDescription = "删除${routine.title}",
-                        tint = MaterialTheme.colorScheme.onErrorContainer,
+                        tint = MaterialTheme.colorScheme.secondary,
                     )
                 }
             }
-        }
-        Surface(
-            modifier = Modifier
-                .fillMaxWidth()
-                .graphicsLayer { translationX = visibleOffset }
-                .semantics {
-                    customActions = listOf(
-                        CustomAccessibilityAction("删除${routine.title}") {
-                            onDelete()
-                            true
-                        },
-                    )
-                }
-                .pointerInput(routine.id, actionWidthPx) {
-                    detectHorizontalDragGestures(
-                        onDragStart = {
-                            dragging = true
-                            onReveal()
-                        },
-                        onDragCancel = {
-                            dragging = false
-                            dragOffset = if (revealed) -actionWidthPx else 0f
-                        },
-                        onDragEnd = {
-                            dragging = false
-                            if (dragOffset <= -actionWidthPx * 0.45f) {
-                                dragOffset = -actionWidthPx
-                                onReveal()
-                            } else {
-                                dragOffset = 0f
-                                onClose()
-                            }
-                        },
-                    ) { change, amount ->
-                        change.consume()
-                        dragOffset = (dragOffset + amount).coerceIn(-actionWidthPx, 0f)
-                    }
-                }
-                .clickable {
-                    if (revealed || dragOffset < 0f) {
-                        dragOffset = 0f
-                        onClose()
-                    } else {
-                        onSelect()
-                    }
-                }
-                .testTag("routine-${routine.id}"),
-            color = MaterialTheme.colorScheme.surface,
-            tonalElevation = 0.dp,
-            shadowElevation = 1.dp,
-            shape = RoundedCornerShape(24.dp),
-            border = androidx.compose.foundation.BorderStroke(
-                1.dp,
-                MaterialTheme.colorScheme.primary.copy(alpha = 0.07f),
-            ),
-        ) {
-            Column(Modifier.padding(horizontal = 20.dp, vertical = 17.dp)) {
-                Text(routine.title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
-                Text("${formatDuration(expandedSeconds)} · ${routine.steps.size} 个动作", color = MaterialTheme.colorScheme.secondary)
+            HorizontalDivider(
+                modifier = Modifier.padding(top = 12.dp, bottom = 12.dp),
+                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.7f),
+            )
+            Text(
+                "动作预览",
+                color = MaterialTheme.colorScheme.primary,
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.SemiBold,
+            )
+            Spacer(Modifier.height(7.dp))
+            routine.steps.take(3).forEachIndexed { index, step ->
+                Text(
+                    "${index + 1}. ${step.name}",
+                    color = MaterialTheme.colorScheme.secondary,
+                    style = MaterialTheme.typography.bodyMedium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Spacer(Modifier.height(3.dp))
+            }
+            Spacer(Modifier.weight(1f))
+            Row(
+                modifier = Modifier.align(Alignment.End),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text("查看方案", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
+                Icon(
+                    Icons.AutoMirrored.Rounded.KeyboardArrowRight,
+                    contentDescription = "打开${routine.title}",
+                    tint = MaterialTheme.colorScheme.primary,
+                )
             }
         }
     }

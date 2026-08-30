@@ -216,7 +216,7 @@ The flow starts with a fast `no abnormality` action. Fatigue and pain are distin
 - Walking plans open the walking scene; the user manually chooses warmup or stretch.
 - The user may switch routines before starting.
 - A cached routine is an offline executable copy, not a replacement for the AI-managed source.
-- Scene switching remains anchored in the lower thumb-reach zone while the routine list scrolls independently; it must not require reaching to the top of the screen.
+- Scene switching remains anchored in the lower thumb-reach zone. Within the selected scene, executable routines form one horizontal pager rather than a vertical list, so the user can move between routines without leaving the Training canvas. At the routine boundary nearest Today, a continued drag toward Today hands control back to the primary Calendar–Today–Training pager; system back from Training still returns directly to Today.
 - The scene switcher is an integrated bottom control band separated by a quiet divider, not a detached floating pill or elevated dock.
 
 ### Preview
