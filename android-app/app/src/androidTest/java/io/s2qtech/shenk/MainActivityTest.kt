@@ -4,6 +4,7 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onNodeWithTag
@@ -144,6 +145,26 @@ class MainActivityTest {
         composeRule.activityRule.scenario.onActivity { activity ->
             activity.onBackPressedDispatcher.onBackPressed()
         }
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag("today-screen").assertIsDisplayed()
+    }
+
+    @Test
+    fun fastSceneReturnSettlesAtHomeBeforeASeparateGestureReturnsToToday() {
+        composeRule.onNodeWithTag("primary-pager").performTouchInput { swipeLeft() }
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag("training-screen").assertIsDisplayed()
+
+        composeRule.onNodeWithTag("scene-walk").performClick()
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag("scene-walk").assertIsSelected()
+
+        composeRule.onNodeWithTag("training-scene-pager").performTouchInput { swipeRight() }
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag("training-screen").assertIsDisplayed()
+        composeRule.onNodeWithTag("scene-home").assertIsSelected()
+
+        composeRule.onNodeWithTag("training-scene-pager").performTouchInput { swipeRight() }
         composeRule.waitForIdle()
         composeRule.onNodeWithTag("today-screen").assertIsDisplayed()
     }
@@ -451,6 +472,10 @@ class MainActivityTest {
             .fetchSemanticsNode()
             .config[SemanticsActions.CustomActions]
         assertTrue(routineActions.any { it.label == "删除离线恢复流程" })
+        composeRule.onNodeWithTag("routine-synthetic-native-timer")
+            .performTouchInput { longClick() }
+        composeRule.onNodeWithText("删除“离线恢复流程”？").assertIsDisplayed()
+        composeRule.onNodeWithText("取消").performClick()
         val routine = runBlocking {
             app.routineLibraryRepository.observeLibrary().first().routines
                 .single { it.id == "synthetic-native-timer" }

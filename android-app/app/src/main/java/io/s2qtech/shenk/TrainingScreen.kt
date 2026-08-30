@@ -10,6 +10,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.rememberScrollState
@@ -65,7 +66,6 @@ import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Info
-import androidx.compose.material.icons.rounded.DeleteOutline
 import androidx.compose.material.icons.rounded.Pause
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.SkipNext
@@ -341,7 +341,38 @@ internal fun RoutineLibraryScreen(
     }
 
     Scaffold(
-        modifier = Modifier.fillMaxSize().testTag("training-screen"),
+        modifier = Modifier
+            .fillMaxSize()
+            .pointerInput(scenePager) {
+                val returnThreshold = 56.dp.toPx()
+                awaitEachGesture {
+                    val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+                    val startPage = if (scenePager.isScrollInProgress) {
+                        -1
+                    } else {
+                        scenePager.currentPage
+                    }
+                    var horizontal = 0f
+                    var vertical = 0f
+                    var pressed = true
+                    while (pressed) {
+                        val event = awaitPointerEvent(PointerEventPass.Initial)
+                        val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                        val delta = change.positionChange()
+                        horizontal += delta.x
+                        vertical += delta.y
+                        pressed = change.pressed
+                    }
+                    if (
+                        startPage == RoutineScene.HOME.ordinal &&
+                        horizontal > returnThreshold &&
+                        abs(horizontal) > abs(vertical) * 1.2f
+                    ) {
+                        onReturnToToday()
+                    }
+                }
+            }
+            .testTag("training-screen"),
         containerColor = MaterialTheme.colorScheme.background,
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         bottomBar = {
@@ -378,7 +409,6 @@ internal fun RoutineLibraryScreen(
                 onPending = onPending,
                 onIgnorePending = onIgnorePending,
                 onDelete = { routinePendingDelete = it },
-                onReturnToToday = onReturnToToday,
                 modifier = Modifier.weight(1f),
             )
         }
@@ -416,7 +446,6 @@ private fun TrainingScenePager(
     onPending: (PendingTimerCompletion) -> Unit,
     onIgnorePending: (PendingTimerCompletion) -> Unit,
     onDelete: (RoutineTemplate) -> Unit,
-    onReturnToToday: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     HorizontalPager(
@@ -427,31 +456,6 @@ private fun TrainingScenePager(
         ),
         modifier = modifier
             .fillMaxWidth()
-            .pointerInput(pagerState, scenes.size) {
-                val returnThreshold = 56.dp.toPx()
-                awaitEachGesture {
-                    val startPage = pagerState.currentPage
-                    val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
-                    var horizontal = 0f
-                    var vertical = 0f
-                    var pressed = true
-                    while (pressed) {
-                        val event = awaitPointerEvent(PointerEventPass.Initial)
-                        val change = event.changes.firstOrNull { it.id == down.id } ?: break
-                        val delta = change.positionChange()
-                        horizontal += delta.x
-                        vertical += delta.y
-                        pressed = change.pressed
-                    }
-                    if (
-                        startPage == RoutineScene.HOME.ordinal &&
-                        horizontal > returnThreshold &&
-                        abs(horizontal) > abs(vertical) * 1.2f
-                    ) {
-                        onReturnToToday()
-                    }
-                }
-            }
             .testTag("training-scene-pager"),
         beyondViewportPageCount = 1,
     ) { page ->
@@ -569,10 +573,15 @@ private fun RoutineListCard(
     onDelete: () -> Unit,
 ) {
     Surface(
-        onClick = onSelect,
         modifier = Modifier
             .fillMaxWidth()
             .heightIn(min = 88.dp)
+            .combinedClickable(
+                onClickLabel = "打开${routine.title}",
+                onLongClickLabel = "删除${routine.title}",
+                onLongClick = onDelete,
+                onClick = onSelect,
+            )
             .semantics {
                 customActions = listOf(
                     CustomAccessibilityAction("删除${routine.title}") {
@@ -598,16 +607,6 @@ private fun RoutineListCard(
             Column(Modifier.weight(1f)) {
                 Text(routine.title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
                 Text("${formatDuration(expandedSeconds)} · ${routine.steps.size} 个动作", color = MaterialTheme.colorScheme.secondary)
-            }
-            IconButton(
-                onClick = onDelete,
-                modifier = Modifier.testTag("delete-routine-${routine.id}"),
-            ) {
-                Icon(
-                    imageVector = Icons.Rounded.DeleteOutline,
-                    contentDescription = "删除${routine.title}",
-                    tint = MaterialTheme.colorScheme.secondary,
-                )
             }
             Icon(
                 Icons.AutoMirrored.Rounded.KeyboardArrowRight,

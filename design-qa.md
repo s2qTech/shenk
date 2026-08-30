@@ -101,3 +101,11 @@ Xiaomi 14 validation first exposed that an unusually fast injected fling could c
 Routine preview now disables the outer primary pager. Real-device verification confirmed that a full horizontal gesture leaves the preview title and Start action visible instead of returning to Today. The first Android edge/system back returns to the Training library, and the second returns to Today. The former loose top `返回训练` text action is absent; `返回方案` is an outlined 56 dp lower action aligned beside the filled `开始训练` control in one shared surface.
 
 JVM tests, Lint, Android-test compilation, and debug assembly passed. The focused regression now checks that preview ignores primary-pager swipes, exposes the aligned lower Back action, and follows Preview → Library → Today on consecutive system backs. Xiaomi 14 accepted the same-certificate update while retaining the original 2026-08-12 first-install identity. No timer was started and no routine or business record was changed.
+
+## 2026-08-30 Routine long-press deletion
+
+Routine cards no longer expose a permanent trash icon beside the normal open affordance. Tap opens the routine; long press opens the existing delete confirmation, and cancelling leaves the routine untouched. Moving horizontally for scene paging cancels long-press recognition. The accessibility tree continues to expose a named Delete action without requiring the gesture.
+
+## 2026-08-30 Nested Training gesture ownership
+
+Training now locks the outer Calendar/Today/Training pager while the inner Home/Walk/Recovery/Travel pager is settled on screen. A fast gesture from Walk toward Home can move at most one scene and remains on Training. Returning to Today requires a new drag whose starting state is the already settled Home scene; the full Training surface passively recognizes that boundary gesture, so it is not limited to a narrow content strip. This removes the intermittent failed Home return and the fast Walk → Today → Training bounce caused by two pagers consuming one fling.

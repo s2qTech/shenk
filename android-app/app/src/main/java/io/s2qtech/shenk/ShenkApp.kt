@@ -111,7 +111,9 @@ fun ShenkApp(
         HorizontalPager(
             state = pager,
             beyondViewportPageCount = PRIMARY_PAGE_RETENTION_RADIUS,
-            userScrollEnabled = secondary == null && timerEngineState == TimerEngineState.IDLE,
+            userScrollEnabled = secondary == null &&
+                timerEngineState == TimerEngineState.IDLE &&
+                pager.settledPage != TRAINING_PAGE,
             modifier = Modifier
                 .fillMaxSize()
                 .background(MaterialTheme.colorScheme.background)
