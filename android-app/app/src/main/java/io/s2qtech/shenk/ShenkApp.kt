@@ -170,9 +170,6 @@ fun ShenkApp(
                         coordinator = coordinator,
                         launchRequest = trainingLaunch,
                         onLaunchConsumed = { trainingLaunch = null },
-                        onReturnToToday = {
-                            scope.launch { pager.animatePrimaryPage(TODAY_PAGE) }
-                        },
                         onReady = { primaryPagesReady[TRAINING_PAGE] = true },
                     )
                 }
