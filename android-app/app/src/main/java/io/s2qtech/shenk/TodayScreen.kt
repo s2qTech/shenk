@@ -14,6 +14,7 @@ import androidx.compose.material.icons.rounded.Bedtime
 import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.Bolt
 import androidx.compose.material.icons.rounded.FitnessCenter
+import androidx.compose.material.icons.rounded.MonitorWeight
 import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material.icons.rounded.SelfImprovement
 import androidx.compose.material.icons.rounded.WaterDrop
@@ -43,7 +44,6 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
@@ -698,61 +698,82 @@ internal fun CoachReviewSection(
 ) {
     Column(Modifier.fillMaxWidth().testTag("today-coach-review")) {
         Text("教练简评", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
-        Spacer(Modifier.height(12.dp))
-        when {
-            state.review != null -> {
-                val review = requireNotNull(state.review)
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    verticalAlignment = Alignment.Bottom,
-                ) {
-                    Column(Modifier.weight(1f)) {
+        Spacer(Modifier.height(10.dp))
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            color = MaterialTheme.colorScheme.surfaceContainerLow,
+            shape = RoundedCornerShape(20.dp),
+            border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+        ) {
+            Column(
+                modifier = Modifier.fillMaxWidth().padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                when {
+                    state.review != null -> {
+                        val review = requireNotNull(state.review)
+                        DeepSeekCoachIdentity(
+                            title = "今日简评已生成",
+                            subtitle = "DeepSeek · 结合今天与近期记录",
+                        )
                         Text(
                             review.conclusion,
                             style = MaterialTheme.typography.bodyLarge,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
-                        Spacer(Modifier.height(5.dp))
                         TextButton(
                             onClick = onOpen,
+                            modifier = Modifier.align(Alignment.End),
                             contentPadding = PaddingValues(horizontal = 0.dp, vertical = 8.dp),
                         ) {
                             Text("查看完整简评")
                             Icon(Icons.AutoMirrored.Rounded.ArrowForward, contentDescription = null, modifier = Modifier.size(18.dp))
                         }
                     }
-                    DeepSeekCoachIdentity(title = "DeepSeek 简评", compact = true, subtitle = null)
-                }
-            }
-            state.jobState in setOf("PENDING", "RUNNING", "AWAITING_SERVER") -> {
-                Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                    CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
-                    Column {
-                        Text("正在生成今日简评", fontWeight = FontWeight.SemiBold)
-                        Text("完成后会自动出现在这里", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.secondary)
+                    state.jobState in setOf("PENDING", "RUNNING", "AWAITING_SERVER") -> {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            DeepSeekCoachIdentity(
+                                title = "正在生成今日简评",
+                                subtitle = "完成后会自动出现在这里",
+                                modifier = Modifier.weight(1f),
+                            )
+                            CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
+                        }
                     }
-                }
-            }
-            state.jobState in setOf("RETRY", "FAILED") -> {
-                Text("简评暂未完成", fontWeight = FontWeight.SemiBold)
-                Text(
-                    dailyReviewFailureMessage(state.jobError, state.jobState == "RETRY"),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.secondary,
-                )
-                TextButton(onClick = onOpen, modifier = Modifier.align(Alignment.End)) {
-                    Text(if (dailyReviewAllowsManualRetry(state.jobState)) "查看并重试" else "查看状态")
-                }
-            }
-            else -> {
-                Text(
-                    "记录今天真实发生的活动和身体感受后，可以生成简评。",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.secondary,
-                )
-                TextButton(onClick = onOpen, modifier = Modifier.align(Alignment.End)) {
-                    Text("生成今日简评")
+                    state.jobState in setOf("RETRY", "FAILED") -> {
+                        DeepSeekCoachIdentity(
+                            title = "简评暂未完成",
+                            subtitle = "DeepSeek · 今日复盘",
+                        )
+                        Text(
+                            dailyReviewFailureMessage(state.jobError, state.jobState == "RETRY"),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.secondary,
+                        )
+                        TextButton(onClick = onOpen, modifier = Modifier.align(Alignment.End)) {
+                            Text(if (dailyReviewAllowsManualRetry(state.jobState)) "查看并重试" else "查看状态")
+                        }
+                    }
+                    else -> {
+                        DeepSeekCoachIdentity(
+                            title = "等待今天的记录",
+                            subtitle = "DeepSeek · 今日复盘",
+                        )
+                        Text(
+                            "记录训练、休息或今天的身体感受后，再结合近期状态生成简评。",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.secondary,
+                        )
+                        FilledTonalButton(onClick = onOpen, modifier = Modifier.align(Alignment.End)) {
+                            Text("生成今日简评")
+                            Spacer(Modifier.size(6.dp))
+                            Icon(Icons.AutoMirrored.Rounded.ArrowForward, contentDescription = null, modifier = Modifier.size(18.dp))
+                        }
+                    }
                 }
             }
         }
@@ -893,27 +914,83 @@ private fun MorningStatusSection(
     }
     records?.metric?.takeIf { it.hasMeasurements }?.let { metric ->
         Spacer(Modifier.height(14.dp))
-        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-        Spacer(Modifier.height(12.dp))
         val values = buildList {
             metric.weightKg?.let { add("体重" to "%.1f kg".format(it)) }
             metric.bodyFatPct?.let { add("体脂" to "%.1f%%".format(it)) }
             metric.muscleKg?.let { add("肌肉" to "%.1f kg".format(it)) }
             metric.waistCm?.let { add("腰围" to "%.1f cm".format(it)) }
         }
-        Column(Modifier.fillMaxWidth()) {
-            Text("晨间测量", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.outline)
-            Text(
-                values.joinToString(" · ") { (label, value) -> "$label $value" },
-                style = MaterialTheme.typography.titleMedium,
-            )
-        }
+        MorningMeasurementSummary(values = values, largeText = largeText)
     }
     if (records?.morning != null) {
         Spacer(Modifier.height(6.dp))
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
             TextButton(onClick = onPreWorkout) {
                 Text(if (records.preWorkout == null) "训练前有变化" else "调整训练前状态")
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun MorningMeasurementSummary(
+    values: List<Pair<String, String>>,
+    largeText: Boolean,
+) {
+    Surface(
+        modifier = Modifier.fillMaxWidth().testTag("morning-measurements-summary"),
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        shape = RoundedCornerShape(18.dp),
+        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+    ) {
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 15.dp, vertical = 14.dp),
+            verticalArrangement = Arrangement.spacedBy(13.dp),
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Surface(
+                        modifier = Modifier.size(34.dp),
+                        color = MaterialTheme.colorScheme.primaryContainer,
+                        shape = RoundedCornerShape(12.dp),
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                Icons.Rounded.MonitorWeight,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(19.dp),
+                            )
+                        }
+                    }
+                    Column {
+                        Text("晨间测量", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                        Text("今天记录的身体数据", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.secondary)
+                    }
+                }
+                Text("${values.size} 项", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.outline)
+            }
+            FlowRow(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+                maxItemsInEachRow = if (largeText) 1 else 2,
+            ) {
+                values.forEach { (label, value) ->
+                    Column(
+                        modifier = (if (largeText) Modifier.fillMaxWidth() else Modifier.weight(1f))
+                            .padding(horizontal = 5.dp),
+                        verticalArrangement = Arrangement.spacedBy(2.dp),
+                    ) {
+                        Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
+                        Text(value, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                    }
+                }
             }
         }
     }

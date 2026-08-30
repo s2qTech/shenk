@@ -1,6 +1,7 @@
 package io.s2qtech.shenk
 
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
@@ -246,9 +247,15 @@ class MainActivityTest {
         composeRule.onNodeWithTag("data-screen").assertIsDisplayed()
         composeRule.onNodeWithTag("data-metric-weight").assertIsDisplayed()
         composeRule.onNodeWithTag("data-metric-body_fat").assertIsDisplayed().performClick()
-        composeRule.onNodeWithTag("body-metric-chart").assertIsDisplayed()
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag("data-metric-body_fat").assertIsSelected()
+        composeRule.onNodeWithTag("data-metric-pager").performTouchInput { swipeLeft() }
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag("data-metric-muscle").assertIsSelected()
+        composeRule.onNodeWithTag("data-screen").assertIsDisplayed()
+        composeRule.onNodeWithTag("body-metric-chart-muscle").assertIsDisplayed()
         val screenBottom = composeRule.onRoot().getUnclippedBoundsInRoot().bottom
-        val chartBottom = composeRule.onNodeWithTag("body-metric-chart").getUnclippedBoundsInRoot().bottom
+        val chartBottom = composeRule.onNodeWithTag("body-metric-chart-muscle").getUnclippedBoundsInRoot().bottom
         assertTrue(chartBottom <= screenBottom)
     }
 

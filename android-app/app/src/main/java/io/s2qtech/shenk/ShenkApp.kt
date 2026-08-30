@@ -111,6 +111,7 @@ fun ShenkApp(
         HorizontalPager(
             state = pager,
             beyondViewportPageCount = PRIMARY_PAGE_RETENTION_RADIUS,
+            userScrollEnabled = secondary == null,
             modifier = Modifier
                 .fillMaxSize()
                 .background(MaterialTheme.colorScheme.background)
@@ -188,6 +189,7 @@ fun ShenkApp(
     when (secondary) {
         SecondarySpace.DATA -> ShenkModalBottomSheet(
             onDismissRequest = { secondary = null },
+            explicitDismissOnly = true,
         ) {
             DataScreen(
                 repository = calendarRepository,

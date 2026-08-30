@@ -1,14 +1,21 @@
 package io.s2qtech.shenk
 
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.PagerState
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -18,14 +25,14 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
@@ -41,6 +48,7 @@ import io.s2qtech.shenk.sync.CalendarRecordRepository
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import kotlin.math.abs
+import kotlinx.coroutines.launch
 
 @Composable
 fun DataScreen(
@@ -49,7 +57,9 @@ fun DataScreen(
 ) {
     val today = remember { LocalDate.now() }
     val trends by repository.observeBodyTrends(today).collectAsState(initial = null)
-    var selectedKind by remember { mutableStateOf(MetricKind.WEIGHT) }
+    val kinds = MetricKind.entries
+    val pagerState = rememberPagerState(pageCount = { kinds.size })
+    val scope = rememberCoroutineScope()
 
     Column(
         modifier = modifier
@@ -60,57 +70,87 @@ fun DataScreen(
         verticalArrangement = Arrangement.spacedBy(18.dp),
     ) {
         SheetHeader("数据", "查看体重、体脂、肌肉和腰围的时间线图。")
-        MetricTabs(selected = selectedKind, onSelect = { selectedKind = it })
-        val value = trends
-        if (value == null) {
-            ShenkStatePanel(
-                title = "正在读取身体趋势",
-                message = "先读取本机 30 天记录；如有同步更新，会自动出现在这里。",
-                tone = ShenkStateTone.PROGRESS,
-                modifier = Modifier.fillMaxWidth().testTag("data-loading"),
-            )
-        } else {
-            BodyMetricChart(value.trend(selectedKind), selectedKind.chartColor())
+        MetricTabs(
+            pagerState = pagerState,
+            kinds = kinds,
+            onSelect = { page -> scope.launch { pagerState.animateScrollToPage(page) } },
+        )
+        HorizontalPager(
+            state = pagerState,
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(356.dp)
+                .testTag("data-metric-pager"),
+            beyondViewportPageCount = 1,
+            verticalAlignment = Alignment.Top,
+        ) { page ->
+            val kind = kinds[page]
+            val value = trends
+            if (value == null) {
+                ShenkStatePanel(
+                    title = "正在读取身体趋势",
+                    message = "先读取本机 30 天记录；如有同步更新，会自动出现在这里。",
+                    tone = ShenkStateTone.PROGRESS,
+                    modifier = Modifier.fillMaxWidth().testTag("data-loading"),
+                )
+            } else {
+                BodyMetricChart(
+                    trend = value.trend(kind),
+                    lineColor = kind.chartColor(),
+                    modifier = Modifier.testTag("body-metric-chart-${kind.name.lowercase()}"),
+                )
+            }
         }
     }
 }
 
 @Composable
 private fun MetricTabs(
-    selected: MetricKind,
-    onSelect: (MetricKind) -> Unit,
+    pagerState: PagerState,
+    kinds: List<MetricKind>,
+    onSelect: (Int) -> Unit,
 ) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
         color = MaterialTheme.colorScheme.surfaceContainer,
         shape = RoundedCornerShape(18.dp),
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(4.dp),
-            horizontalArrangement = Arrangement.spacedBy(4.dp),
-        ) {
-            MetricKind.entries.forEach { kind ->
-                val active = kind == selected
-                Surface(
-                    onClick = { onSelect(kind) },
-                    modifier = Modifier
-                        .weight(1f)
-                        .height(42.dp)
-                        .semantics {
-                            role = Role.Tab
-                            this.selected = active
-                        }
-                        .testTag("data-metric-${kind.name.lowercase()}"),
-                    shape = RoundedCornerShape(14.dp),
-                    color = if (active) MaterialTheme.colorScheme.primary else Color.Transparent,
-                    contentColor = if (active) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.secondary,
-                ) {
-                    Row(
-                        modifier = Modifier.fillMaxSize(),
-                        horizontalArrangement = Arrangement.Center,
-                        verticalAlignment = Alignment.CenterVertically,
+        BoxWithConstraints(Modifier.fillMaxWidth().padding(4.dp)) {
+            val tabWidth = maxWidth / kinds.size
+            val indicatorPosition = (pagerState.currentPage + pagerState.currentPageOffsetFraction)
+                .coerceIn(0f, (kinds.size - 1).toFloat())
+            Box(
+                modifier = Modifier
+                    .offset(x = tabWidth * indicatorPosition)
+                    .height(42.dp)
+                    .fillMaxWidth(1f / kinds.size)
+                    .background(MaterialTheme.colorScheme.primary, RoundedCornerShape(14.dp)),
+            )
+            Row(modifier = Modifier.fillMaxWidth()) {
+                kinds.forEachIndexed { index, kind ->
+                    val activeAmount = (1f - abs(indicatorPosition - index)).coerceIn(0f, 1f)
+                    val labelColor = lerp(
+                        MaterialTheme.colorScheme.secondary,
+                        MaterialTheme.colorScheme.onPrimary,
+                        activeAmount,
+                    )
+                    Box(
+                        contentAlignment = Alignment.Center,
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(42.dp)
+                            .clickable(role = Role.Tab) { onSelect(index) }
+                            .semantics {
+                                role = Role.Tab
+                                selected = pagerState.currentPage == index
+                            }
+                            .testTag("data-metric-${kind.name.lowercase()}"),
                     ) {
-                        Text(kind.tabLabel(), style = MaterialTheme.typography.labelMedium)
+                        Text(
+                            kind.tabLabel(),
+                            style = MaterialTheme.typography.labelMedium,
+                            color = labelColor,
+                        )
                     }
                 }
             }
@@ -119,9 +159,13 @@ private fun MetricTabs(
 }
 
 @Composable
-private fun BodyMetricChart(trend: MetricTrend, lineColor: Color) {
+private fun BodyMetricChart(
+    trend: MetricTrend,
+    lineColor: Color,
+    modifier: Modifier = Modifier,
+) {
     Surface(
-        modifier = Modifier.fillMaxWidth().testTag("body-metric-chart"),
+        modifier = modifier.fillMaxWidth(),
         color = MaterialTheme.colorScheme.surfaceContainerLow,
         shape = RoundedCornerShape(20.dp),
         border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),

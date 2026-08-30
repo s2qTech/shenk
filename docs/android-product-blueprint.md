@@ -118,6 +118,7 @@ Today is one adaptable canvas rather than a dashboard of nested cards.
 - A small list of genuinely missing information, not a permanent checklist.
 - The record/adjust command is the only prominent action in the morning area. Trend, pre-workout delta, and reminder actions remain visually subordinate.
 - Body trends use the single fixed Data destination; the morning measurement summary does not add a second inline trend link.
+- When measurements exist, they form one intentional third-level summary inside the body-status section: a labelled measurement header plus compact values. They must not fall back to an unframed concatenated text line that looks detached from the status hierarchy.
 
 ### Daytime State
 
@@ -254,6 +255,7 @@ Walking records may come from wearable data or manual entry and do not require a
 - Offline requests are queued and generated automatically when connectivity returns.
 - Correcting the day regenerates the review; only the latest review is prominent.
 - The review never modifies a formal plan.
+- Before a review exists, Today presents a compact coach-identity state with one clear generation action. Empty, running, failed, and completed review states keep the same container anatomy so the section does not change from an orphaned text link into an unrelated card after generation.
 
 ## 11. Weekly Feedback and Plan Intake
 
@@ -289,6 +291,8 @@ The second native slice applies the shared system to routine preview, active tim
 The following secondary-surface slices now carry the same accepted prototype language into Today detail, daily review, planning, body trends, settings, and shared non-content states. Today keeps one compact primary plan card and a four-part body-status summary; Data, Plan, Settings, and the full review open as phone-scoped sheets rather than replacing the three-page primary canvas. Planning exposes only its two real jobs, body trends expose one selected metric at a time, settings uses a divided action list, and DeepSeek uses the accepted replaceable whale identity. Xiaomi 14 side-by-side QA against the accepted prototype is recorded in `design-qa.md`. Motion remains a separate final slice.
 
 All phone bottom sheets follow one sizing contract. The sheet wraps its content and keeps only the system safe area plus a small visual breathing space; it must not use a page-specific fixed height or expand merely to occupy the screen. The initial sheet content is capped at two thirds of the available screen height. When content exceeds that cap, the sheet stays at the cap and the content scrolls vertically inside it. The initial state skips Material's partially expanded detent so a short sheet opens at its natural height and a long sheet opens directly at its readable capped height.
+
+The Data sheet is a persistent inspection surface rather than a transient chooser. It does not close from outside taps, small diagonal movement, or horizontal paging. It closes only through the system back path or a deliberate downward drag on its visible handle. Its four metric labels and chart pages share one pager state: tapping a label animates to that page, swiping the chart moves the selected indicator continuously, and both paths retain an accessible tab alternative.
 
 ## 13. Phase 1 Success Criteria
 
