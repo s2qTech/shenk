@@ -83,6 +83,7 @@ class MainActivityTest {
         composeRule.onNodeWithTag("today-screen").assertIsDisplayed()
         composeRule.onNodeWithTag("cloud-setup-prompt").assertIsDisplayed()
         composeRule.onNodeWithText("身体状态").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithTag("body-status-card").assertIsDisplayed()
         composeRule.onNodeWithTag("morning-status-values").assertIsDisplayed()
         composeRule.onNodeWithTag("morning-action").performClick()
         composeRule.onNodeWithText("今天身体怎么样？").assertIsDisplayed()

@@ -823,6 +823,15 @@ private fun MorningStatusSection(
     onMorning: () -> Unit,
     onPreWorkout: () -> Unit,
 ) {
+    Surface(
+        modifier = Modifier.fillMaxWidth().testTag("body-status-card"),
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        shape = RoundedCornerShape(24.dp),
+        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+    ) {
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 17.dp),
+        ) {
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween,
@@ -927,17 +936,13 @@ private fun MorningStatusSection(
     }
     if (records?.morning != null && measurements == null) {
         Spacer(Modifier.height(14.dp))
-        Surface(
-            modifier = Modifier.fillMaxWidth(),
-            color = MaterialTheme.colorScheme.surfaceContainerLow,
-            shape = RoundedCornerShape(18.dp),
-            border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-        ) {
-            PreWorkoutActionRow(
-                recorded = records.preWorkout != null,
-                onClick = onPreWorkout,
-                modifier = Modifier.padding(horizontal = 15.dp, vertical = 4.dp),
-            )
+        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+        Spacer(Modifier.height(8.dp))
+        PreWorkoutActionRow(
+            recorded = records.preWorkout != null,
+            onClick = onPreWorkout,
+        )
+    }
         }
     }
 }
@@ -950,16 +955,11 @@ private fun MorningMeasurementSummary(
     preWorkoutRecorded: Boolean,
     onPreWorkout: () -> Unit,
 ) {
-    Surface(
+    Column(
         modifier = Modifier.fillMaxWidth().testTag("morning-measurements-summary"),
-        color = MaterialTheme.colorScheme.surfaceContainerLow,
-        shape = RoundedCornerShape(18.dp),
-        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+        verticalArrangement = Arrangement.spacedBy(13.dp),
     ) {
-        Column(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 15.dp, vertical = 14.dp),
-            verticalArrangement = Arrangement.spacedBy(13.dp),
-        ) {
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -1009,7 +1009,6 @@ private fun MorningMeasurementSummary(
                 recorded = preWorkoutRecorded,
                 onClick = onPreWorkout,
             )
-        }
     }
 }
 

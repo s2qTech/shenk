@@ -120,6 +120,7 @@ Today is one adaptable canvas rather than a dashboard of nested cards.
 - Body trends use the single fixed Data destination; the morning measurement summary does not add a second inline trend link.
 - When measurements exist, they form one intentional third-level summary inside the body-status section: a labelled measurement header plus compact values. They must not fall back to an unframed concatenated text line that looks detached from the status hierarchy.
 - The four-part body-status row is authoritative for normal and missing pain state, so Today does not repeat `正常`, `未记录`, or an equivalent sentence beneath it. Actual pain remains visible as a deliberate warning. The optional pre-workout update is a secondary action row attached to the morning-measurement card (or its own compact card when there are no measurements), never a floating text link between sections.
+- Body status is one first-class Today card, not an uncontained page fragment. Its heading, record/modify action, four-part scan, actual-pain warning, morning measurements, and pre-workout action share one outer container and use dividers for internal hierarchy; the measurement area must not become a nested card.
 
 ### Daytime State
 
