@@ -4,6 +4,7 @@ import android.Manifest
 import android.app.Activity
 import android.content.pm.PackageManager
 import android.view.WindowManager
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
@@ -210,6 +211,9 @@ fun TrainingRoute(
             activity.window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         }
         onDispose { activity.window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON) }
+    }
+    BackHandler(enabled = snapshot.state == TimerEngineState.PREVIEW) {
+        coordinator.reset()
     }
 
     when (snapshot.state) {
@@ -686,19 +690,38 @@ private fun RoutinePreviewScreen(
                 shadowElevation = 3.dp,
                 shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
             ) {
-                Button(
-                    onClick = onStart,
+                Row(
                     modifier = Modifier
                         .fillMaxWidth()
                         .navigationBarsPadding()
-                        .padding(horizontal = 20.dp, vertical = 12.dp)
-                        .heightIn(min = 56.dp)
-                        .testTag("timer-start"),
-                    shape = RoundedCornerShape(19.dp),
+                        .padding(horizontal = 20.dp, vertical = 12.dp),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Text("开始训练", fontWeight = FontWeight.SemiBold)
-                    Spacer(Modifier.width(8.dp))
-                    Icon(Icons.AutoMirrored.Rounded.KeyboardArrowRight, contentDescription = null)
+                    OutlinedButton(
+                        onClick = onBack,
+                        modifier = Modifier
+                            .weight(1f)
+                            .heightIn(min = 56.dp)
+                            .testTag("timer-preview-back"),
+                        shape = RoundedCornerShape(19.dp),
+                    ) {
+                        Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = null)
+                        Spacer(Modifier.width(6.dp))
+                        Text("返回方案", fontWeight = FontWeight.SemiBold)
+                    }
+                    Button(
+                        onClick = onStart,
+                        modifier = Modifier
+                            .weight(1.35f)
+                            .heightIn(min = 56.dp)
+                            .testTag("timer-start"),
+                        shape = RoundedCornerShape(19.dp),
+                    ) {
+                        Text("开始训练", fontWeight = FontWeight.SemiBold)
+                        Spacer(Modifier.width(7.dp))
+                        Icon(Icons.AutoMirrored.Rounded.KeyboardArrowRight, contentDescription = null)
+                    }
                 }
             }
         },
@@ -709,12 +732,6 @@ private fun RoutinePreviewScreen(
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             item {
-                TextButton(onClick = onBack) {
-                    Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = null)
-                    Spacer(Modifier.width(4.dp))
-                    Text("返回训练")
-                }
-                Spacer(Modifier.height(12.dp))
                 Text(
                     "${routine.scene.displayName} · ${routine.role.previewLabel}",
                     color = MaterialTheme.colorScheme.primary,

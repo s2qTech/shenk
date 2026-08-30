@@ -224,6 +224,7 @@ The flow starts with a fast `no abnormality` action. Fatigue and pain are distin
 - Show logical exercises, not expanded prepare/switch implementation steps as separate exercises.
 - Every exercise can be opened before training to inspect cues and warnings.
 - Preparation, side switching, and bilateral execution remain visible as execution details.
+- Routine preview is a nested Training state, not another primary page. While it is open, ordinary horizontal movement must not drive the outer Calendar–Today–Training pager. Android edge/system back exits preview to the Training library first; a second back from the library returns to Today. Preview back and Start are aligned in the same lower action surface rather than splitting navigation into a loose top text link and a bottom primary button.
 
 ### Active Timer
 

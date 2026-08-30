@@ -462,8 +462,28 @@ class MainActivityTest {
             app.nativeTimerCoordinator.snapshot.value.state == TimerEngineState.PREVIEW
         }
         composeRule.waitForIdle()
-        composeRule.onNodeWithTag("timer-start").assertExists()
+        composeRule.onNodeWithTag("timer-preview-back").assertIsDisplayed()
+        composeRule.onNodeWithTag("timer-start").assertIsDisplayed()
         composeRule.onNodeWithText("原地慢走").assertExists()
+        composeRule.onNodeWithText("返回训练").assertDoesNotExist()
+
+        composeRule.onNodeWithTag("primary-pager").performTouchInput { swipeRight() }
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag("timer-start").assertIsDisplayed()
+
+        composeRule.activityRule.scenario.onActivity { activity ->
+            activity.onBackPressedDispatcher.onBackPressed()
+        }
+        composeRule.waitUntil(timeoutMillis = 5_000) {
+            app.nativeTimerCoordinator.snapshot.value.state == TimerEngineState.IDLE
+        }
+        composeRule.onNodeWithTag("training-screen").assertIsDisplayed()
+
+        composeRule.activityRule.scenario.onActivity { activity ->
+            activity.onBackPressedDispatcher.onBackPressed()
+        }
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag("today-screen").assertIsDisplayed()
     }
 
     private fun validPendingPatch() = """
