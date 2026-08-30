@@ -5,6 +5,7 @@ import android.content.ActivityNotFoundException
 import android.content.pm.PackageManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowForward
 import androidx.compose.material.icons.automirrored.rounded.DirectionsRun
@@ -713,6 +714,25 @@ private fun guidanceIcon(type: String): ImageVector = when (type) {
     else -> Icons.Rounded.SelfImprovement
 }
 
+private sealed interface CoachReviewDisplayState {
+    data class Completed(val review: io.s2qtech.shenk.sync.DailyReview) : CoachReviewDisplayState
+    data object Running : CoachReviewDisplayState
+    data class Failure(val message: String, val manualRetry: Boolean) : CoachReviewDisplayState
+    data object Empty : CoachReviewDisplayState
+}
+
+private fun io.s2qtech.shenk.sync.DailyReviewState.toCoachReviewDisplayState(): CoachReviewDisplayState {
+    review?.let { return CoachReviewDisplayState.Completed(it) }
+    return when {
+        jobState in setOf("PENDING", "RUNNING", "AWAITING_SERVER") -> CoachReviewDisplayState.Running
+        jobState in setOf("RETRY", "FAILED") -> CoachReviewDisplayState.Failure(
+            message = dailyReviewFailureMessage(jobError, jobState == "RETRY"),
+            manualRetry = dailyReviewAllowsManualRetry(jobState),
+        )
+        else -> CoachReviewDisplayState.Empty
+    }
+}
+
 @Composable
 internal fun CoachReviewSection(
     state: io.s2qtech.shenk.sync.DailyReviewState,
@@ -727,73 +747,79 @@ internal fun CoachReviewSection(
             shape = RoundedCornerShape(20.dp),
             border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
         ) {
-            Column(
+            AnimatedContent(
+                targetState = state.toCoachReviewDisplayState(),
+                transitionSpec = { shenkStateContentTransform() },
                 modifier = Modifier.fillMaxWidth().padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                when {
-                    state.review != null -> {
-                        val review = requireNotNull(state.review)
-                        DeepSeekCoachIdentity(
-                            title = "今日简评已生成",
-                            subtitle = "DeepSeek · 结合今天与近期记录",
-                        )
-                        Text(
-                            review.conclusion,
-                            style = MaterialTheme.typography.bodyLarge,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                        TodaySecondaryActionButton(
-                            label = "查看完整简评",
-                            onClick = onOpen,
-                            modifier = Modifier.align(Alignment.End),
-                        )
-                    }
-                    state.jobState in setOf("PENDING", "RUNNING", "AWAITING_SERVER") -> {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
+                label = "coach-review-state",
+            ) { displayState ->
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    when (displayState) {
+                        is CoachReviewDisplayState.Completed -> {
                             DeepSeekCoachIdentity(
-                                title = "正在生成今日简评",
-                                subtitle = "完成后会自动出现在这里",
-                                modifier = Modifier.weight(1f),
+                                title = "今日简评已生成",
+                                subtitle = "DeepSeek · 结合今天与近期记录",
                             )
-                            CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
+                            Text(
+                                displayState.review.conclusion,
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                            TodaySecondaryActionButton(
+                                label = "查看完整简评",
+                                onClick = onOpen,
+                                modifier = Modifier.align(Alignment.End),
+                            )
                         }
-                    }
-                    state.jobState in setOf("RETRY", "FAILED") -> {
-                        DeepSeekCoachIdentity(
-                            title = "简评暂未完成",
-                            subtitle = "DeepSeek · 今日复盘",
-                        )
-                        Text(
-                            dailyReviewFailureMessage(state.jobError, state.jobState == "RETRY"),
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.secondary,
-                        )
-                        TodaySecondaryActionButton(
-                            label = if (dailyReviewAllowsManualRetry(state.jobState)) "查看并重试" else "查看状态",
-                            onClick = onOpen,
-                            modifier = Modifier.align(Alignment.End),
-                        )
-                    }
-                    else -> {
-                        DeepSeekCoachIdentity(
-                            title = "等待今天的记录",
-                            subtitle = "DeepSeek · 今日复盘",
-                        )
-                        Text(
-                            "记录训练、休息或今天的身体感受后，再结合近期状态生成简评。",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.secondary,
-                        )
-                        TodaySecondaryActionButton(
-                            label = "生成今日简评",
-                            onClick = onOpen,
-                            modifier = Modifier.align(Alignment.End),
-                        )
+                        CoachReviewDisplayState.Running -> {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                DeepSeekCoachIdentity(
+                                    title = "正在生成今日简评",
+                                    subtitle = "完成后会自动出现在这里",
+                                    modifier = Modifier.weight(1f),
+                                )
+                                CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
+                            }
+                        }
+                        is CoachReviewDisplayState.Failure -> {
+                            DeepSeekCoachIdentity(
+                                title = "简评暂未完成",
+                                subtitle = "DeepSeek · 今日复盘",
+                            )
+                            Text(
+                                displayState.message,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.secondary,
+                            )
+                            TodaySecondaryActionButton(
+                                label = if (displayState.manualRetry) "查看并重试" else "查看状态",
+                                onClick = onOpen,
+                                modifier = Modifier.align(Alignment.End),
+                            )
+                        }
+                        CoachReviewDisplayState.Empty -> {
+                            DeepSeekCoachIdentity(
+                                title = "等待今天的记录",
+                                subtitle = "DeepSeek · 今日复盘",
+                            )
+                            Text(
+                                "记录训练、休息或今天的身体感受后，再结合近期状态生成简评。",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.secondary,
+                            )
+                            TodaySecondaryActionButton(
+                                label = "生成今日简评",
+                                onClick = onOpen,
+                                modifier = Modifier.align(Alignment.End),
+                            )
+                        }
                     }
                 }
             }

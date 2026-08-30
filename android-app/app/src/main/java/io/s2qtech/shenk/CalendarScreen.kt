@@ -1,10 +1,6 @@
 package io.s2qtech.shenk
 
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.scaleIn
-import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.isSystemInDarkTheme
@@ -199,8 +195,8 @@ fun CalendarScreen(
                     .statusBarsPadding()
                     .padding(top = 66.dp, end = 18.dp)
                     .testTag("calendar-week-distance"),
-                enter = fadeIn() + scaleIn(initialScale = 0.88f),
-                exit = fadeOut() + scaleOut(targetScale = 0.94f),
+                enter = shenkAppearEnter(),
+                exit = shenkAppearExit(),
             ) {
                 WeekDistanceHud(weekDistance)
             }
@@ -222,8 +218,8 @@ fun CalendarScreen(
             AnimatedVisibility(
                 visible = agendaLaidOut && !todayVisible,
                 modifier = Modifier.align(Alignment.BottomCenter),
-                enter = fadeIn() + scaleIn(initialScale = 0.9f),
-                exit = fadeOut() + scaleOut(targetScale = 0.94f),
+                enter = shenkAppearEnter(),
+                exit = shenkAppearExit(),
             ) {
                 ThumbDockButton(
                     onClick = {

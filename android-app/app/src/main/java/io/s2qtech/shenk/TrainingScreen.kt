@@ -7,6 +7,7 @@ import android.view.WindowManager
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -124,6 +125,14 @@ import kotlin.math.abs
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.jsonPrimitive
 
+private enum class TrainingSurface { LIBRARY, PREVIEW, ACTIVE }
+
+private fun TimerEngineState.trainingSurface(): TrainingSurface = when (this) {
+    TimerEngineState.IDLE -> TrainingSurface.LIBRARY
+    TimerEngineState.PREVIEW -> TrainingSurface.PREVIEW
+    else -> TrainingSurface.ACTIVE
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TrainingRoute(
@@ -154,6 +163,7 @@ fun TrainingRoute(
     var preferredScene by remember { mutableStateOf<RoutineScene?>(null) }
     var launchNotice by remember { mutableStateOf<String?>(null) }
     var launchContext by remember { mutableStateOf<TrainingLaunchRequest?>(null) }
+    var retainedPreviewSnapshot by remember { mutableStateOf<TimerSnapshot?>(null) }
 
     LaunchedEffect(library) {
         if (library != null) onReady()
@@ -193,6 +203,9 @@ fun TrainingRoute(
         cuePlayer?.let { player -> coordinator.cues.collect(player::speak) }
     }
     LaunchedEffect(snapshot.state, snapshot.request?.sessionId) {
+        if (snapshot.state == TimerEngineState.PREVIEW) {
+            retainedPreviewSnapshot = snapshot
+        }
         if (snapshot.state in setOf(TimerEngineState.COMPLETED, TimerEngineState.STOPPED)) {
             completion = coordinator.terminalFact()
         }
@@ -216,75 +229,89 @@ fun TrainingRoute(
         coordinator.reset()
     }
 
-    when (snapshot.state) {
-        TimerEngineState.IDLE -> if (library == null) {
-            Box(
-                Modifier.fillMaxSize().testTag("training-screen").padding(horizontal = 22.dp),
-                contentAlignment = Alignment.Center,
-            ) {
-                ShenkStatePanel(
-                    title = "正在读取方案库",
-                    message = "优先打开本机缓存的可执行方案，暂时不需要等待网络。",
-                    tone = ShenkStateTone.PROGRESS,
-                    modifier = Modifier.testTag("training-loading"),
-                )
-            }
-        } else RoutineLibraryScreen(
-            library = requireNotNull(library),
-            pending = pending,
-            preferredScene = preferredScene,
-            notice = launchNotice,
-            onSelect = { routine ->
-                val request = launchContext
-                coordinator.select(
-                    routine = routine,
-                    date = request?.date ?: java.time.LocalDate.now(),
-                    dailyPlanItemId = request?.guidance?.dailyPlanItemId,
-                    planTemplateId = request?.guidance?.planTemplateId,
-                )
-                launchContext = null
-            },
-            onPending = { completion = it.session },
-            onIgnorePending = { item ->
-                scope.launch {
-                    sessionRepository.ignoreCompletion(item.session)
-                    SyncScheduler(context).enqueue()
+    val trainingSurface = snapshot.state.trainingSurface()
+    AnimatedContent(
+        targetState = trainingSurface,
+        transitionSpec = {
+            shenkHorizontalContentTransform(forward = targetState.ordinal > initialState.ordinal)
+        },
+        label = "training-surface",
+        modifier = Modifier.fillMaxSize(),
+    ) { surface ->
+        when (surface) {
+            TrainingSurface.LIBRARY -> if (library == null) {
+                Box(
+                    Modifier.fillMaxSize().testTag("training-screen").padding(horizontal = 22.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    ShenkStatePanel(
+                        title = "正在读取方案库",
+                        message = "优先打开本机缓存的可执行方案，暂时不需要等待网络。",
+                        tone = ShenkStateTone.PROGRESS,
+                        modifier = Modifier.testTag("training-loading"),
+                    )
                 }
-            },
-            onDeleteRoutine = { routine ->
-                scope.launch {
-                    if (routineRepository.deleteRoutine(routine.id)) {
+            } else RoutineLibraryScreen(
+                library = requireNotNull(library),
+                pending = pending,
+                preferredScene = preferredScene,
+                notice = launchNotice,
+                onSelect = { routine ->
+                    val request = launchContext
+                    coordinator.select(
+                        routine = routine,
+                        date = request?.date ?: java.time.LocalDate.now(),
+                        dailyPlanItemId = request?.guidance?.dailyPlanItemId,
+                        planTemplateId = request?.guidance?.planTemplateId,
+                    )
+                    launchContext = null
+                },
+                onPending = { completion = it.session },
+                onIgnorePending = { item ->
+                    scope.launch {
+                        sessionRepository.ignoreCompletion(item.session)
                         SyncScheduler(context).enqueue()
                     }
-                }
-            },
-            onReturnToToday = onReturnToToday,
-        )
-        TimerEngineState.PREVIEW -> RoutinePreviewScreen(
-            snapshot = snapshot,
-            onBack = coordinator::reset,
-            onStart = {
-                val missing = buildList {
-                    if (context.checkSelfPermission(Manifest.permission.READ_PHONE_STATE) != PackageManager.PERMISSION_GRANTED) {
-                        add(Manifest.permission.READ_PHONE_STATE)
+                },
+                onDeleteRoutine = { routine ->
+                    scope.launch {
+                        if (routineRepository.deleteRoutine(routine.id)) {
+                            SyncScheduler(context).enqueue()
+                        }
                     }
-                    if (context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
-                        add(Manifest.permission.POST_NOTIFICATIONS)
+                },
+                onReturnToToday = onReturnToToday,
+            )
+            TrainingSurface.PREVIEW -> RoutinePreviewScreen(
+                snapshot = if (snapshot.state == TimerEngineState.PREVIEW) {
+                    snapshot
+                } else {
+                    retainedPreviewSnapshot ?: snapshot
+                },
+                onBack = coordinator::reset,
+                onStart = {
+                    val missing = buildList {
+                        if (context.checkSelfPermission(Manifest.permission.READ_PHONE_STATE) != PackageManager.PERMISSION_GRANTED) {
+                            add(Manifest.permission.READ_PHONE_STATE)
+                        }
+                        if (context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+                            add(Manifest.permission.POST_NOTIFICATIONS)
+                        }
                     }
-                }
-                if (missing.isNotEmpty()) permissionLauncher.launch(missing.toTypedArray())
-                coordinator.start()
-            },
-        )
-        else -> ActiveTimerScreen(
-            snapshot = snapshot,
-            voiceNotice = voiceNotice,
-            onPause = { if (snapshot.state == TimerEngineState.RUNNING) coordinator.pause() else coordinator.resume() },
-            onPrevious = coordinator::previous,
-            onNext = coordinator::next,
-            onStop = { coordinator.stop() },
-            onFinish = { completion = coordinator.terminalFact() },
-        )
+                    if (missing.isNotEmpty()) permissionLauncher.launch(missing.toTypedArray())
+                    coordinator.start()
+                },
+            )
+            TrainingSurface.ACTIVE -> ActiveTimerScreen(
+                snapshot = snapshot,
+                voiceNotice = voiceNotice,
+                onPause = { if (snapshot.state == TimerEngineState.RUNNING) coordinator.pause() else coordinator.resume() },
+                onPrevious = coordinator::previous,
+                onNext = coordinator::next,
+                onStop = { coordinator.stop() },
+                onFinish = { completion = coordinator.terminalFact() },
+            )
+        }
     }
 
     completion?.let { session ->
@@ -379,7 +406,7 @@ internal fun RoutineLibraryScreen(
             TrainingSceneDock(
                 pagerState = scenePager,
                 scenes = scenes,
-                onSelect = { page -> scope.launch { scenePager.animateScrollToPage(page) } },
+                onSelect = { page -> scope.launch { scenePager.animateShenkToPage(page) } },
                 modifier = Modifier.testTag("training-scene-dock"),
             )
         },

@@ -103,7 +103,7 @@ fun ShenkApp(
     }
     BackHandler(enabled = secondary == null && pager.currentPage != 1) {
         scope.launch {
-            pager.animateScrollToPage(page = 1)
+            pager.animateShenkToPage(page = 1)
         }
     }
 
@@ -243,5 +243,5 @@ internal fun initialPrimaryPageForTimerState(state: TimerEngineState): Int =
     if (state == TimerEngineState.IDLE) TODAY_PAGE else TRAINING_PAGE
 
 private suspend fun androidx.compose.foundation.pager.PagerState.animatePrimaryPage(page: Int) {
-    animateScrollToPage(page = page)
+    animateShenkToPage(page = page)
 }

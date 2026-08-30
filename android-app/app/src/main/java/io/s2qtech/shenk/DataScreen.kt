@@ -73,7 +73,7 @@ fun DataScreen(
         MetricTabs(
             pagerState = pagerState,
             kinds = kinds,
-            onSelect = { page -> scope.launch { pagerState.animateScrollToPage(page) } },
+            onSelect = { page -> scope.launch { pagerState.animateShenkToPage(page) } },
         )
         HorizontalPager(
             state = pagerState,

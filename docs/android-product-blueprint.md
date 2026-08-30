@@ -299,6 +299,8 @@ All phone bottom sheets follow one sizing contract. The sheet wraps its content 
 
 The Data sheet is a persistent inspection surface rather than a transient chooser. It does not close from outside taps, small diagonal movement, or horizontal paging. A visible handle communicates its vertical behavior, but a deliberate downward gesture anywhere inside the sheet closes it; the sheet must follow the finger continuously and settle or return through the native bottom-sheet motion instead of disappearing after a threshold. Android system back remains the non-gesture alternative. Its four metric labels and chart pages share one pager state: tapping a label animates to that page, swiping the chart moves the selected indicator continuously, and both paths retain an accessible tab alternative.
 
+The final motion slice uses one restrained Android motion contract: quick, standard, and emphasized transitions are `180 ms`, `240 ms`, and `280 ms`, with one shared spatial easing curve. Finger-driven Calendar/Today/Training and metric/scene paging remains directly coupled to the gesture; the duration tokens apply only to existing programmatic page changes and stable content-state transitions. Calendar feedback controls keep their existing visibility conditions, Training keeps the accepted Library → Preview → Active hierarchy, and the Today coach-review card keeps the same four business states and actions. When system animators are disabled, these additions resolve immediately. This slice does not authorize layout, copy, navigation, gesture-outcome, or business-state changes.
+
 ## 13. Phase 1 Success Criteria
 
 The first release succeeds when the user can stop opening the Web app for most daily tasks:
