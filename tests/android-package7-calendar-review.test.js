@@ -39,8 +39,8 @@ test('daily review sheet is date aware and supports returning to date details', 
   assert.match(sheet, /val reviewLabel = if \(isToday\) "今日简评" else "当日简评"/);
   assert.match(sheet, /onBack: \(\(\) -> Unit\)\? = null/);
   assert.match(sheet, /Text\("返回日期详情"\)/);
-  assert.match(sheet, /title = "今日评价"/);
-  assert.match(sheet, /ReviewSectionCard\(title = "复盘分析"/);
+  assert.match(sheet, /Text\(reviewLabel, style = MaterialTheme\.typography\.headlineLarge/);
+  assert.match(sheet, /ReviewTextSection\(title = "复盘分析"/);
   assert.match(sheet, /title = "接下来怎么做"/);
   assert.match(sheet, /title = "需要留意"/);
   assert.match(sheet, /title = "判断依据"/);
