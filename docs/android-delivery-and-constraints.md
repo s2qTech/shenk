@@ -89,6 +89,8 @@ Exit: the user can rely on Android for the defined 80% daily workflow.
 
 Accepted on 2026-08-22 with signed private RC `1.0.0-rc.1`: external signing and checksum archive, data-preserving Xiaomi 14 update, retained business data, signed-release critical navigation, backup reachability, system-state verification, and rollback revision record all passed.
 
+Follow-up release closure passed on 2026-08-31 with signed private RC `1.0.0-rc.2` / `versionCode 12`: the accepted visual and motion implementation was built from committed source, archived with a known-good forward-rollback revision, installed over RC1 with the same certificate and unchanged first-install identity, and passed read-only navigation, Plan-entry, Data-paging, system-state, cleanup, and crash-buffer checks. No current design, feature, entity, ownership, or Contract behavior changed during release closure.
+
 Phase-2 work starts only after Package 8: widget, Health Connect/Xiaomi data, and exercise animation assets.
 
 ## 2. Non-negotiable Product Boundaries

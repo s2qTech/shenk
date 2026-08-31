@@ -1,6 +1,6 @@
 # Android Package 8: Hardening and Private Release
 
-Updated: 2026-08-22
+Updated: 2026-08-31
 Status: Complete
 Overall delivery progress: `9 / 9`
 
@@ -112,6 +112,14 @@ Implementation notes:
 - Xiaomi 14 updated in place from versionCode 10 to 11 with the same signing certificate and unchanged first-install identity. Today retained existing content, Calendar retained actual records and formal plans, Training retained the routine library, system back returned to Today, and Settings -> Data backup remained reachable.
 - The signed Android 16 cold-launch gate reported 3015 ms `WaitTime`. Auto-rotate remained off, font and animation scales remained `1.0`, no test package or active Shenk notification remained, and the temporary signing-store copy plus temporary build ACL were removed.
 
+Follow-up RC2 release closure:
+
+- `1.0.0-rc.2` / `versionCode 12` was built from committed revision `6b6c294`, with the accepted final-motion revision `894008b` recorded as the known-good forward-rollback source.
+- All 62 repository tests and `package8FoundationCheck` passed before the signed `package8ReleaseCandidateCheck`. The private archive records the exact APK, checksum, byte size, signing-certificate digest, source revision, and rollback revision without any signing credential.
+- Xiaomi 14 updated in place from versionCode 11 to 12 with the same certificate and unchanged first-install identity. Android reported a 948 ms cold launch.
+- Read-only device acceptance covered Calendar–Today–Training paging, Calendar return-to-today, routine Preview → Training → Today system-back hierarchy, Data four-tab horizontal paging, both Plan subpages, Settings sections, and return to Today. No generation, import, training start, delete, or business save was triggered.
+- Crash buffer, active-notification, orientation, font-scale, animation-scale, temporary UI-dump, temporary signing-store, and temporary signing-file-permission checks all passed. Authenticated R2/Worker publication remains optional and was not changed.
+
 ## Current Gate
 
 `android-app/gradlew.bat package8FoundationCheck` remains the credential-free CI gate. `package8ReleaseCandidateCheck` is the private-machine distribution gate and requires complete external signing material plus `SHENK_REQUIRE_RELEASE_SIGNING=true`.
@@ -119,5 +127,7 @@ Implementation notes:
 P8.0 and P8.1 passed on 2026-08-10. P8.2 passed on 2026-08-12: the authenticated no-release Worker route is deployed; all Node and Package 8 foundation gates passed; Xiaomi 14 accepted a data-preserving same-package/same-signature update; the focused on-device test verified APK package, version, SHA-256, and signing-certificate inspection; and a six-second cold-start check showed Today with zero update prompts while no release metadata was configured. The temporary instrumentation APK was removed after the test. P8.3 passed on 2026-08-12: JVM coverage verifies delivery-status composition and Xiaomi-family detection; the Package 8 foundation gate passed; Xiaomi 14 accepted the data-preserving install and the focused device test verified real notification state plus public system-setting targets. Device diagnostics found notifications currently disabled by HyperOS (`importance=NONE` / AppOps `ignore`), which the app now exposes instead of silently implying delivery. No permission or reminder setting was changed, and the temporary instrumentation APK was removed. P8.4 passed automated and Xiaomi 14 gates on 2026-08-12. The median debug cold start improved from 579 ms to 505 ms; four primary-page transitions were 1.17% janky at p95 19 ms; 12 calendar gestures were 0.09% janky at p95 25 ms; the 400-day/560-record projection completed in 123 ms; a full 100-operation outbox batch completed in 716 ms; and one virtual timer hour completed its 14,400 ticks in 40 ms. P8.5 passed its automated and Xiaomi 14 gates on 2026-08-15: contrast, 1.5x text, 48 dp touch targets, Android accessibility-node labels/actions, and zero-animation behavior were accepted, while the absence of an installed TalkBack package is recorded above. The temporary test package was removed and all changed device settings were restored. P8.6 passed on 2026-08-22: all 61 cross-repository tests, Android JVM gates, debug/release lint and assemblies, and 42 Xiaomi 14 isolated instrumentation tests passed. The production package retained its original install identity and Room database; the temporary synthetic backup URI and test package were removed.
 
 P8.7 passed on 2026-08-22 with the same 61 cross-repository tests, Package 8 Android gates, 42 isolated device tests, three read-only production-package checks, data-preserving installation, 2110 ms cold launch, primary-space navigation, backup-entry reachability, orientation/system-state verification, and complete test-artifact cleanup. P8.8 then passed with 62 repository tests, the configuration-cache-compatible signed release gate, verifiable private archive, signed data-preserving Xiaomi 14 update, retained Today/Calendar/Training data and navigation, backup-entry reachability, system-state preservation, and signing-artifact cleanup.
+
+The 2026-08-31 RC2 follow-up then repeated the 62-test and signed-release gates against the accepted visual/motion source, archived the signed candidate with rollback metadata, updated Xiaomi 14 in place from versionCode 11 to 12, and passed the read-only critical-path and cleanup checks recorded above.
 
 Package 8 is complete. Native Android phase-1 delivery is `9 / 9`.

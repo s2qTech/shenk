@@ -1,7 +1,7 @@
 # Android Private Update Operations
 
-Updated: 2026-08-22
-Status: accepted private-release runbook; signed P8.8 release candidate installed, authenticated publication remains optional
+Updated: 2026-08-31
+Status: accepted private-release runbook; signed RC2 installed, authenticated publication remains optional
 
 ## Trust boundary
 
@@ -30,7 +30,7 @@ The example is synthetic. Never commit a real release manifest, APK, signing cer
 ## P8.8 publication sequence
 
 1. Establish the intended long-lived signing identity outside Git. Before any install, compare its certificate with the certificate of the application already installed on Xiaomi 14. A different certificate cannot perform a data-preserving Android update; stop for an explicit signing/data-transition decision and never uninstall or clear the existing app as a shortcut.
-2. Check out a clean accepted source revision with a `versionCode` greater than every installed or previously published build. The first candidate is `1.0.0-rc.1` / `11`.
+2. Check out a clean accepted source revision with a `versionCode` greater than every installed or previously published build. The first candidate was `1.0.0-rc.1` / `11`; the current locally accepted candidate is `1.0.0-rc.2` / `12`.
 3. Supply all external `SHENK_RELEASE_*` properties and run `android-app/ci/build-private-release.ps1 -RollbackRevision <known-good-revision>`. If the local build sandbox cannot read the permanent store directly, pass a short-lived external copy with `-SigningStoreFile <temporary-path>` and remove it immediately after the build. The script rejects repository-local overrides, invokes `package8ReleaseCandidateCheck` with signing required, verifies the exact APK with Android build tools, and creates the ignored private release record.
 4. Run `android-app/ci/verify-private-release-device.ps1 -ApkPath <archived-apk> -AdbPath <adb>` on the connected Xiaomi 14. The script verifies application ID, increasing version, signing-certificate equality, `adb install -r`, unchanged first-install identity, installed version, and cold launch. It contains no uninstall or data-clear path.
 5. Confirm the accepted daily critical path and archive the release record outside the repository. Only source revision, version, checksum, byte size, signing certificate digest, build time, and rollback revision belong in that record; signing secrets remain external.
