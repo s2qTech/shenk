@@ -5,6 +5,8 @@ import io.s2qtech.shenk.timer.RuntimeStep
 import io.s2qtech.shenk.timer.TimerEngineState
 import io.s2qtech.shenk.timer.TimerSnapshot
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class TrainingTimerPresentationTest {
@@ -49,6 +51,34 @@ class TrainingTimerPresentationTest {
         assertEquals(2, initialPrimaryPageForTimerState(TimerEngineState.PAUSED))
         assertEquals(2, initialPrimaryPageForTimerState(TimerEngineState.COMPLETED))
         assertEquals(2, initialPrimaryPageForTimerState(TimerEngineState.STOPPED))
+    }
+
+    @Test
+    fun `process recovered active timer is revealed after asynchronous restore`() {
+        assertTrue(
+            shouldRevealRecoveredTimer(
+                TimerSnapshot(
+                    state = TimerEngineState.PAUSED,
+                    interruptionReason = "recovered_after_process_death",
+                ),
+            ),
+        )
+        assertFalse(
+            shouldRevealRecoveredTimer(
+                TimerSnapshot(
+                    state = TimerEngineState.PAUSED,
+                    interruptionReason = "phone_call",
+                ),
+            ),
+        )
+        assertFalse(
+            shouldRevealRecoveredTimer(
+                TimerSnapshot(
+                    state = TimerEngineState.IDLE,
+                    interruptionReason = "recovered_after_process_death",
+                ),
+            ),
+        )
     }
 
     private fun step(

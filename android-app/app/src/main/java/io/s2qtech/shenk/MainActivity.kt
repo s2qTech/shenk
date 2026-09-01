@@ -108,6 +108,7 @@ class MainActivity : ComponentActivity() {
 
     companion object {
         const val EXTRA_OPEN_SPACE = "io.s2qtech.shenk.OPEN_SPACE"
+        const val OPEN_SPACE_TRAINING = "training"
         private const val SPLASH_EXIT_DURATION_MILLIS = 220L
         private const val PRIMARY_UI_STARTUP_TIMEOUT_MILLIS = 5_000L
     }

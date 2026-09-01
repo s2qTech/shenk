@@ -5,6 +5,7 @@ import android.app.Activity
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
+import android.app.PendingIntent
 import android.app.Service
 import android.content.Context
 import android.content.Intent
@@ -55,10 +56,20 @@ class NativeTimerForegroundService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        val openTimer = Intent(this, MainActivity::class.java)
+            .putExtra(MainActivity.EXTRA_OPEN_SPACE, MainActivity.OPEN_SPACE_TRAINING)
+            .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+        val openTimerPendingIntent = PendingIntent.getActivity(
+            this,
+            NOTIFICATION_ID,
+            openTimer,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
         val notification = NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(android.R.drawable.ic_media_play)
             .setContentTitle("训练计时进行中")
             .setContentText("返回身刻查看当前动作")
+            .setContentIntent(openTimerPendingIntent)
             .setOngoing(true)
             .setSilent(true)
             .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)

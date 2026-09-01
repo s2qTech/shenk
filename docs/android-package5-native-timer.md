@@ -2,7 +2,7 @@
 
 Status: accepted on Xiaomi 14 on 2026-07-19; Android delivery progress `6 / 9`.
 
-Updated: 2026-08-11
+Updated: 2026-09-01
 
 Package 5 acceptance also includes a corrective gate for previously delivered native surfaces: a clean install must expose the existing-data connection flow, and Today/Calendar must render as intentional native product surfaces rather than unstyled functional skeletons. This correction does not start Package 6 or change package progress.
 
@@ -69,6 +69,8 @@ Required Xiaomi 14 acceptance:
 Acceptance result: passed. The primary device completed the routine, rotation, persistence, offline/sync, completion, portrait/landscape UI, Chinese TTS, upcoming-action, and music-ducking gates without a crash or duplicate record.
 
 The 2026-08-15 orientation corrective gate added the missing inverse behavior: Today, Calendar, Training library, and timer preview remain portrait; timer execution may rotate; terminal and reset transitions return to portrait. The policy is Activity-scoped so it continues to follow an active timer while the primary pager is showing Today.
+
+The 2026-09-01 lifecycle corrective gate closes the remaining process-recovery navigation gap. If an active timer is restored asynchronously after the primary pager has initialized, the app reveals the Training surface after pager warm-up instead of leaving the user on a pager-locked Today or Calendar page. The foreground-service notification now carries an explicit immutable content intent that returns to the same Training surface. Ordinary phone-call pauses do not force navigation, the active-timer pager lock remains unchanged, and no timer fact, formal record, plan, or routine semantics changed.
 
 ## 2026-07-27 Corrective Gate
 

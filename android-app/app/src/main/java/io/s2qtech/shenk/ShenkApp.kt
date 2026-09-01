@@ -35,6 +35,7 @@ import io.s2qtech.shenk.sync.RoutineLibraryRepository
 import io.s2qtech.shenk.sync.TodayRecordRepository
 import io.s2qtech.shenk.model.TodayGuidance
 import io.s2qtech.shenk.timer.TimerEngineState
+import io.s2qtech.shenk.timer.TimerSnapshot
 import java.time.LocalDate
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
@@ -62,13 +63,17 @@ fun ShenkApp(
     onPrimaryPagesReady: () -> Unit = {},
 ) {
     val coordinator = remember { timerCoordinator() }
-    val initialTimerEngineState = remember(coordinator) { coordinator.snapshot.value.state }
+    val initialTimerSnapshot = remember(coordinator) { coordinator.snapshot.value }
+    val initialTimerEngineState = initialTimerSnapshot.state
     val initialPrimaryPage = remember(initialTimerEngineState) {
         initialPrimaryPageForTimerState(initialTimerEngineState)
     }
     val timerEngineState by remember(coordinator) {
         coordinator.snapshot.map { it.state }.distinctUntilChanged()
     }.collectAsState(initial = initialTimerEngineState)
+    val recoveredTimerNeedsReveal by remember(coordinator) {
+        coordinator.snapshot.map(::shouldRevealRecoveredTimer).distinctUntilChanged()
+    }.collectAsState(initial = shouldRevealRecoveredTimer(initialTimerSnapshot))
     val pager = rememberPagerState(initialPage = initialPrimaryPage, pageCount = { 3 })
     val scope = rememberCoroutineScope()
     var secondary by remember { mutableStateOf<SecondarySpace?>(null) }
@@ -83,7 +88,7 @@ fun ShenkApp(
             withFrameNanos { }
             pager.scrollToPage(TRAINING_PAGE)
             withFrameNanos { }
-            pager.scrollToPage(initialPrimaryPage)
+            pager.scrollToPage(initialPrimaryPageForTimerState(coordinator.snapshot.value.state))
             withFrameNanos { }
             primaryPagerWarmed = true
             onPrimaryPagesReady()
@@ -95,6 +100,16 @@ fun ShenkApp(
             pendingFeedback = requestedSpace == "feedback"
             secondary = SecondarySpace.PLANNING
             onExternalRequestConsumed()
+        } else if (requestedSpace == MainActivity.OPEN_SPACE_TRAINING) {
+            pendingFeedback = false
+            secondary = null
+            pager.scrollToPage(TRAINING_PAGE)
+            onExternalRequestConsumed()
+        }
+    }
+    LaunchedEffect(recoveredTimerNeedsReveal, primaryPagerWarmed) {
+        if (primaryPagerWarmed && recoveredTimerNeedsReveal) {
+            pager.scrollToPage(TRAINING_PAGE)
         }
     }
 
@@ -241,6 +256,10 @@ private const val PRIMARY_PAGE_RETENTION_RADIUS = 2
 
 internal fun initialPrimaryPageForTimerState(state: TimerEngineState): Int =
     if (state == TimerEngineState.IDLE) TODAY_PAGE else TRAINING_PAGE
+
+internal fun shouldRevealRecoveredTimer(snapshot: TimerSnapshot): Boolean =
+    snapshot.state in setOf(TimerEngineState.RUNNING, TimerEngineState.PAUSED) &&
+        snapshot.interruptionReason == "recovered_after_process_death"
 
 private suspend fun androidx.compose.foundation.pager.PagerState.animatePrimaryPage(page: Int) {
     animateShenkToPage(page = page)
