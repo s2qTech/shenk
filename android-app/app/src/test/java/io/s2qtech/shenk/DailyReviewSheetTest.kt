@@ -16,6 +16,7 @@ class DailyReviewSheetTest {
                 reviewPresent = false,
                 jobState = null,
                 attempted = false,
+                hasConfirmedDayRecord = true,
             ),
         )
     }
@@ -30,6 +31,7 @@ class DailyReviewSheetTest {
                 reviewPresent = false,
                 jobState = null,
                 attempted = false,
+                hasConfirmedDayRecord = true,
             ),
         )
     }
@@ -37,11 +39,22 @@ class DailyReviewSheetTest {
     @Test
     fun existingOrRunningReviewIsNeverAutoQueuedAgain() {
         assertFalse(
-            shouldAutoStartDailyReview(true, true, emptyList(), reviewPresent = true, jobState = null, attempted = false),
+            shouldAutoStartDailyReview(
+                true, true, emptyList(), reviewPresent = true, jobState = null,
+                attempted = false, hasConfirmedDayRecord = true,
+            ),
         )
         assertFalse(
-            shouldAutoStartDailyReview(true, true, emptyList(), reviewPresent = false, jobState = "PENDING", attempted = false),
+            shouldAutoStartDailyReview(
+                true, true, emptyList(), reviewPresent = false, jobState = "PENDING",
+                attempted = false, hasConfirmedDayRecord = true,
+            ),
         )
+    }
+
+    @Test
+    fun unrecordedDayCannotAutoGenerateEvenWithCompleteMorningStatus() {
+        assertFalse(shouldAutoStartDailyReview(true, true, emptyList(), false, null, false, false))
     }
 
     @Test

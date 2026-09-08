@@ -136,18 +136,12 @@ data class TodayGuidance(
 
 enum class TodayPrimaryAction {
     NONE,
-    OPEN_TIMER,
     RECORD_DAY,
 }
 
 object TodayPrimaryActionResolver {
-    private val directRecordTypes = setOf("rest", "easy_walk", "quality_walk")
-
     fun resolve(guidance: TodayGuidance): TodayPrimaryAction = when {
         guidance.source == GuidanceSource.ACTUAL -> TodayPrimaryAction.NONE
-        guidance.source != GuidanceSource.FORMAL_PLAN -> TodayPrimaryAction.RECORD_DAY
-        guidance.trainingType in directRecordTypes -> TodayPrimaryAction.RECORD_DAY
-        !guidance.routineId.isNullOrBlank() -> TodayPrimaryAction.OPEN_TIMER
         else -> TodayPrimaryAction.RECORD_DAY
     }
 }

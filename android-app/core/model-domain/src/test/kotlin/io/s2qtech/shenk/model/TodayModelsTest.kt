@@ -51,7 +51,7 @@ class TodayModelsTest {
     }
 
     @Test
-    fun onlyRunnableFormalPlanOpensTimer() {
+    fun everyUnrecordedDayOpensRecordingRegardlessOfRoutine() {
         val strength = TodayGuidance(
             source = GuidanceSource.FORMAL_PLAN,
             title = "力量训练",
@@ -61,7 +61,7 @@ class TodayModelsTest {
         val strengthWithoutRoutine = strength.copy(routineId = null)
         val suggestionWithRoutine = strength.copy(source = GuidanceSource.LOCAL_SUGGESTION)
 
-        assertEquals(TodayPrimaryAction.OPEN_TIMER, TodayPrimaryActionResolver.resolve(strength))
+        assertEquals(TodayPrimaryAction.RECORD_DAY, TodayPrimaryActionResolver.resolve(strength))
         assertEquals(TodayPrimaryAction.RECORD_DAY, TodayPrimaryActionResolver.resolve(strengthWithoutRoutine))
         assertEquals(TodayPrimaryAction.RECORD_DAY, TodayPrimaryActionResolver.resolve(suggestionWithRoutine))
     }

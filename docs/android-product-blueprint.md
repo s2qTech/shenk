@@ -133,7 +133,7 @@ Today is one adaptable canvas rather than a dashboard of nested cards.
 
 - User may add a delta check-in; omitted fields inherit the morning check-in.
 - Plan and relevant safety notes remain visible.
-- If the formal plan requires a timer routine, Today can enter Training with the matching routine selected.
+- Today’s day-level action opens “记录今日情况” regardless of the plan’s routine reference. Training is entered independently through the Training canvas; recording never requires choosing or linking a routine.
 
 ### Completed State
 
@@ -255,10 +255,12 @@ Walking records may come from wearable data or manual entry and do not require a
 ## 10. Daily AI Review
 
 - Runs after a formal workout, confirmed rest, or explicit skip is recorded.
+- Without a confirmed day record, generation is unavailable, including explicit partial generation. Morning status, measurements, plans, and unconfirmed timer facts alone do not qualify.
 - Covers rest days and may point out avoidable inactivity, but remains factual and professional.
 - Missing key status data prompts the user to complete it or explicitly generate from available data.
 - Offline requests are queued and generated automatically when connectivity returns.
 - Correcting the day regenerates the review; only the latest review is prominent.
+- A completed review also offers explicit regeneration with unchanged facts. Keep the previous review visible until the replacement succeeds, and never duplicate a pending or running job.
 - The review never modifies a formal plan.
 - Before a review exists, Today presents a compact coach-identity state with one clear generation action. Empty, running, failed, and completed review states keep the same container anatomy so the section does not change from an orphaned text link into an unrelated card after generation.
 

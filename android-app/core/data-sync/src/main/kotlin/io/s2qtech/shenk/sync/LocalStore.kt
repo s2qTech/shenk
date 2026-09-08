@@ -177,6 +177,9 @@ interface AiReviewJobDao {
     @Query("SELECT * FROM ai_review_jobs WHERE date = :date AND input_digest = :digest LIMIT 1")
     suspend fun find(date: String, digest: String): AiReviewJobEntity?
 
+    @Query("SELECT * FROM ai_review_jobs WHERE date = :date AND state IN ('PENDING', 'RUNNING', 'AWAITING_SERVER', 'RETRY') LIMIT 1")
+    suspend fun findActive(date: String): AiReviewJobEntity?
+
     @Query("UPDATE ai_review_jobs SET state = :state, attempts = :attempts, next_attempt_at = :nextAttemptAt, last_error = :lastError, updated_at = :updatedAt WHERE job_id = :jobId")
     suspend fun updateState(jobId: String, state: String, attempts: Int, nextAttemptAt: Long, lastError: String?, updatedAt: Long)
 

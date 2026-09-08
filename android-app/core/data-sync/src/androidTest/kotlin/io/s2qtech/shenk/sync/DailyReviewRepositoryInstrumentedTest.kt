@@ -8,6 +8,10 @@ import io.s2qtech.shenk.model.SharedEntityOwner
 import io.s2qtech.shenk.model.SharedRecord
 import java.time.LocalDate
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
@@ -64,6 +68,7 @@ class DailyReviewRepositoryInstrumentedTest {
     fun missingMorningStatusRequiresExplicitPartialGeneration() {
         runBlocking {
             secrets.put(SecretName.AI_PROVIDER_KEY, "synthetic-key")
+            saveDayRecord()
 
             val result = reviews.enqueue(TEST_DATE)
 
@@ -77,6 +82,7 @@ class DailyReviewRepositoryInstrumentedTest {
     @Test
     fun missingProviderKeyDoesNotCreateAnUnprocessableJob() {
         runBlocking {
+            saveDayRecord()
             records.persistAndEnqueue(morningCheckin("morning-1", fatigue = 2), SharedEntityOwner.RECORD)
 
             val result = reviews.enqueue(TEST_DATE)
@@ -91,6 +97,7 @@ class DailyReviewRepositoryInstrumentedTest {
     fun configuredReviewIsQueuedWithDeterministicDigest() {
         runBlocking {
             secrets.put(SecretName.AI_PROVIDER_KEY, "synthetic-key")
+            saveDayRecord()
             records.persistAndEnqueue(morningCheckin("morning-1", fatigue = 2), SharedEntityOwner.RECORD)
             val prepared = reviews.prepare(TEST_DATE)
 
@@ -135,6 +142,7 @@ class DailyReviewRepositoryInstrumentedTest {
     fun explicitRetryReactivatesDelayedJobImmediately() {
         runBlocking {
             secrets.put(SecretName.AI_PROVIDER_KEY, "synthetic-key")
+            saveDayRecord()
             records.persistAndEnqueue(morningCheckin("morning-retry", fatigue = 2), SharedEntityOwner.RECORD)
             val prepared = reviews.prepare(TEST_DATE)
             database.aiReviewJobs().put(
@@ -167,6 +175,7 @@ class DailyReviewRepositoryInstrumentedTest {
     fun correctedStatusSupersedesOldQueuedInput() {
         runBlocking {
             secrets.put(SecretName.AI_PROVIDER_KEY, "synthetic-key")
+            saveDayRecord()
             records.persistAndEnqueue(morningCheckin("morning-1", fatigue = 2), SharedEntityOwner.RECORD)
             val first = reviews.prepare(TEST_DATE)
             reviews.enqueue(TEST_DATE)
@@ -212,6 +221,104 @@ class DailyReviewRepositoryInstrumentedTest {
             assertFalse(succeeded)
             assertEquals("working-key", secrets.get(SecretName.AI_PROVIDER_KEY))
         }
+    }
+
+    @Test
+    fun emptyOrStatusOnlyDayCannotGenerateEvenExplicitly() {
+        runBlocking {
+            secrets.put(SecretName.AI_PROVIDER_KEY, "synthetic-key")
+            assertTrue(reviews.enqueue(TEST_DATE, allowIncomplete = true).dayRecordMissing)
+            records.persistAndEnqueue(morningCheckin("morning-only", fatigue = 2), SharedEntityOwner.RECORD)
+            assertTrue(reviews.enqueue(TEST_DATE, allowIncomplete = true, regenerate = true).dayRecordMissing)
+            saveDayRecord("planned")
+            assertTrue(reviews.enqueue(TEST_DATE, allowIncomplete = true).dayRecordMissing)
+            assertEquals(null, database.aiReviewJobs().nextDue(Long.MAX_VALUE))
+        }
+    }
+
+    @Test
+    fun confirmedTrainingRestAndSkipPermitPartialReviewButDeletedRecordDoesNot() {
+        runBlocking {
+            secrets.put(SecretName.AI_PROVIDER_KEY, "synthetic-key")
+            listOf("completed", "rested", "skipped").forEach { status ->
+                saveDayRecord(status)
+                assertTrue(reviews.prepare(TEST_DATE).hasConfirmedDayRecord)
+                assertTrue(reviews.enqueue(TEST_DATE, allowIncomplete = true).queued)
+            }
+            CalendarRecordRepository(records).deleteTrainingLog("synthetic-day-record")
+            assertTrue(reviews.enqueue(TEST_DATE, allowIncomplete = true).dayRecordMissing)
+            assertFalse(reviews.prepare(TEST_DATE.minusDays(1)).hasConfirmedDayRecord)
+        }
+    }
+
+    @Test
+    fun regenerationUsesNewExecutionWithSameDigestAndPreservesOldReviewUntilSuccess() {
+        runBlocking {
+            secrets.put(SecretName.AI_PROVIDER_KEY, "synthetic-key")
+            secrets.put(SecretName.SHENK_TOKEN, "synthetic-token")
+            preferences.setApiBase("https://example.invalid/api")
+            var fail = false
+            reviews = DailyReviewRepository(database, records, preferences, secrets, apiFactory = { _, _, _ ->
+                object : WorkerAiApi {
+                    override suspend fun connectionTest(request: JsonObject) = JsonObject(emptyMap())
+                    override suspend fun dailyReviewJob(jobId: String) = JsonObject(emptyMap())
+                    override suspend fun dailyReview(request: JsonObject) = buildJsonObject {
+                        put("state", JsonPrimitive(if (fail) "FAILED" else "SUCCEEDED"))
+                        put("error", JsonPrimitive("synthetic_failure"))
+                        put("review", buildJsonObject {
+                            put("conclusion", JsonPrimitive("已确认休息"))
+                            put("actions", buildJsonArray { add(JsonPrimitive("按状态安排明天")) })
+                        })
+                    }
+                }
+            })
+            saveDayRecord()
+            val digest = reviews.prepare(TEST_DATE).inputDigest
+            reviews.enqueue(TEST_DATE, allowIncomplete = true)
+            assertEquals(DailyReviewProcessResult.COMPLETED, reviews.processNext())
+            val originalJob = database.aiReviewJobs().find(TEST_DATE.toString(), digest)!!
+            assertFalse(reviews.enqueue(TEST_DATE, allowIncomplete = true).queued)
+            listOf(async { reviews.enqueue(TEST_DATE, true, regenerate = true) },
+                async { reviews.enqueue(TEST_DATE, true, regenerate = true) }).awaitAll()
+            val replacement = database.aiReviewJobs().find(TEST_DATE.toString(), digest)!!
+            assertNotEquals(originalJob.jobId, replacement.jobId)
+            assertEquals(originalJob.inputDigest, replacement.inputDigest)
+            assertEquals(1, reviews.observe(TEST_DATE).first().review?.version)
+            reviews.enqueue(TEST_DATE, true, regenerate = true)
+            assertEquals(replacement.jobId, database.aiReviewJobs().find(TEST_DATE.toString(), digest)?.jobId)
+            fail = true
+            assertEquals(DailyReviewProcessResult.FAILED, reviews.processNext())
+            assertEquals(1, reviews.observe(TEST_DATE).first().review?.version)
+            fail = false
+            reviews.enqueue(TEST_DATE, true, regenerate = true)
+            assertEquals(DailyReviewProcessResult.COMPLETED, reviews.processNext())
+            assertEquals(2, reviews.observe(TEST_DATE).first().review?.version)
+            CalendarRecordRepository(records).deleteTrainingLog("synthetic-day-record")
+            assertEquals(null, reviews.observe(TEST_DATE).first().review)
+        }
+    }
+
+    @Test
+    fun awaitingServerJobKeepsItsIdentityAndPollingState() {
+        runBlocking {
+            secrets.put(SecretName.AI_PROVIDER_KEY, "synthetic-key")
+            saveDayRecord()
+            reviews.enqueue(TEST_DATE, true)
+            val digest = reviews.prepare(TEST_DATE).inputDigest
+            val job = database.aiReviewJobs().find(TEST_DATE.toString(), digest)!!
+            database.aiReviewJobs().updateState(job.jobId, "AWAITING_SERVER", 0, NOW, null, NOW)
+            reviews.enqueue(TEST_DATE, true, regenerate = true)
+            val kept = database.aiReviewJobs().find(TEST_DATE.toString(), digest)!!
+            assertEquals(job.jobId, kept.jobId)
+            assertEquals("AWAITING_SERVER", kept.state)
+        }
+    }
+
+    private suspend fun saveDayRecord(status: String = "rested") {
+        CalendarRecordRepository(records).saveTrainingLog(io.s2qtech.shenk.model.TrainingLog(
+            id = "synthetic-day-record", date = TEST_DATE.toString(), type = "rest",
+            status = status, source = "manual",
+        ))
     }
 
     private fun morningCheckin(

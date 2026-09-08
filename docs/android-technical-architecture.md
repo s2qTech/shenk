@@ -204,6 +204,8 @@ Android device
 5. Android polls authoritative server state until `SUCCEEDED` or explicit `FAILED`; it cannot cancel or duplicate provider execution.
 6. Correction creates a new version; only the latest is prominent.
 
+Generation requires a confirmed training/rest/skip record for the selected date, including when the user accepts incomplete status inputs. Explicit regeneration of a completed review uses a new execution id with the same normalized input digest. The local queue transaction reuses active jobs and replaces only a completed entry for that digest; existing review versions remain visible until the replacement succeeds. This requires no Room or shared Contract migration.
+
 Daily AI cannot write formal plans, plan adjustments, or routines.
 
 ## 9. Notifications

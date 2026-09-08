@@ -48,20 +48,21 @@ test('daily review sheet is date aware and supports returning to date details', 
   assert.match(sheet, /复盘当天执行，指出问题并给出后续修正/);
 });
 
-test('a completed daily review hides stale generation and retry state', () => {
+test('a completed daily review keeps replacement progress and retry available', () => {
   const sheet = read('android-app/app/src/main/java/io/s2qtech/shenk/DailyReviewSheet.kt');
   const today = read('android-app/app/src/main/java/io/s2qtech/shenk/TodayScreen.kt');
   const store = read('android-app/core/data-sync/src/main/kotlin/io/s2qtech/shenk/sync/LocalStore.kt');
 
-  assert.match(sheet, /if \(state\.review == null && generating\)/);
+  assert.match(sheet, /if \(generating\)/);
   assert.match(sheet, /"PENDING", "RUNNING", "AWAITING_SERVER"/);
   assert.match(today, /"PENDING", "RUNNING", "AWAITING_SERVER"/);
   assert.match(store, /state IN \('PENDING', 'RETRY', 'AWAITING_SERVER'\)/);
-  assert.match(sheet, /else if \(state\.review == null && state\.jobState == "RETRY"\)/);
-  assert.match(sheet, /else if \(state\.review == null && state\.jobState == "FAILED"\)/);
+  assert.match(sheet, /else if \(state\.jobState == "RETRY"\)/);
+  assert.match(sheet, /else if \(state\.jobState == "FAILED"\)/);
   assert.match(sheet, /dailyReviewAllowsManualRetry\(jobState: String\?\): Boolean = jobState == "FAILED"/);
-  assert.match(sheet, /else if \(state\.review == null && !providerReady\)/);
-  assert.match(sheet, /else if \(state\.review == null\)/);
+  assert.match(sheet, /else if \(!providerReady\)/);
+  assert.match(sheet, /重新生成简评/);
+  assert.match(sheet, /daily-review-day-unrecorded/);
 });
 
 test('package 7 contract documents historical review behavior', () => {

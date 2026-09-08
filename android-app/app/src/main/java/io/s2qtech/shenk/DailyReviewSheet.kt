@@ -61,6 +61,7 @@ fun DailyReviewSheet(
     var missing by remember { mutableStateOf<List<String>>(emptyList()) }
     var providerReady by remember { mutableStateOf(false) }
     var preparationLoaded by remember(date) { mutableStateOf(false) }
+    var hasConfirmedDayRecord by remember(date) { mutableStateOf(false) }
     var autoGenerationAttempted by remember(date) { mutableStateOf(false) }
     var generationRequested by remember(date) { mutableStateOf(false) }
     val processing = state.jobState in setOf("PENDING", "RUNNING", "AWAITING_SERVER")
@@ -74,7 +75,9 @@ fun DailyReviewSheet(
         scope.launch {
             var queued = false
             try {
-                val result = repository.enqueue(date, allowIncomplete = missing.isNotEmpty())
+                val result = repository.enqueue(
+                    date, allowIncomplete = missing.isNotEmpty(), regenerate = state.review != null,
+                )
                 queued = result.queued
                 when {
                     result.queued -> {
@@ -82,6 +85,10 @@ fun DailyReviewSheet(
                         onMessage(startedMessage)
                     }
                     result.configurationMissing -> onMessage("请先完成 AI 服务配置")
+                    result.dayRecordMissing -> {
+                        hasConfirmedDayRecord = false
+                        onMessage("请先记录当天的训练、休息或跳过情况")
+                    }
                     else -> onMessage("这一天的相同版本已经生成")
                 }
             } catch (error: CancellationException) {
@@ -100,6 +107,7 @@ fun DailyReviewSheet(
         val prepared = repository.prepare(date)
         providerReady = ready
         missing = prepared.missingCriticalFields
+        hasConfirmedDayRecord = prepared.hasConfirmedDayRecord
         preparationLoaded = true
     }
     LaunchedEffect(state.jobState, state.review) {
@@ -113,6 +121,7 @@ fun DailyReviewSheet(
                 reviewPresent = state.review != null,
                 jobState = state.jobState,
                 attempted = autoGenerationAttempted,
+                hasConfirmedDayRecord = hasConfirmedDayRecord,
             )
         ) {
             autoGenerationAttempted = true
@@ -214,7 +223,7 @@ fun DailyReviewSheet(
             Spacer(Modifier.height(20.dp))
         }
 
-        if (missing.isNotEmpty()) {
+        if (hasConfirmedDayRecord && missing.isNotEmpty()) {
             ShenkStatePanel(
                 title = "资料不完整",
                 message = "缺少 ${missing.joinToString("、")}。仍可按现有事实生成，缺失值不会被当作正常。",
@@ -224,28 +233,35 @@ fun DailyReviewSheet(
             Spacer(Modifier.height(14.dp))
         }
 
-        if (state.review == null && !preparationLoaded) {
+        if (!preparationLoaded) {
             ShenkStatePanel(
                 title = "正在检查简评条件",
                 message = "先从本机整理当天记录和近期事实。",
                 tone = ShenkStateTone.PROGRESS,
                 modifier = Modifier.fillMaxWidth().testTag("daily-review-preparing"),
             )
-        } else if (state.review == null && generating) {
+        } else if (generating) {
             ShenkStatePanel(
                 title = "正在生成$reviewLabel",
                 message = "服务端会继续处理，可以先返回日期详情；完成后这里会自动更新。",
                 tone = ShenkStateTone.PROGRESS,
                 modifier = Modifier.fillMaxWidth().testTag("daily-review-generating"),
             )
-        } else if (state.review == null && state.jobState == "RETRY") {
+        } else if (state.jobState == "RETRY") {
             ShenkStatePanel(
                 title = "简评正在等待自动重试",
                 message = dailyReviewFailureMessage(state.jobError, retrying = true),
                 tone = ShenkStateTone.OFFLINE,
                 modifier = Modifier.fillMaxWidth().testTag("daily-review-auto-retry"),
             )
-        } else if (state.review == null && state.jobState == "FAILED") {
+        } else if (!hasConfirmedDayRecord) {
+            ShenkStatePanel(
+                title = "请先记录当天情况",
+                message = "确认当天的训练、休息或跳过后，才能生成简评。只有身体状态或测量还不够。",
+                tone = ShenkStateTone.NEUTRAL,
+                modifier = Modifier.fillMaxWidth().testTag("daily-review-day-unrecorded"),
+            )
+        } else if (state.jobState == "FAILED") {
             ShenkStatePanel(
                 title = "简评生成失败",
                 message = dailyReviewFailureMessage(state.jobError, retrying = false),
@@ -256,7 +272,7 @@ fun DailyReviewSheet(
                 },
                 modifier = Modifier.fillMaxWidth().testTag("daily-review-failed"),
             )
-        } else if (state.review == null && !providerReady) {
+        } else if (!providerReady) {
             ShenkStatePanel(
                 title = "尚未配置 AI 服务",
                 message = "配置并测试 DeepSeek API Key 后，才能生成每日简评。",
@@ -265,12 +281,17 @@ fun DailyReviewSheet(
                 onAction = onOpenAiSettings,
                 modifier = Modifier.fillMaxWidth().testTag("daily-review-provider-missing"),
             )
-        } else if (state.review == null) {
+        } else {
             Button(
                 onClick = { requestGeneration("正在生成$reviewLabel", "无法生成，请检查 AI 服务配置") },
                 modifier = Modifier.fillMaxWidth().heightIn(min = 54.dp),
             ) {
-                Text(if (missing.isEmpty()) "生成$reviewLabel" else "按现有事实生成$reviewLabel")
+                Text(when {
+                    state.review != null && missing.isNotEmpty() -> "按现有事实重新生成简评"
+                    state.review != null -> "重新生成简评"
+                    missing.isEmpty() -> "生成$reviewLabel"
+                    else -> "按现有事实生成$reviewLabel"
+                })
             }
         }
         Spacer(Modifier.height(24.dp))
@@ -306,7 +327,8 @@ internal fun shouldAutoStartDailyReview(
     reviewPresent: Boolean,
     jobState: String?,
     attempted: Boolean,
-): Boolean = preparationLoaded && providerReady && missing.isEmpty() && !reviewPresent && jobState == null && !attempted
+    hasConfirmedDayRecord: Boolean,
+): Boolean = preparationLoaded && hasConfirmedDayRecord && providerReady && missing.isEmpty() && !reviewPresent && jobState == null && !attempted
 
 internal fun dailyReviewAllowsManualRetry(jobState: String?): Boolean = jobState == "FAILED"
 

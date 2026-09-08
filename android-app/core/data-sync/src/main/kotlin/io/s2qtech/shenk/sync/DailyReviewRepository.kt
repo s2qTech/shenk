@@ -11,6 +11,7 @@ import java.security.MessageDigest
 import java.time.Instant
 import java.time.LocalDate
 import java.util.concurrent.TimeUnit
+import java.util.UUID
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
@@ -74,12 +75,14 @@ data class DailyReviewPreparation(
     val inputDigest: String,
     val snapshot: JsonObject,
     val missingCriticalFields: List<String>,
+    val hasConfirmedDayRecord: Boolean,
 )
 
 data class DailyReviewEnqueueResult(
     val queued: Boolean,
     val missingCriticalFields: List<String>,
     val configurationMissing: Boolean = false,
+    val dayRecordMissing: Boolean = false,
 )
 
 enum class DailyReviewProcessResult { NONE, COMPLETED, WAITING, RETRY, FAILED }
@@ -192,11 +195,13 @@ class DailyReviewRepository(
     fun observe(date: LocalDate): Flow<DailyReviewState> = combine(
         records.observeActive("daily_reviews"),
         database.aiReviewJobs().observeLatest(date.toString()),
-    ) { reviews, job ->
+        records.observeActive("training_logs"),
+    ) { reviews, job, trainingLogs ->
         DailyReviewState(
             review = reviews.mapNotNull(::decodeReview)
                 .filter { it.date == date.toString() && it.status == "generated" }
-                .maxByOrNull { it.version },
+                .maxByOrNull { it.version }
+                ?.takeIf { hasConfirmedDayRecord(date, trainingLogs) },
             jobState = job?.state,
             jobError = job?.lastError,
             jobAttempts = job?.attempts ?: 0,
@@ -252,12 +257,20 @@ class DailyReviewRepository(
             inputDigest = "sha256:${canonical.sha256()}",
             snapshot = snapshot,
             missingCriticalFields = missing,
+            hasConfirmedDayRecord = hasConfirmedDayRecord(date, relevant),
         )
     }
 
-    suspend fun enqueue(date: LocalDate, allowIncomplete: Boolean = false): DailyReviewEnqueueResult {
+    suspend fun enqueue(
+        date: LocalDate,
+        allowIncomplete: Boolean = false,
+        regenerate: Boolean = false,
+    ): DailyReviewEnqueueResult {
         recoverInterruptedJobs()
         val preparation = prepare(date)
+        if (!preparation.hasConfirmedDayRecord) {
+            return DailyReviewEnqueueResult(false, preparation.missingCriticalFields, dayRecordMissing = true)
+        }
         if (preparation.missingCriticalFields.isNotEmpty() && !allowIncomplete) {
             return DailyReviewEnqueueResult(false, preparation.missingCriticalFields)
         }
@@ -269,25 +282,29 @@ class DailyReviewRepository(
                 configurationMissing = true,
             )
         }
-        val existing = database.aiReviewJobs().find(date.toString(), preparation.inputDigest)
-        when (existing?.state) {
-            "COMPLETED" -> return DailyReviewEnqueueResult(false, preparation.missingCriticalFields)
-            "PENDING", "RUNNING" -> return DailyReviewEnqueueResult(true, preparation.missingCriticalFields)
-            "RETRY", "FAILED" -> {
-                database.aiReviewJobs().activate(
-                    jobId = existing.jobId,
-                    attempts = if (existing.state == "FAILED") 0 else existing.attempts,
-                    now = nowMillis(),
-                )
-                return DailyReviewEnqueueResult(true, preparation.missingCriticalFields)
+        return database.withTransaction {
+            if (regenerate && database.aiReviewJobs().findActive(date.toString()) != null) {
+                return@withTransaction DailyReviewEnqueueResult(true, preparation.missingCriticalFields)
             }
-        }
-        val now = nowMillis()
-        database.withTransaction {
+            val existing = database.aiReviewJobs().find(date.toString(), preparation.inputDigest)
+            when (existing?.state) {
+                "COMPLETED" -> if (!regenerate) return@withTransaction DailyReviewEnqueueResult(false, preparation.missingCriticalFields)
+                "PENDING", "RUNNING", "AWAITING_SERVER" -> return@withTransaction DailyReviewEnqueueResult(true, preparation.missingCriticalFields)
+                "RETRY", "FAILED" -> {
+                    database.aiReviewJobs().activate(
+                        jobId = existing.jobId,
+                        attempts = if (existing.state == "FAILED") 0 else existing.attempts,
+                        now = nowMillis(),
+                    )
+                    return@withTransaction DailyReviewEnqueueResult(true, preparation.missingCriticalFields)
+                }
+            }
+            val now = nowMillis()
             database.aiReviewJobs().supersedeOtherInputs(date.toString(), preparation.inputDigest, now)
             database.aiReviewJobs().put(
                 AiReviewJobEntity(
-                    jobId = "daily-review:${date}:${preparation.inputDigest.removePrefix("sha256:").take(16)}",
+                    jobId = if (regenerate) "daily-review:$date:${UUID.randomUUID()}"
+                        else "daily-review:${date}:${preparation.inputDigest.removePrefix("sha256:").take(16)}",
                     date = date.toString(),
                     inputDigest = preparation.inputDigest,
                     snapshotJson = json.encodeToString(JsonObject.serializer(), preparation.snapshot),
@@ -300,8 +317,8 @@ class DailyReviewRepository(
                     updatedAt = now,
                 ),
             )
+            DailyReviewEnqueueResult(true, preparation.missingCriticalFields)
         }
-        return DailyReviewEnqueueResult(true, preparation.missingCriticalFields)
     }
 
     suspend fun requeueIfReviewed(date: LocalDate): DailyReviewEnqueueResult? {
@@ -561,3 +578,12 @@ internal fun parseWorkerErrorCode(raw: String): String? = runCatching {
 private val REVIEW_INPUT_ENTITIES = setOf(
     "status_checkins", "body_metrics", "training_logs", "daily_plan_items", "plan_adjustments", "goal_sets", "coach_strategies",
 )
+
+private val CONFIRMED_DAY_STATUSES = setOf(
+    "completed", "short_version", "stretch_only", "skipped", "rested", "modified_by_user",
+)
+
+private fun hasConfirmedDayRecord(date: LocalDate, records: List<SharedRecord>): Boolean = records.any {
+    it.entity == "training_logs" && it.data.dateOrNull() == date.toString() &&
+        it.data.string("status") in CONFIRMED_DAY_STATUSES
+}

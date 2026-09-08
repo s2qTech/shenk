@@ -652,10 +652,6 @@ private fun GuidanceBlock(
                 }
                 when (TodayPrimaryActionResolver.resolve(guidance)) {
                     TodayPrimaryAction.NONE -> Unit
-                    TodayPrimaryAction.OPEN_TIMER -> {
-                        Spacer(Modifier.height(17.dp))
-                        TodayGuidanceButton("进入训练", onTraining, "today-open-training")
-                    }
                     TodayPrimaryAction.RECORD_DAY -> {
                         Spacer(Modifier.height(17.dp))
                         TodayGuidanceButton("记录今日情况", onRecordDay, "today-record-day")
