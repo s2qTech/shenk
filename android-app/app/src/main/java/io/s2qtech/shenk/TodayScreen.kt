@@ -529,6 +529,7 @@ private fun TodayScreen(
             Spacer(Modifier.height(22.dp))
             CoachReviewSection(
                 state = dailyReviewState,
+                hasConfirmedDayRecord = records?.guidance?.source == GuidanceSource.ACTUAL,
                 onOpen = onDailyReview,
             )
             Spacer(Modifier.height(24.dp))
@@ -732,6 +733,7 @@ private fun io.s2qtech.shenk.sync.DailyReviewState.toCoachReviewDisplayState(): 
 @Composable
 internal fun CoachReviewSection(
     state: io.s2qtech.shenk.sync.DailyReviewState,
+    hasConfirmedDayRecord: Boolean,
     onOpen: () -> Unit,
 ) {
     Column(Modifier.fillMaxWidth().testTag("today-coach-review")) {
@@ -744,7 +746,7 @@ internal fun CoachReviewSection(
             border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
         ) {
             AnimatedContent(
-                targetState = state.toCoachReviewDisplayState(),
+                targetState = if (hasConfirmedDayRecord) state.toCoachReviewDisplayState() else CoachReviewDisplayState.Empty,
                 transitionSpec = { shenkStateContentTransform() },
                 modifier = Modifier.fillMaxWidth().padding(16.dp),
                 label = "coach-review-state",
@@ -806,15 +808,21 @@ internal fun CoachReviewSection(
                                 subtitle = "DeepSeek · 今日复盘",
                             )
                             Text(
-                                "记录训练、休息或今天的身体感受后，再结合近期状态生成简评。",
+                                if (hasConfirmedDayRecord) {
+                                    "今日情况已确认，可以结合今天与近期状态生成简评。"
+                                } else {
+                                    "请先确认今天的训练、休息或跳过情况，再生成简评。身体状态或测量不能代替今日情况。"
+                                },
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.secondary,
                             )
-                            TodaySecondaryActionButton(
-                                label = "生成今日简评",
-                                onClick = onOpen,
-                                modifier = Modifier.align(Alignment.End),
-                            )
+                            if (hasConfirmedDayRecord) {
+                                TodaySecondaryActionButton(
+                                    label = "生成今日简评",
+                                    onClick = onOpen,
+                                    modifier = Modifier.align(Alignment.End),
+                                )
+                            }
                         }
                     }
                 }

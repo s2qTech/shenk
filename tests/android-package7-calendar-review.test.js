@@ -11,7 +11,19 @@ test('calendar observes and opens the review for the selected date', () => {
 
   assert.match(calendar, /dailyReviewRepository\.observe\(date\)/);
   assert.match(calendar, /DailyReviewSheet\(\s*date = date,/);
-  assert.match(calendar, /canReview = !date\.isAfter\(today\)/);
+  assert.match(calendar, /canReview = !date\.isAfter\(today\) && details\?\.actualLogs\?\.isNotEmpty\(\) == true/);
+});
+
+test('daily review entry requires a confirmed day record on Today and Calendar', () => {
+  const calendar = read('android-app/app/src/main/java/io/s2qtech/shenk/CalendarScreen.kt');
+  const today = read('android-app/app/src/main/java/io/s2qtech/shenk/TodayScreen.kt');
+  const sheet = read('android-app/app/src/main/java/io/s2qtech/shenk/DailyReviewSheet.kt');
+
+  assert.match(calendar, /details\?\.actualLogs\?\.isNotEmpty\(\) == true/);
+  assert.match(today, /hasConfirmedDayRecord = records\?\.guidance\?\.source == GuidanceSource\.ACTUAL/);
+  assert.match(today, /if \(hasConfirmedDayRecord\) \{[\s\S]{0,220}label = "生成今日简评"/);
+  assert.match(sheet, /else if \(!hasConfirmedDayRecord\)/);
+  assert.match(sheet, /确认当天的训练、休息或跳过后，才能生成简评/);
 });
 
 test('calendar day overview gives guidance, body metrics, and review separate semantic cards', () => {
@@ -95,8 +107,10 @@ test('daily review generation is long-running, idempotent, and exposes retry onl
   assert.match(androidWorker, /ExistingWorkPolicy\.APPEND_OR_REPLACE/);
   assert.match(application, /policy = ExistingWorkPolicy\.KEEP/);
   assert.match(worker, /42_066/);
+  assert.match(worker, /reasoningEffort: "high"/);
   assert.match(worker, /8192/);
-  assert.match(worker, /timeoutMs: 0/);
+  assert.match(worker, /DAILY_REVIEW_GENERATION_TIMEOUT_MS = 5 \* 60 \* 1000/);
+  assert.match(worker, /remainingDailyReviewTime\(deadline\)/);
   assert.match(worker, /class DailyReviewWorkflow extends WorkflowEntrypoint/);
   assert.match(worker, /sealDailyReviewPayload/);
   assert.match(worker, /AI_JOB_ENCRYPTION_KEY/);

@@ -1937,8 +1937,9 @@ function validateDailyReviewSnapshot(snapshot) {
 async function generateDailyReview(body) {
   const provider = validateAiProvider(body);
   const snapshot = validateDailyReviewSnapshot(body?.snapshot);
+  const deadline = Date.now() + DAILY_REVIEW_GENERATION_TIMEOUT_MS;
   const system = [
-    "你是身刻的专业、克制、实事求是的每日运动复盘教练。",
+    "你是身刻的专业、实事求是、有人情味的每日运动复盘教练。表达要像一位长期了解用户状态的真实教练：自然、有温度、直截了当，避免模板化套话、机械罗列和客服腔；表扬与提醒都必须有事实依据。",
     "你正在复盘 snapshot.date 这一天已经发生的执行结果，而不是在训练前指导这一天应该怎么做。即使复盘日期是今天，也必须使用事后评价语义。",
     "综合考虑身体测量、睡眠时长与深睡、睡眠感受、精力、疲劳、疼痛、最近训练、目标、教练策略和当前有效正式计划。",
     "缺失值保持缺失，不得推断为正常、休息或已完成；不得冒充医疗诊断。",
@@ -1946,8 +1947,8 @@ async function generateDailyReview(body) {
     "可以生成 localSuggestion，但它只是身刻本地建议，只能在当天没有有效正式计划时提供；有正式计划时必须返回 null。",
     "localSuggestion 不得伪装成正式计划，且只能建议当天，不得安排未来日期。",
     "重点评价当天完成得怎么样、计划与实际是否匹配、存在什么问题及可能原因，并给出接下来或下一次如何修正；不要复述输入中的状态、测量和训练流水。",
-    "conclusion 是完整、可独立阅读的事后评价结论，不超过 50 个汉字；只概括当天表现和最重要的问题，不写尚未执行的当日指令。assessment 是复盘分析，不超过 300 个汉字。",
-    "actions 为 1 至 3 条后续修正措施，每条只表达一个动作，面向接下来、下次训练或有依据时的次日；不得把 reviewed date 上尚未发生的动作写成仍需完成的任务。cautions 只写真实风险，没有则为空数组。",
+    "conclusion 是完整、可独立阅读的事后评价结论，不超过 50 个汉字；只概括当天表现和最重要的问题，不写尚未执行的当日指令。assessment 是有层次的复盘分析，通常写 350 至 550 个汉字；结合近期趋势解释做得好的地方、主要限制、可能原因和调整方向，不为凑字数重复流水。",
+    "actions 为 2 至 4 条后续修正措施，每条只表达一个清楚、可执行的动作，面向接下来、下次训练或有依据时的次日；不得把 reviewed date 上尚未发生的动作写成仍需完成的任务。cautions 只写真实风险，没有则为空数组。",
     "evidence 只保留 1 至 4 条最能支撑结论的关键依据，每条写成用户可直接阅读的简短中文事实。禁止输出 estimatedMinutes、durationSec、status_checkin、calf_ankle 等 JSON 字段名、下划线或驼峰枚举、内部 ID 和原始状态码；时长换算为小时/分钟，疼痛区域、侧别和程度写成人话。",
     "只输出 JSON，不要 Markdown：{\"conclusion\":\"...\",\"assessment\":\"...\",\"actions\":[\"...\"],\"evidence\":[\"...\"],\"cautions\":[\"...\"],\"localSuggestion\":null}。",
     "localSuggestion 非空时格式为：{\"date\":\"YYYY-MM-DD\",\"title\":\"...\",\"trainingType\":\"...\",\"estimatedMinutes\":30,\"reason\":\"...\"}。"
@@ -1966,7 +1967,7 @@ async function generateDailyReview(body) {
       provider,
       messages,
       42_066,
-      { thinkingEnabled: true, jsonOutput: true, timeoutMs: 0 }
+      { thinkingEnabled: true, reasoningEffort: "high", jsonOutput: true, timeoutMs: remainingDailyReviewTime(deadline) }
     );
     usage = addAiUsage(usage, primary.usage);
     finishReason = primary.finishReason;
@@ -1987,7 +1988,7 @@ async function generateDailyReview(body) {
         provider,
         repairMessages,
         8192,
-        { thinkingEnabled: false, jsonOutput: true, timeoutMs: 0 }
+        { thinkingEnabled: false, jsonOutput: true, timeoutMs: remainingDailyReviewTime(deadline) }
       );
       usage = addAiUsage(usage, repaired.usage);
       finishReason = repaired.finishReason;
@@ -2006,12 +2007,17 @@ async function generateDailyReview(body) {
 
 function isRepairableDailyReviewError(error) {
   return [
-    "ai_provider_timeout",
     "ai_provider_response_invalid",
     "ai_provider_output_truncated",
     "ai_provider_review_invalid",
     "ai_provider_review_actions_missing"
   ].includes(error?.message);
+}
+
+function remainingDailyReviewTime(deadline) {
+  const remaining = deadline - Date.now();
+  if (remaining <= 0) throw providerError("ai_provider_timeout", 504);
+  return remaining;
 }
 
 function snapshotHasFormalPlan(snapshot) {
@@ -2036,37 +2042,46 @@ async function callCompatibleAi(provider, messages, maxTokens, options = {}) {
       temperature: 0.2,
       thinking: { type: options.thinkingEnabled ? "enabled" : "disabled" }
     };
+    if (options.thinkingEnabled && options.reasoningEffort) requestBody.reasoning_effort = options.reasoningEffort;
     if (options.jsonOutput) requestBody.response_format = { type: "json_object" };
-    response = await fetch(`${provider.baseUrl}/chat/completions`, {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${provider.apiKey}`,
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify(requestBody),
-      ...(controller ? { signal: controller.signal } : {})
-    });
-  } catch (cause) {
-    const timedOut = controller?.signal.aborted === true;
-    const error = new Error(timedOut ? "ai_provider_timeout" : "ai_provider_unreachable");
-    error.status = 503;
-    throw error;
+    try {
+      response = await fetch(`${provider.baseUrl}/chat/completions`, {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${provider.apiKey}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify(requestBody),
+        ...(controller ? { signal: controller.signal } : {})
+      });
+    } catch (cause) {
+      throw providerError(controller?.signal.aborted === true ? "ai_provider_timeout" : "ai_provider_unreachable", 503);
+    }
+    if (!response.ok) {
+      const error = new Error(`ai_provider_http_${response.status}`);
+      error.status = response.status === 401 || response.status === 403 ? 502 : 503;
+      throw error;
+    }
+    let payload;
+    try {
+      payload = await response.json();
+    } catch (cause) {
+      if (controller?.signal.aborted === true) throw providerError("ai_provider_timeout", 504);
+      payload = null;
+    }
+    if (controller?.signal.aborted === true) throw providerError("ai_provider_timeout", 504);
+    if (!payload || !Array.isArray(payload.choices)) throw providerError("ai_provider_response_invalid", 502);
+    return {
+      content: typeof payload.choices[0]?.message?.content === "string" ? payload.choices[0].message.content.trim() : "",
+      finishReason: typeof payload.choices[0]?.finish_reason === "string" ? payload.choices[0].finish_reason : null,
+      usage: sanitizeAiUsage(payload.usage)
+    };
   } finally {
     if (timeout !== null) clearTimeout(timeout);
   }
-  if (!response.ok) {
-    const error = new Error(`ai_provider_http_${response.status}`);
-    error.status = response.status === 401 || response.status === 403 ? 502 : 503;
-    throw error;
-  }
-  const payload = await response.json().catch(() => null);
-  if (!payload || !Array.isArray(payload.choices)) throw providerError("ai_provider_response_invalid", 502);
-  return {
-    content: typeof payload.choices[0]?.message?.content === "string" ? payload.choices[0].message.content.trim() : "",
-    finishReason: typeof payload.choices[0]?.finish_reason === "string" ? payload.choices[0].finish_reason : null,
-    usage: sanitizeAiUsage(payload.usage)
-  };
 }
+
+const DAILY_REVIEW_GENERATION_TIMEOUT_MS = 5 * 60 * 1000;
 
 function emptyAiUsage() {
   return {

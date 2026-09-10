@@ -177,7 +177,7 @@ References: [keep the screen on](https://developer.android.com/develop/backgroun
 
 ### Provider Contract
 
-Phase 1 uses DeepSeek V4 Flash as the single user-facing provider. The phone asks only for the API key; the canonical base URL and model ID are application defaults. Provider selection, model editing, and custom endpoint editing are not exposed in the phase-1 UI.
+Phase 1 uses DeepSeek V4.1 Flash as the single user-facing provider through model ID `deepseek-flash`. The phone asks only for the API key; the canonical base URL and model ID are application defaults. Provider selection, model editing, and custom endpoint editing are not exposed in the phase-1 UI.
 
 The transport boundary remains OpenAI Chat Completions-compatible internally. A later provider adapter may replace the fixed default, but it must preserve the same normalized snapshot, bounded output schema, permissions, queue, confirmation, and audit semantics. The API key remains device-local in Android Keystore and is not included in the migration profile.
 
@@ -186,7 +186,7 @@ The transport boundary remains OpenAI Chat Completions-compatible internally. A 
 ```text
 Android device
   -> Cloudflare Worker AI proxy
-  -> DeepSeek V4 Flash
+  -> DeepSeek V4.1 Flash
 ```
 
 - The phone sends the provider secret only over TLS when submitting the review job.

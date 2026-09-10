@@ -54,13 +54,13 @@ class DailyReviewRepositoryInstrumentedTest {
     fun tearDown() = database.close()
 
     @Test
-    fun phaseOneProviderIsCanonicalDeepSeekV4Flash() {
+    fun phaseOneProviderIsCanonicalDeepSeekV41Flash() {
         runBlocking {
             val settings = reviews.providerSettings()
 
             assertEquals("deepseek", settings.provider)
             assertEquals("https://api.deepseek.com", settings.baseUrl)
-            assertEquals("deepseek-v4-flash", settings.model)
+            assertEquals("deepseek-flash", settings.model)
         }
     }
 

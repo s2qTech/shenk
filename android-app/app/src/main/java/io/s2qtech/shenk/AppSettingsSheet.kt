@@ -67,7 +67,7 @@ fun AppSettingsSheet(
         SheetHeader("设置", "提醒、AI 服务与本机数据")
         Spacer(Modifier.height(2.dp))
         SecondaryActionRow(Icons.Rounded.Alarm, "提醒", "晨起、午间和周复盘", onReminders, testTag = "settings-reminders")
-        SecondaryActionRow(Icons.Rounded.AutoAwesome, "AI 服务", "DeepSeek V4 Flash · 每日简评", onAiService, testTag = "settings-ai")
+        SecondaryActionRow(Icons.Rounded.AutoAwesome, "AI 服务", "DeepSeek V4.1 Flash · 每日简评", onAiService, testTag = "settings-ai")
         SecondaryActionRow(Icons.Rounded.Storage, "数据备份", "导出或安全合并业务记录", onBackup, testTag = "settings-backup")
         if (conflictCount > 0) {
             SecondaryActionRow(
@@ -144,10 +144,10 @@ fun AiProviderSettingsSheet(repository: DailyReviewRepository, onMessage: (Strin
             .verticalScroll(rememberScrollState())
             .padding(horizontal = 22.dp, vertical = 8.dp),
     ) {
-        SheetHeader("AI 服务", "每日简评由 DeepSeek V4 Flash 生成")
+        SheetHeader("AI 服务", "每日简评由 DeepSeek V4.1 Flash 生成")
         Spacer(Modifier.height(14.dp))
         DeepSeekCoachIdentity(
-            title = "DeepSeek V4 Flash",
+            title = "DeepSeek V4.1 Flash",
             subtitle = if (hasKey) "已配置，可用于每日简评" else "尚未配置 API Key",
         )
 
@@ -194,7 +194,7 @@ fun AiProviderSettingsSheet(repository: DailyReviewRepository, onMessage: (Strin
                                 AiProviderConnectionFailure.KEY_REJECTED -> "DeepSeek 拒绝了该 API Key，请确认复制完整；原有密钥未更改"
                                 AiProviderConnectionFailure.BALANCE_OR_QUOTA -> "DeepSeek 账户余额或调用额度不足；原有密钥未更改"
                                 AiProviderConnectionFailure.RATE_LIMITED -> "DeepSeek 当前请求过多，请稍后再试；原有密钥未更改"
-                                AiProviderConnectionFailure.MODEL_UNAVAILABLE -> "DeepSeek V4 Flash 当前不可用或账户无权使用；原有密钥未更改"
+                                AiProviderConnectionFailure.MODEL_UNAVAILABLE -> "DeepSeek V4.1 Flash 当前不可用或账户无权使用；原有密钥未更改"
                                 AiProviderConnectionFailure.PROVIDER_UNAVAILABLE -> "云端暂时无法连接 DeepSeek，请稍后再试；原有密钥未更改"
                                 AiProviderConnectionFailure.INVALID_RESPONSE -> "DeepSeek 已响应，但连接测试结果异常；原有密钥未更改"
                                 AiProviderConnectionFailure.NETWORK -> "手机无法连接身刻云端，请检查网络或代理；原有密钥未更改"

@@ -63,6 +63,14 @@ class DailyReviewSheetTest {
         assertTrue(dailyReviewFailureMessage("ai_provider_review_invalid", retrying = true).contains("不完整"))
         assertTrue(dailyReviewFailureMessage("ai_provider_job_expired", retrying = false).contains("连接意外中断"))
         assertTrue(dailyReviewFailureMessage("ai_provider_job_abandoned", retrying = false).contains("可以重新尝试"))
+        assertTrue(dailyReviewFailureMessage("ai_provider_timeout", retrying = false).contains("5 分钟"))
+        assertTrue(dailyReviewAllowsManualRetry("FAILED"))
+    }
+
+    @Test
+    fun currentModelUsesV41LabelWhileHistoricalAliasRemainsExplicit() {
+        assertEquals("DeepSeek V4.1 Flash", dailyReviewModelLabel("deepseek-flash"))
+        assertEquals("DeepSeek V4 Flash", dailyReviewModelLabel("deepseek-v4-flash"))
     }
 
     @Test

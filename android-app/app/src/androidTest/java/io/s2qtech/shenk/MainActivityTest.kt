@@ -1,11 +1,13 @@
 package io.s2qtech.shenk
 
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.onAllNodesWithTag
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onRoot
@@ -78,6 +80,7 @@ class MainActivityTest {
             ShenkTheme {
                 CoachReviewSection(
                     state = DailyReviewState(review = review),
+                    hasConfirmedDayRecord = true,
                     onOpen = {},
                 )
             }
@@ -85,6 +88,23 @@ class MainActivityTest {
 
         composeRule.onNodeWithText("今天恢复良好。").assertIsDisplayed()
         composeRule.onNodeWithText("查看完整简评").assertIsDisplayed()
+    }
+
+    @Test
+    fun emptyDayDoesNotOfferDailyReviewGeneration() {
+        composeRule.activity.setContent {
+            ShenkTheme {
+                CoachReviewSection(
+                    state = DailyReviewState(),
+                    hasConfirmedDayRecord = false,
+                    onOpen = {},
+                )
+            }
+        }
+
+        composeRule.onNodeWithText("请先确认今天的训练、休息或跳过情况，再生成简评。身体状态或测量不能代替今日情况。")
+            .assertIsDisplayed()
+        composeRule.onAllNodesWithText("生成今日简评").assertCountEquals(0)
     }
 
     @Test

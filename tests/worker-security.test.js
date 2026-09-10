@@ -174,7 +174,7 @@ async function run() {
       method: "POST",
       headers: { Authorization: "Bearer valid", "Content-Type": "application/json" },
       body: JSON.stringify({
-        provider: { id: "deepseek", baseUrl: "https://api.deepseek.com", model: "deepseek-v4-flash", apiKey: "fixture-secret" }
+        provider: { id: "deepseek", baseUrl: "https://api.deepseek.com", model: "deepseek-flash", apiKey: "fixture-secret" }
       })
     }),
     { SHENK_TOKEN: "valid" }
@@ -192,20 +192,20 @@ async function run() {
   const worker = loadWorker(async (url, options) => {
     upstreamRequest = { url, options };
     return new Response(JSON.stringify({
-        choices: [{ message: { content: JSON.stringify({
-          conclusion: "Synthetic review.",
-          assessment: "Recovery is appropriate today.",
-          actions: ["Keep the planned easy session."],
-          evidence: ["fixture"],
-          cautions: [],
-          localSuggestion: {
-            date: "2099-01-01",
-            title: "Easy walk",
-            trainingType: "easy_walk",
-            estimatedMinutes: 25,
-            reason: "No formal plan exists."
-          }
-        }) } }]
+      choices: [{ message: { content: JSON.stringify({
+        conclusion: "Synthetic review.",
+        assessment: "Recovery is appropriate today.",
+        actions: ["Keep the planned easy session."],
+        evidence: ["fixture"],
+        cautions: [],
+        localSuggestion: {
+          date: "2099-01-01",
+          title: "Easy walk",
+          trainingType: "easy_walk",
+          estimatedMinutes: 25,
+          reason: "No formal plan exists."
+        }
+      }) } }]
     }), { status: 200, headers: { "Content-Type": "application/json" } });
   });
   const env = dailyReviewWorkflowEnv(worker, aiJobDb());
@@ -231,26 +231,27 @@ async function run() {
   const { body } = await readDailyReviewStatus(worker, env, dailyJobFields("2099-01-01").jobId);
   const upstreamBody = JSON.parse(upstreamRequest.options.body);
   const systemPrompt = upstreamBody.messages.find((message) => message.role === "system")?.content || "";
-    assert.equal(response.status, 202);
-    assert.equal(accepted.state, "RUNNING");
-    assert.doesNotMatch(JSON.stringify(env.lastWorkflowParams), /fixture-secret|daily_review_snapshot/);
-    assert.equal(body.review.conclusion, "Synthetic review.");
-    assert.equal(body.review.assessment, "Recovery is appropriate today.");
-    assert.equal(body.review.localSuggestion.title, "Easy walk");
-    assert.deepEqual(body.review.actions, ["Keep the planned easy session."]);
+  assert.equal(response.status, 202);
+  assert.equal(accepted.state, "RUNNING");
+  assert.doesNotMatch(JSON.stringify(env.lastWorkflowParams), /fixture-secret|daily_review_snapshot/);
+  assert.equal(body.review.conclusion, "Synthetic review.");
+  assert.equal(body.review.assessment, "Recovery is appropriate today.");
+  assert.equal(body.review.localSuggestion.title, "Easy walk");
+  assert.deepEqual(body.review.actions, ["Keep the planned easy session."]);
   assert.equal(upstreamRequest.url, "https://provider.example/v1/chat/completions");
   assert.equal(upstreamRequest.options.headers.Authorization, "Bearer fixture-secret");
-    assert.deepEqual(upstreamBody.thinking, { type: "enabled" });
-    assert.equal(upstreamBody.max_tokens, 42_066);
-    assert.deepEqual(upstreamBody.response_format, { type: "json_object" });
-    assert.equal(upstreamRequest.options.signal, undefined);
-    assert.match(systemPrompt, /已经发生的执行结果/);
-    assert.match(systemPrompt, /当天完成得怎么样/);
-    assert.match(systemPrompt, /后续修正措施/);
-    assert.match(systemPrompt, /用户可直接阅读的简短中文事实/);
-    assert.match(systemPrompt, /禁止输出 estimatedMinutes、durationSec、status_checkin、calf_ankle/);
-    assert.doesNotMatch(systemPrompt, /今天怎么做/);
-    assert.doesNotMatch(JSON.stringify(body), /fixture-secret/);
+  assert.deepEqual(upstreamBody.thinking, { type: "enabled" });
+  assert.equal(upstreamBody.reasoning_effort, "high");
+  assert.equal(upstreamBody.max_tokens, 42_066);
+  assert.deepEqual(upstreamBody.response_format, { type: "json_object" });
+  assert.ok(upstreamRequest.options.signal);
+  assert.match(systemPrompt, /已经发生的执行结果/);
+  assert.match(systemPrompt, /当天完成得怎么样/);
+  assert.match(systemPrompt, /后续修正措施/);
+  assert.match(systemPrompt, /用户可直接阅读的简短中文事实/);
+  assert.match(systemPrompt, /禁止输出 estimatedMinutes、durationSec、status_checkin、calf_ankle/);
+  assert.doesNotMatch(systemPrompt, /今天怎么做/);
+  assert.doesNotMatch(JSON.stringify(body), /fixture-secret/);
   }
 
   {
@@ -366,7 +367,7 @@ async function run() {
       return new Response(JSON.stringify({
         choices: [{ message: { content: JSON.stringify({
           conclusion: "Long-running review.",
-          assessment: "Generation completed without a client deadline.",
+          assessment: "Generation completed within the bounded review deadline.",
           actions: ["Keep the next session easy."],
           evidence: [],
           cautions: [],
@@ -393,7 +394,43 @@ async function run() {
     assert.equal(accepted.state, "RUNNING");
     assert.equal(body.state, "SUCCEEDED");
     assert.equal(body.review.conclusion, "Long-running review.");
-    assert.equal(observedSignal, undefined);
+    assert.ok(observedSignal);
+  }
+
+  {
+    let upstreamCalls = 0;
+    const worker = loadWorker(async (_url, options) => {
+      upstreamCalls += 1;
+      if (options.signal?.aborted) throw new Error("synthetic abort");
+      throw new Error("expected an aborted request");
+    }, {
+      setTimeout(callback) {
+        callback();
+        return 1;
+      },
+      clearTimeout() {}
+    });
+    const env = dailyReviewWorkflowEnv(worker, aiJobDb());
+    const response = await worker.fetch(
+      request("https://worker.example/api/ai/daily-review", {
+        method: "POST",
+        headers: { Authorization: "Bearer valid", "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...dailyJobFields("2099-01-06"),
+          provider: { id: "custom", baseUrl: "https://provider.example/v1", model: "fixture", apiKey: "fixture-secret" },
+          snapshot: { schema: "daily_review_snapshot", contractVersion: "2.0", date: "2099-01-06", records: [] }
+        })
+      }),
+      env
+    );
+    const accepted = await response.json();
+    const { body } = await readDailyReviewStatus(worker, env, dailyJobFields("2099-01-06").jobId);
+    assert.equal(response.status, 202);
+    assert.equal(accepted.state, "RUNNING");
+    assert.equal(body.state, "FAILED");
+    assert.equal(body.error, "ai_provider_timeout");
+    assert.equal(body.upstreamRequests, 1);
+    assert.equal(upstreamCalls, 1);
   }
 
   {

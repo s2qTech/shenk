@@ -35,7 +35,7 @@ data class AiProviderSettings(
 
 const val DEFAULT_AI_PROVIDER = "deepseek"
 const val DEFAULT_AI_BASE_URL = "https://api.deepseek.com"
-const val DEFAULT_AI_MODEL = "deepseek-v4-flash"
+const val DEFAULT_AI_MODEL = "deepseek-flash"
 
 class DevicePreferencesStore internal constructor(
     private val preferencesStore: DataStore<Preferences>,
@@ -83,7 +83,7 @@ class DevicePreferencesStore internal constructor(
     suspend fun aiProviderSettings(): AiProviderSettings = AiProviderSettings()
 
     suspend fun setAiProviderSettings(value: AiProviderSettings) {
-        require(value == AiProviderSettings()) { "phase 1 only supports the canonical DeepSeek V4 Flash provider" }
+        require(value == AiProviderSettings()) { "phase 1 only supports the canonical DeepSeek V4.1 Flash provider" }
     }
 
     internal val dataStore get() = preferencesStore

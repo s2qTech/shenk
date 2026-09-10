@@ -330,7 +330,7 @@ fun CalendarScreen(
                     details = details,
                     reviewState = reviewState,
                     canEdit = RecordEditPolicy.canEdit(date, today),
-                    canReview = !date.isAfter(today),
+                    canReview = !date.isAfter(today) && details?.actualLogs?.isNotEmpty() == true,
                     onEdit = { editing = it },
                     onCreate = { creating = true },
                     onOpenReview = { reviewing = true },

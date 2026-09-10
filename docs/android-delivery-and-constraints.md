@@ -69,7 +69,7 @@ Exit: an AI patch cannot partially apply, clear unrelated arrays, infer scenes, 
 
 ### Package 7: Daily AI Review
 
-- Fixed DeepSeek V4 Flash configuration with API-key-only setup and connection test.
+- Fixed DeepSeek V4.1 Flash configuration with API-key-only setup and connection test.
 - Worker proxy with secret redaction.
 - Durable AI job queue and daily-review versioning.
 - Evening unrecorded prompt and review notification.
@@ -184,7 +184,7 @@ Phase-2 work starts only after Package 8: widget, Health Connect/Xiaomi data, an
 
 ### AI
 
-- DeepSeek V4 Flash connection test, including unauthorized and timeout handling.
+- DeepSeek V4.1 Flash connection test, including unauthorized and timeout handling.
 - Timeout, unauthorized, malformed JSON, partial response, and retry.
 - Offline queue and later generation.
 - Corrected day invalidates and regenerates latest review.

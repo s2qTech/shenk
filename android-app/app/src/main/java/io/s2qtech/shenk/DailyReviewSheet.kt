@@ -216,7 +216,7 @@ fun DailyReviewSheet(
 
             Spacer(Modifier.height(18.dp))
             Text(
-                "第 ${review.version} 版 · DeepSeek V4 Flash",
+                "第 ${review.version} 版 · ${dailyReviewModelLabel(review.model)}",
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.outline,
             )
@@ -332,21 +332,23 @@ internal fun shouldAutoStartDailyReview(
 
 internal fun dailyReviewAllowsManualRetry(jobState: String?): Boolean = jobState == "FAILED"
 
+internal fun dailyReviewModelLabel(model: String): String = when (model) {
+    "deepseek-flash" -> "DeepSeek V4.1 Flash"
+    else -> "DeepSeek V4 Flash"
+}
+
 internal fun dailyReviewFailureMessage(error: String?, retrying: Boolean): String = when (error) {
     "ai_provider_http_401", "ai_provider_http_403" -> "DeepSeek 拒绝了当前 API Key，请到设置中重新测试或更换。"
     "ai_provider_http_402" -> "DeepSeek 账户余额或调用额度不足，请充值后重试。"
-    "ai_provider_http_400", "ai_provider_http_404" -> "DeepSeek V4 Flash 当前不可用或账户无权使用。"
+    "ai_provider_http_400", "ai_provider_http_404" -> "DeepSeek V4.1 Flash 当前不可用或账户无权使用。"
     "ai_provider_http_429" -> "DeepSeek 当前请求过多，稍后会自动重试。"
     "ai_provider_response_invalid", "ai_provider_review_invalid", "ai_provider_review_actions_missing" ->
         "DeepSeek 返回的简评不完整，稍后会自动重试。"
     "ai_provider_output_truncated" -> "DeepSeek 返回内容被截断，结构修复仍未完成，请重新尝试。"
     "ai_provider_job_expired", "ai_provider_job_abandoned" ->
         "上一次生成连接意外中断，服务端已确认任务不再运行，可以重新尝试。"
-    "generation_timeout", "ai_provider_timeout" -> if (retrying) {
-        "DeepSeek 本次生成时间较长，稍后会自动重试。"
-    } else {
-        "DeepSeek 多次生成超时，请稍后重试。"
-    }
+    "generation_timeout", "ai_provider_timeout" ->
+        "DeepSeek 在 5 分钟内未完成本次简评，请重新生成。"
     "ai_provider_unreachable" -> "云端暂时无法连接 DeepSeek，稍后会自动重试。"
     else -> if (retrying) "网络或 AI 服务暂时不可用，稍后会自动重试。" else "生成失败，请检查 AI 服务后重试。"
 }

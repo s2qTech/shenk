@@ -2,7 +2,7 @@
 
 Status: accepted on Xiaomi 14 on 2026-08-09; progress advanced to `8 / 9`.
 
-Updated: 2026-08-17
+Updated: 2026-09-11
 
 ## Scope
 
@@ -20,12 +20,12 @@ Package 7 generates one factual daily review after a formal workout, confirmed r
 
 ## Security and transport
 
-- Phase 1 fixes the user-facing provider to DeepSeek V4 Flash. The user configures only the API key; provider URL and model are canonical application defaults and are not exposed as routine settings.
+- Phase 1 fixes the user-facing provider to DeepSeek V4.1 Flash through the canonical `deepseek-flash` model name. The user configures only the API key; provider URL and model are canonical application defaults and are not exposed as routine settings.
 - The Worker transport remains OpenAI Chat Completions-compatible internally so a later provider adapter can be added without changing review ownership, queue, validation, confirmation, or audit semantics.
 - The provider key is stored only through Android Keystore.
 - Android sends the provider key to the Shenk Worker over TLS for the current request only.
 - The Worker validates the endpoint, rejects local/private/credential-bearing URLs, does not log or store the key, calls the provider, validates bounded JSON output, and returns only normalized review fields.
-- Daily-review calls keep reasoning enabled, request JSON output explicitly, and use a 42,066-token primary completion budget: twice the observed 21,033-token real-device request baseline. Because DeepSeek `max_tokens` excludes input, the actual total capacity is intentionally greater than two times the observed total. A structurally incomplete, empty, or length-truncated response receives one internal non-reasoning repair pass with an 8,192-token budget; this remains one user-visible job.
+- Daily-review calls explicitly enable reasoning at `high`, request JSON output, and use a 42,066-token primary completion budget: twice the observed 21,033-token real-device request baseline. Because DeepSeek `max_tokens` excludes input, the actual total capacity is intentionally greater than two times the observed total. A structurally incomplete, empty, or length-truncated response receives one internal non-reasoning repair pass with an 8,192-token budget; this remains one user-visible job. The prompt asks for a natural, evidence-based coach voice and a substantive 350–550-character assessment instead of terse or mechanical output.
 - The Worker records DeepSeek's numeric prompt/cache/completion/reasoning/total usage, finish reason, and upstream request count for each execution job. It does not record prompt content, snapshot facts, response bodies, or credentials.
 - Secrets are excluded from Room business rows, DataStore, contracts, logs, fixtures, backups, URLs, and cloud records.
 - Provider setup belongs to the app settings surface. The review sheet never exposes routine credential controls; after a successful test it shows only connection status and an explicit replace-key action.
@@ -35,7 +35,7 @@ Package 7 generates one factual daily review after a formal workout, confirmed r
 
 - Only the short conclusion is attached to the primary Today guidance card, directly after the effective plan or actual training summary.
 - Calendar date details subscribe to the selected date's current `daily_reviews` record and place the complete conclusion in the same day-overview surface as the effective guidance and formal training details. The compact date card does not repeat action items and does not truncate the conclusion; actions remain in the full review sheet.
-- Any past or current date can open the same review detail and generation flow. Historical generation always uses the normalized 14-day snapshot ending on the selected date; future dates cannot generate reviews.
+- Any past or current date with a confirmed formal workout/rest/skip record can open the same review detail and generation flow. Today and Calendar do not expose a generation or retry action before that confirmation. Historical generation always uses the normalized 14-day snapshot ending on the selected date; future dates cannot generate reviews.
 - Review generation is independent of the training-log correction window. An old day may receive a review even when its formal training record is already read-only.
 - Pending generation is visible immediately on that card and in the detail sheet. `PENDING`, `RUNNING`, and `AWAITING_SERVER` are all one non-retryable generating state. The UI never exposes retry until the Worker has recorded `FAILED` for that job.
 - Opening a missing review is the generation action when the provider and critical inputs are ready: it queues once and immediately shows the durable pending state. Missing critical inputs still require an explicit "按现有事实生成" confirmation, and existing, pending, retrying, or completed jobs are never auto-duplicated.
@@ -50,12 +50,12 @@ Package 7 generates one factual daily review after a formal workout, confirmed r
 - Missing data stays missing. Morning status, sleep duration, sleep quality, energy, and fatigue are critical review inputs.
 - Automatic generation does not assume values and does not queue an unprocessable job when provider configuration is absent.
 - The user may explicitly generate a partial review after seeing the missing-field list.
-- As confirmed on 2026-09-08, both automatic and partial generation require a non-deleted formal training/rest/skip record for the selected day. Status, measurements, plans, and timer facts alone cannot unlock review generation.
+- As confirmed on 2026-09-08, both automatic and partial generation require a non-deleted formal training/rest/skip record for the selected day. Status, measurements, plans, and timer facts alone cannot unlock review generation. This prerequisite is visible at every UI entry and is enforced again by the repository before queue creation.
 - Completed reviews expose explicit regeneration even when the input digest is unchanged. A new execution id replaces only the completed local queue entry; the normalized input digest is unchanged, existing review versions remain until successful replacement, and pending/running/polling jobs retain their execution id. No database or shared Contract migration is required.
 - Offline jobs remain queued until connectivity returns. After submission, Android uses the same deterministic job id and polls Worker state after any uncertain connection loss; it never submits a second provider request while the Worker reports `RUNNING`.
 - The Worker persists `RUNNING`, `SUCCEEDED`, or `FAILED` before returning the corresponding state. A repeated running or successful job id is idempotent and cannot call DeepSeek again. Only an explicit Worker `FAILED` state opens the user retry action.
 - Android submits once, accepts the Worker's immediate `RUNNING` response, and thereafter only polls D1-backed status. Opening or restarting Shenk keeps existing unique polling work, and chained follow-up work appends without replacing an active poll.
-- Cloudflare Workflows owns provider execution after acceptance. Its durable provider step has a 24-hour infrastructure guard rather than a phone/network deadline; the normal provider call and bounded structure-repair call have no application-defined timeout. The 20-second deadline remains limited to the explicit connection test.
+- Cloudflare Workflows owns provider execution after acceptance. Its durable step retains the 24-hour infrastructure guard, while one user-visible generation now shares a five-minute provider deadline across the high-reasoning primary call and any bounded structure-repair call. Exhausting that deadline writes an explicit `FAILED` result and exposes manual retry; timeout never starts a repair call. The 20-second deadline remains limited to the explicit connection test.
 - The provider key and normalized snapshot are AES-GCM sealed before entering durable Workflow state. Only ciphertext is persisted by the Workflow engine; the dedicated encryption key is a Cloudflare secret, and D1 still stores only job status, result, and usage metadata.
 - Android preserves only the Worker's bounded machine-readable error code. It never displays or persists provider response bodies, but it distinguishes rejected keys, exhausted balance, unavailable models, rate limits, upstream availability, and malformed review output. Both transient and terminal jobs can be retried explicitly.
 
@@ -67,14 +67,14 @@ Package 7 generates one factual daily review after a formal workout, confirmed r
 
 ## Automated gates
 
-- Contract and Worker regression tests: `45 / 45` passing.
+- Contract, Worker, and Android static regression tests: `63 / 63` passing.
 - Android unit tests, Lint, and debug APK assembly: passing.
 - Repository tests cover missing-data gating, missing-key behavior, deterministic digesting, queue creation, corrected-input superseding, failed-key replacement rollback, Worker role authorization, private-endpoint blocking, provider authorization forwarding, and secret non-echo.
 - Reliability regression tests also cover the reasoning completion budget, explicit JSON response mode, safe Worker error-code parsing, and retry UI for both transient and terminal jobs.
 
 ## Xiaomi 14 acceptance
 
-1. Enter a DeepSeek API key and test the DeepSeek V4 Flash connection.
+1. Enter a DeepSeek API key and test the DeepSeek V4.1 Flash connection.
 2. Open Today > Daily Review and verify missing critical inputs are named.
 3. Generate explicitly with incomplete data and verify no values are invented.
 4. Complete a formal workout/rest/skip online and verify a review is generated.
