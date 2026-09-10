@@ -134,6 +134,7 @@ Today is one adaptable canvas rather than a dashboard of nested cards.
 - User may add a delta check-in; omitted fields inherit the morning check-in.
 - Plan and relevant safety notes remain visible.
 - Today’s day-level action opens “记录今日情况” regardless of the plan’s routine reference. Training is entered independently through the Training canvas; recording never requires choosing or linking a routine.
+- After a formal training, rest, or skip record confirms the day, Today keeps recorded body facts visible but closes morning and pre-workout editing. A recorded pre-workout delta becomes read-only; a missing one is not offered for retrospective entry.
 
 ### Completed State
 

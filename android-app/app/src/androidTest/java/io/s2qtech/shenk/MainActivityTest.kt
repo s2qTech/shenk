@@ -22,12 +22,18 @@ import androidx.compose.ui.unit.dp
 import androidx.activity.compose.setContent
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import io.s2qtech.shenk.model.RoutineScene
+import io.s2qtech.shenk.model.CheckinKind
+import io.s2qtech.shenk.model.EffectiveStatusResolver
+import io.s2qtech.shenk.model.GuidanceSource
 import io.s2qtech.shenk.model.SharedEntityOwner
 import io.s2qtech.shenk.model.SharedRecord
+import io.s2qtech.shenk.model.StatusCheckin
+import io.s2qtech.shenk.model.TodayGuidance
 import io.s2qtech.shenk.model.decodeRoutineTemplate
 import io.s2qtech.shenk.sync.DailyReview
 import io.s2qtech.shenk.sync.DailyReviewState
 import io.s2qtech.shenk.sync.RoutineLibrary
+import io.s2qtech.shenk.sync.TodayRecords
 import io.s2qtech.shenk.timer.TimerEngineState
 import io.s2qtech.shenk.timer.RuntimePart
 import io.s2qtech.shenk.timer.RuntimeStep
@@ -147,6 +153,52 @@ class MainActivityTest {
         }
         composeRule.waitForIdle()
         composeRule.onNodeWithTag("today-screen").assertIsDisplayed()
+    }
+
+    @Test
+    fun completedDayKeepsBodyFactsVisibleWithoutEditActions() {
+        val morning = StatusCheckin(
+            id = "morning-test",
+            date = "2026-09-10",
+            kind = CheckinKind.MORNING,
+            observedAt = "2026-09-10T07:00:00+08:00",
+            sleepDurationMinutes = 326,
+            energy = 3,
+            fatigue = 3,
+            pain = emptyList(),
+        )
+        val preWorkout = StatusCheckin(
+            id = "pre-workout-test",
+            date = "2026-09-10",
+            kind = CheckinKind.PRE_WORKOUT,
+            observedAt = "2026-09-10T20:00:00+08:00",
+            baseCheckinId = morning.id,
+            energy = 4,
+        )
+        val records = TodayRecords(
+            date = morning.date,
+            morning = morning,
+            preWorkout = preWorkout,
+            metric = null,
+            latestMetric = null,
+            effectiveStatus = EffectiveStatusResolver.resolve(morning, preWorkout),
+            guidance = TodayGuidance(
+                source = GuidanceSource.ACTUAL,
+                title = "室内有氧",
+                trainingType = "indoor_aerobic",
+            ),
+        )
+
+        composeRule.activity.setContent {
+            ShenkTheme {
+                MorningStatusSection(records = records, onMorning = {}, onPreWorkout = {})
+            }
+        }
+
+        composeRule.onNodeWithTag("body-status-card").assertIsDisplayed()
+        composeRule.onNodeWithText("训练前状态").assertIsDisplayed()
+        assertTrue(composeRule.onAllNodesWithTag("morning-action").fetchSemanticsNodes().isEmpty())
+        assertTrue(composeRule.onAllNodesWithTag("pre-workout-action").fetchSemanticsNodes().isEmpty())
     }
 
     @Test

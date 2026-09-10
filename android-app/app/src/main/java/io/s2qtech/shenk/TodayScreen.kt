@@ -860,11 +860,12 @@ private fun CloudSetupPrompt(onClick: () -> Unit) {
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun MorningStatusSection(
+internal fun MorningStatusSection(
     records: TodayRecords?,
     onMorning: () -> Unit,
     onPreWorkout: () -> Unit,
 ) {
+    val statusLocked = isTodayStatusLocked(records?.guidance?.source)
     Surface(
         modifier = Modifier.fillMaxWidth().testTag("body-status-card"),
         color = MaterialTheme.colorScheme.surfaceContainerLow,
@@ -887,11 +888,13 @@ private fun MorningStatusSection(
                 style = MaterialTheme.typography.bodyMedium,
             )
         }
-        TodaySecondaryActionButton(
-            label = if (records?.morning == null) "记录" else "修改",
-            onClick = onMorning,
-            modifier = Modifier.testTag("morning-action"),
-        )
+        if (!statusLocked) {
+            TodaySecondaryActionButton(
+                label = if (records?.morning == null) "记录" else "修改",
+                onClick = onMorning,
+                modifier = Modifier.testTag("morning-action"),
+            )
+        }
     }
     Spacer(Modifier.height(16.dp))
 
@@ -974,15 +977,17 @@ private fun MorningStatusSection(
             values = values,
             largeText = largeText,
             preWorkoutRecorded = records.preWorkout != null,
+            statusLocked = statusLocked,
             onPreWorkout = onPreWorkout,
         )
     }
-    if (records?.morning != null && measurements == null) {
+    if (records?.morning != null && measurements == null && (!statusLocked || records.preWorkout != null)) {
         Spacer(Modifier.height(14.dp))
         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
         Spacer(Modifier.height(8.dp))
         PreWorkoutActionRow(
             recorded = records.preWorkout != null,
+            editable = !statusLocked,
             onClick = onPreWorkout,
         )
     }
@@ -996,6 +1001,7 @@ private fun MorningMeasurementSummary(
     values: List<Pair<String, String>>,
     largeText: Boolean,
     preWorkoutRecorded: Boolean,
+    statusLocked: Boolean,
     onPreWorkout: () -> Unit,
 ) {
     Column(
@@ -1047,17 +1053,21 @@ private fun MorningMeasurementSummary(
                     }
                 }
             }
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-            PreWorkoutActionRow(
-                recorded = preWorkoutRecorded,
-                onClick = onPreWorkout,
-            )
+            if (!statusLocked || preWorkoutRecorded) {
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                PreWorkoutActionRow(
+                    recorded = preWorkoutRecorded,
+                    editable = !statusLocked,
+                    onClick = onPreWorkout,
+                )
+            }
     }
 }
 
 @Composable
 private fun PreWorkoutActionRow(
     recorded: Boolean,
+    editable: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -1077,13 +1087,17 @@ private fun PreWorkoutActionRow(
                 color = MaterialTheme.colorScheme.secondary,
             )
         }
-        TodaySecondaryActionButton(
-            label = if (recorded) "修改" else "记录",
-            onClick = onClick,
-            modifier = Modifier.testTag("pre-workout-action"),
-        )
+        if (editable) {
+            TodaySecondaryActionButton(
+                label = if (recorded) "修改" else "记录",
+                onClick = onClick,
+                modifier = Modifier.testTag("pre-workout-action"),
+            )
+        }
     }
 }
+
+internal fun isTodayStatusLocked(source: GuidanceSource?): Boolean = source == GuidanceSource.ACTUAL
 
 @Composable
 private fun StatusValue(
