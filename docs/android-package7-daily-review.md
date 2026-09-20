@@ -86,3 +86,15 @@ Package 7 generates one factual daily review after a formal workout, confirmed r
 Device acceptance passed on 2026-08-09. Package 8 remains a separate work package and has not started.
 
 The 2026-08-12 reliability correction was deployed to the existing Worker and installed over the Xiaomi 14 build with application data preserved. The previously retrying August 11 job completed automatically after restart, and the device exposed the generated conclusion, assessment, and follow-up sections without another manual tap.
+
+## September 2026 corrective verification
+
+Implementation commit: `c92e6bb` (pushed). Phase-1 package progress remains `9 / 9`; this is corrective work within accepted Package 7.
+
+- The 2026-09-11 run passed all 63 Node regression checks, Android domain/data/app unit tests, debug Lint, UI instrumentation compilation, and debug/release assembly.
+- Xiaomi 14 passed all 12 `DailyReviewRepositoryInstrumentedTest` cases through direct ADB instrumentation in the isolated data-sync test package. Coverage includes empty/status-only rejection, confirmed training/rest/skip eligibility, deletion of the last day record, regeneration, and canonical provider configuration. Gradle's offline connected-test launcher lacked cached UTP dependencies; the direct instrumentation run completed successfully.
+- Worker version `3c070b41-2a86-48c3-8103-f6250a3adb06` was deployed and its health endpoint returned HTTP 200. Provider timeout tests use synthetic upstream responses; they do not constitute a live DeepSeek latency or output-quality measurement.
+- Release `1.0.0-rc.2` (12) was installed with `adb install -r` and cold-launched successfully. The original first-install timestamp remained `2026-08-12 02:29:56`.
+- The new empty-day Compose test compiled but has not completed a device UI run. On the 2026-09-20 follow-up, ADB reported no connected device. Remaining manual acceptance is to verify the empty-day entry, confirmed-day generation, and failed-job retry in the isolated test app. Production health records must not be altered for these checks.
+
+No shared schema, ownership, or database migration changed. Rollback uses the prior Worker deployment and a same-certificate Android build from `78a35c2`, with a version code no lower than the installed package. Install over the existing app without uninstalling or clearing data. Previously generated reviews and device-local credentials are retained.
