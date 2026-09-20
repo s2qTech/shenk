@@ -145,8 +145,8 @@ fun TrainingRoute(
     onReturnToToday: () -> Unit,
     onReady: () -> Unit = {},
 ) {
-    val library by routineRepository.observeLibrary().collectAsState(initial = null)
-    val pending by sessionRepository.observePendingCompletion().collectAsState(initial = emptyList())
+    val library by remember(routineRepository) { routineRepository.observeLibrary() }.collectAsState(initial = null)
+    val pending by remember(sessionRepository) { sessionRepository.observePendingCompletion() }.collectAsState(initial = emptyList())
     val snapshot by coordinator.snapshot.collectAsState()
     val context = LocalContext.current
     val activity = context as Activity

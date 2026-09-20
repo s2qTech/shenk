@@ -9,6 +9,9 @@ import java.time.Instant
 import java.util.UUID
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonObject
@@ -52,7 +55,8 @@ class LocalFirstRepository(
     private val json: Json = Json { ignoreUnknownKeys = false },
 ) {
     fun observeActive(entity: String): Flow<List<SharedRecord>> =
-        database.records().observeActive(entity).map { rows -> rows.map(::decode) }
+        database.records().observeActive(entity).distinctUntilChanged()
+            .map { rows -> rows.map(::decode) }.flowOn(Dispatchers.Default)
 
     fun observeConflicts(): Flow<List<ConflictEntity>> = database.conflicts().observeAll()
 
@@ -107,6 +111,7 @@ class LocalFirstRepository(
         database.withTransaction {
             val existing = database.records().get(remote.entity, remote.id)
             if (existing == null || existing.syncState == SyncFoundationState.SYNCED.name) {
+                if (existing != null && remote.revision < existing.revision) return@withTransaction
                 database.records().put(remote.toEntity(SyncFoundationState.SYNCED))
                 return@withTransaction
             }

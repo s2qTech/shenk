@@ -12,6 +12,8 @@
     const migrationKey = String(options.migrationKey || "entity-store-v2");
     const legacyCheckpointKey = String(options.legacyCheckpointKey || "legacy-snapshot-checkpoint-v2");
     let db = null;
+    let recordBaseline = null;
+    let persistTail = Promise.resolve();
 
     function clone(value) {
       return JSON.parse(JSON.stringify(value));
@@ -59,30 +61,18 @@
       });
     }
 
-    async function replaceRows(storeName, rows) {
+    async function updateOutbox(keys, update) {
       const database = await open();
-      if (!database) return { available: false, written: 0, removed: 0 };
-      const current = await getAll(storeName);
-      const currentByKey = new Map((current || []).map((row) => [row.key, row]));
-      const nextByKey = new Map((rows || []).map((row) => [row.key, row]));
-      const writes = [];
-      const deletes = [];
-
-      nextByKey.forEach((row, key) => {
-        if (JSON.stringify(currentByKey.get(key)) !== JSON.stringify(row)) writes.push(row);
-      });
-      currentByKey.forEach((_row, key) => {
-        if (!nextByKey.has(key)) deletes.push(key);
-      });
-      if (!writes.length && !deletes.length) return { available: true, written: 0, removed: 0 };
-
+      if (!database) return false;
       return new Promise((resolve, reject) => {
-        const tx = database.transaction(storeName, "readwrite");
-        const store = tx.objectStore(storeName);
-        writes.forEach((row) => store.put(row));
-        deletes.forEach((key) => store.delete(key));
-        tx.oncomplete = () => resolve({ available: true, written: writes.length, removed: deletes.length });
-        tx.onerror = () => reject(tx.error || new Error(`IndexedDB write failed: ${storeName}`));
+        const tx = database.transaction(outboxStoreName, "readwrite");
+        const store = tx.objectStore(outboxStoreName);
+        [...new Set(keys || [])].forEach(key => {
+          const request = store.get(key);
+          request.onsuccess = () => { if (request.result) store.put(update(request.result)); };
+        });
+        tx.oncomplete = () => resolve(true);
+        tx.onabort = tx.onerror = () => reject(tx.error || new Error("IndexedDB outbox update failed"));
       });
     }
 
@@ -141,6 +131,7 @@
 
     async function loadRecords() {
       const rows = await getAll(recordStoreName);
+      if (rows) recordBaseline = new Map(rows.map(row => [row.key, JSON.stringify(row)]));
       return rows === null ? null : rows.map((row) => clone(row.envelope)).filter(Boolean);
     }
 
@@ -149,16 +140,69 @@
       return rows === null ? null : rows.map(clone);
     }
 
-    async function persist(records, outboxEntries) {
-      const outboxRows = await getAll(outboxStoreName);
-      const recordResult = await replaceRows(recordStoreName, toRecordRows(records));
-      const outboxResult = await replaceRows(outboxStoreName, toOutboxRows(outboxEntries, outboxRows || []));
-      return {
-        available: recordResult.available,
-        recordResult,
-        outboxResult,
-        outbox: recordResult.available ? await loadOutbox() : null
-      };
+    function persist(records, outboxEntries, metadata = {}) {
+      const rows = toRecordRows(records);
+      const entries = clone(outboxEntries || []);
+      const task = persistTail.then(() => persistRows(rows, entries, metadata));
+      persistTail = task.catch(() => {});
+      return task;
+    }
+
+    async function persistRows(rows, entries, metadata) {
+      const database = await open();
+      if (!database) return { available: false, outbox: null };
+      if (!recordBaseline) await loadRecords();
+      const changed = rows.filter(row => recordBaseline.get(row.key) !== JSON.stringify(row));
+      return new Promise((resolve, reject) => {
+        const tx = database.transaction([recordStoreName, outboxStoreName, metaStoreName], "readwrite");
+        const recordStore = tx.objectStore(recordStoreName);
+        let failure = null;
+        let nextOutbox = [];
+        let outboxWritten = 0;
+        let outboxRemoved = 0;
+        changed.forEach(row => {
+          const request = recordStore.get(row.key);
+          request.onsuccess = () => {
+            const current = request.result;
+            // Another tab may have committed since this page loaded. Never
+            // replace that value from a stale in-memory snapshot.
+            if (current && JSON.stringify(current) !== recordBaseline.get(row.key) && JSON.stringify(current) !== JSON.stringify(row)) {
+              failure = new Error("entity_store_changed_in_another_tab");
+              tx.abort();
+              return;
+            }
+            recordStore.put(row);
+          };
+        });
+        const outboxStore = tx.objectStore(outboxStoreName);
+        const outboxRequest = outboxStore.getAll();
+        outboxRequest.onsuccess = () => {
+          const current = outboxRequest.result || [];
+          // Change only operations belonging to records changed by this save.
+          const changedKeys = new Set(changed.map(row => row.key));
+          const byKey = new Map(current.map(row => [row.key, row]));
+          const entryKeys = new Set(entries.map(row => row.key));
+          toOutboxRows(entries.filter(row => changedKeys.has(row.key) || !byKey.has(row.key)), current).forEach(row => {
+            outboxStore.put(row);
+            byKey.set(row.key, row);
+            outboxWritten++;
+          });
+          changedKeys.forEach(key => {
+            if (!entryKeys.has(key) && byKey.has(key)) {
+              outboxStore.delete(key);
+              byKey.delete(key);
+              outboxRemoved++;
+            }
+          });
+          nextOutbox = [...byKey.values()];
+        };
+        Object.entries(metadata).forEach(([key, value]) => tx.objectStore(metaStoreName).put({ key, value: clone(value) }));
+        tx.oncomplete = () => {
+          changed.forEach(row => recordBaseline.set(row.key, JSON.stringify(row)));
+          resolve({ available: true, recordResult: { available: true, written: changed.length, removed: 0 }, outboxResult: { available: true, written: outboxWritten, removed: outboxRemoved }, outbox: nextOutbox });
+        };
+        tx.onabort = tx.onerror = () => reject(failure || tx.error || new Error("IndexedDB transaction failed"));
+      });
     }
 
     async function initializeFromSnapshot(snapshotRecords, outboxEntries, backupPayload) {
@@ -189,38 +233,22 @@
     }
 
     async function recordFailure(keys, message, nextAttemptAt) {
-      const rows = await getAll(outboxStoreName);
-      if (rows === null) return false;
-      const target = new Set(keys || []);
-      const next = rows.map((row) => {
-        if (!target.has(row.key)) return row;
-        return {
+      return updateOutbox(keys, row => ({
           ...row,
           attempts: Number(row.attempts || 0) + 1,
           lastError: String(message || "sync_failed"),
           lastAttemptAt: new Date().toISOString(),
           nextAttemptAt: nextAttemptAt || "",
           updatedAt: new Date().toISOString()
-        };
-      });
-      await replaceRows(outboxStoreName, next);
-      return true;
+      }));
     }
 
     async function scheduleRetry(keys, nextAttemptAt) {
-      const rows = await getAll(outboxStoreName);
-      if (rows === null) return false;
-      const target = new Set(keys || []);
-      const next = rows.map((row) => {
-        if (!target.has(row.key)) return row;
-        return {
+      return updateOutbox(keys, row => ({
           ...row,
           nextAttemptAt: nextAttemptAt || "",
           updatedAt: new Date().toISOString()
-        };
-      });
-      await replaceRows(outboxStoreName, next);
-      return true;
+      }));
     }
 
     return {

@@ -86,7 +86,7 @@
       "RecordQueryResponse": {
         "type": "object",
         "required": ["ok", "contractVersion", "serverTime", "records"],
-        "properties": { "ok": { "const": true }, "contractVersion": { "const": "1.0" }, "serverTime": { "type": "string" }, "nextCursor": { "type": ["string", "null"] }, "records": { "type": "array", "items": { "$ref": "#/components/schemas/RecordEnvelope" } } }
+        "properties": { "ok": { "const": true }, "contractVersion": { "const": "1.0" }, "serverTime": { "type": "string", "description": "Committed query watermark: last returned updatedAt, or unchanged since on an empty page. Persist only after records are durable; continue pagination with the original since." }, "nextCursor": { "type": ["string", "null"] }, "records": { "type": "array", "items": { "$ref": "#/components/schemas/RecordEnvelope" } } }
       },
       "RecordUpsertResponse": {
         "type": "object",

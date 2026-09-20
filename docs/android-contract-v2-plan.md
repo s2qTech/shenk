@@ -13,6 +13,8 @@ Package 1 added the canonical v2 schema, OpenAPI description, sanitized fixtures
 
 ## 2. Compatibility Rules
 
+The 2026-09-20 reliability correction preserves v1/v2 envelopes and roles. Cloud writes use atomic revision preconditions; a record and its event commit together. `updatedAt` is assigned inside the database write and is strictly greater than prior committed record timestamps. Query `serverTime` is the last returned committed timestamp (or the unchanged `since` on an empty page), not response wall-clock time. Clients persist it only after the page data is durable. This requires no D1 schema or business-data migration. Updated clients perform one safe full reconciliation to recover records skipped by old watermarks; local dirty/conflict protection still applies. Rolling back code requires a fresh reconciliation before trusting an older timestamp cursor again.
+
 1. Keep the existing record envelope semantics: entity, ID, revision, device ID, timestamps, deletion marker, and data.
 2. Add fields and entities before removing old ones.
 3. Old Web `workouts` and combined `body_metrics` remain readable through mappers.

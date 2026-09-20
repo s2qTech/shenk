@@ -15,6 +15,28 @@ import kotlin.system.measureTimeMillis
 
 class TimerRuntimeTest {
     @Test
+    fun wallClockChangesDoNotChangeTrainingDurations() {
+        var monotonic = 0L
+        val engine = NativeTimerEngine(monotonicMillis = { monotonic })
+        engine.preview(TimerPreviewRequest(routine(simpleStep(60)), "clock", "clock", "2100-01-01"))
+        engine.start(100_000L)
+        monotonic = 5_000L
+        engine.tick(3_700_000L)
+        assertEquals(5_000L, engine.snapshot.activeMillis)
+        assertEquals(55_000L, engine.snapshot.currentStepRemainingMillis)
+        monotonic = 6_000L
+        engine.pause(1_000L)
+        monotonic = 16_000L
+        engine.resume(2_000L)
+        monotonic = 20_000L
+        engine.stop(6_000L)
+        assertEquals(10_000L, engine.snapshot.activeMillis)
+        assertEquals(10_000L, engine.snapshot.pausedMillis)
+        assertEquals(20_000L, engine.snapshot.elapsedMillis)
+        assertEquals(6_000L, engine.snapshot.endedAtEpochMillis)
+    }
+
+    @Test
     fun oneHourQuarterSecondTickStressStaysWithinCpuBudget() {
         val steps = (0 until 60).map { index ->
             simpleStep(60).copy(stepId = "step-$index", name = "动作 $index")

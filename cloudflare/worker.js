@@ -1119,7 +1119,7 @@ async function queryRecords(env, body, client) {
   const since = body.since ? String(body.since) : null;
   const page = normalizeQueryPage(body);
   if (!entities.length) {
-    return { ok: true, contractVersion, serverTime: new Date().toISOString(), records: [], nextCursor: null };
+    return { ok: true, contractVersion, serverTime: since || "1970-01-01T00:00:00.000Z", records: [], nextCursor: null };
   }
   const placeholders = entities.map(() => "?").join(",");
   const where = [`entity IN (${placeholders})`];
@@ -1151,7 +1151,7 @@ async function queryRecords(env, body, client) {
   return {
     ok: true,
     contractVersion,
-    serverTime: new Date().toISOString(),
+    serverTime: lastRow?.updated_at || since || "1970-01-01T00:00:00.000Z",
     records: visibleRows.map(row => rowToRecord(row, contractVersion)),
     nextCursor: hasMore && lastRow ? encodeQueryCursor(lastRow) : null
   };
@@ -1259,26 +1259,43 @@ async function upsertRecords(env, body, client) {
     const now = new Date().toISOString();
     const nextRevision = existing ? Number(existing.revision || 0) + 1 : Math.max(1, Number(record.revision || 1));
     const createdAt = existing?.created_at || record.createdAt || record.data.createdAt || now;
-    const updatedAt = now;
     const deletedAt = record.deletedAt || null;
 
-    await env.DB.prepare(
+    // The timestamp is allocated in the same serialized database write as the
+    // revision CAS. A later commit must sort after every previously pulled row.
+    const [written] = await env.DB.batch([env.DB.prepare(
       `INSERT INTO cloud_records(entity, id, revision, device_id, created_at, updated_at, deleted_at, data_json)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+       VALUES (?, ?, ?, ?, ?,
+         strftime('%Y-%m-%dT%H:%M:%fZ', MAX(julianday('now'),
+           COALESCE(julianday((SELECT MAX(updated_at) FROM cloud_records)) + 1.0 / 86400000, 0))), ?, ?)
        ON CONFLICT(entity, id) DO UPDATE SET
          revision = excluded.revision,
          device_id = excluded.device_id,
          updated_at = excluded.updated_at,
          deleted_at = excluded.deleted_at,
-         data_json = excluded.data_json`
-    ).bind(entity, id, nextRevision, deviceId, createdAt, updatedAt, deletedAt, JSON.stringify(record.data)).run();
-
-    await env.DB.prepare(
+         data_json = excluded.data_json
+       WHERE cloud_records.revision = ? AND ? = 1
+       RETURNING entity, id, revision, updated_at`
+    ).bind(entity, id, nextRevision, deviceId, createdAt, deletedAt, JSON.stringify(record.data), baseRevision, existing ? 1 : 0),
+    env.DB.prepare(
       `INSERT INTO cloud_events(id, entity, entity_id, operation, device_id, base_revision, next_revision, happened_at, payload_json)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
-    ).bind(crypto.randomUUID(), entity, id, deletedAt ? "delete" : "upsert", deviceId, baseRevision, nextRevision, now, JSON.stringify(record)).run();
+       SELECT ?, entity, id, ?, ?, ?, revision, updated_at, ? FROM cloud_records
+       WHERE entity = ? AND id = ? AND changes() > 0`
+    ).bind(crypto.randomUUID(), deletedAt ? "delete" : "upsert", deviceId, baseRevision, JSON.stringify(record), entity, id)]);
 
-    accepted.push({ entity, id, revision: nextRevision, updatedAt });
+    const committed = written.results?.[0];
+    if (committed) {
+      accepted.push({ entity, id, revision: committed.revision, updatedAt: committed.updated_at });
+    } else {
+      const current = await env.DB.prepare(
+        "SELECT entity, id, revision, device_id, created_at, updated_at, deleted_at, data_json FROM cloud_records WHERE entity = ? AND id = ?"
+      ).bind(entity, id).first();
+      if (current && hasSameStoredPayload(current, record.data, deletedAt)) {
+        accepted.push({ entity, id, revision: current.revision, updatedAt: current.updated_at });
+      } else {
+        conflicts.push({ entity, id, reason: "server_revision_mismatch", serverRecord: current ? rowToRecord(current, contractVersion) : null, clientRecord: record });
+      }
+    }
   }
 
   return {

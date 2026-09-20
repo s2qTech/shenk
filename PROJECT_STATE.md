@@ -59,7 +59,7 @@ Timer modules write:
 2. In-progress timer sessions are persisted every 15 seconds and recovered as `stopped` using the last activity heartbeat. A process kill can still lose up to one heartbeat interval of active time.
 3. Published templates are protected when explicitly marked `lifecycle: "published"`, `publishedAt`, or `immutable: true`; legacy templates without a marker remain mutable for migration compatibility.
 4. Both frontends remain large single files; the first extracted timer-session core is only the start of modularization.
-5. Pull pagination is available and both Web clients follow it. IndexedDB still stores a whole snapshot, so the entity-store outbox remains work package 4.
+5. Pull pagination and the Web entity-store/outbox are implemented. The 2026-09-20 reliability work addresses atomic revision checks, committed pull watermarks, transactional Web persistence, and repeated Android subscriptions; acceptance is recorded separately after verification.
 6. The 11 legacy cloud `routine_templates` still require the user-approved one-time authority migration recorded in `docs/coach-routine-contract.md`. The prepared migration updates only explicit `scene`, `role`, and legacy `active` to `published`; it deletes nothing and preserves steps and visibility fields. Until that migration is applied and synchronized, Android correctly excludes those routines as invalid.
 
 ## Work Package Progress

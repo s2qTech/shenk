@@ -111,6 +111,9 @@ interface SharedRecordDao {
 
 @Dao
 interface OutboxDao {
+    @Query("SELECT MIN(next_attempt_at) FROM outbox")
+    suspend fun nextScheduledAt(): Long?
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun put(operation: OutboxEntity)
 
@@ -153,6 +156,9 @@ interface ConflictDao {
 
 @Dao
 interface SyncMetadataDao {
+    @Query("DELETE FROM sync_metadata WHERE `key` = :key")
+    suspend fun delete(key: String)
+
     @Query("SELECT value FROM sync_metadata WHERE `key` = :key")
     suspend fun get(key: String): String?
 
@@ -165,7 +171,7 @@ interface AiReviewJobDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun put(job: AiReviewJobEntity)
 
-    @Query("SELECT * FROM ai_review_jobs WHERE date = :date ORDER BY updated_at DESC, created_at DESC, job_id DESC LIMIT 1")
+    @Query("SELECT * FROM ai_review_jobs WHERE date = :date AND state != 'SUPERSEDED' ORDER BY updated_at DESC, created_at DESC, job_id DESC LIMIT 1")
     fun observeLatest(date: String): Flow<AiReviewJobEntity?>
 
     @Query("SELECT * FROM ai_review_jobs WHERE state IN ('PENDING', 'RETRY', 'AWAITING_SERVER') AND next_attempt_at <= :now ORDER BY created_at LIMIT 1")
@@ -180,7 +186,7 @@ interface AiReviewJobDao {
     @Query("SELECT * FROM ai_review_jobs WHERE date = :date AND state IN ('PENDING', 'RUNNING', 'AWAITING_SERVER', 'RETRY') LIMIT 1")
     suspend fun findActive(date: String): AiReviewJobEntity?
 
-    @Query("UPDATE ai_review_jobs SET state = :state, attempts = :attempts, next_attempt_at = :nextAttemptAt, last_error = :lastError, updated_at = :updatedAt WHERE job_id = :jobId")
+    @Query("UPDATE ai_review_jobs SET state = :state, attempts = :attempts, next_attempt_at = :nextAttemptAt, last_error = :lastError, updated_at = :updatedAt WHERE job_id = :jobId AND state != 'SUPERSEDED'")
     suspend fun updateState(jobId: String, state: String, attempts: Int, nextAttemptAt: Long, lastError: String?, updatedAt: Long)
 
     @Query("UPDATE ai_review_jobs SET state = 'AWAITING_SERVER', next_attempt_at = :now, last_error = NULL, updated_at = :now WHERE state = 'RUNNING' AND updated_at <= :cutoff")
@@ -189,8 +195,11 @@ interface AiReviewJobDao {
     @Query("UPDATE ai_review_jobs SET state = 'PENDING', attempts = :attempts, next_attempt_at = :now, last_error = NULL, updated_at = :now WHERE job_id = :jobId")
     suspend fun activate(jobId: String, attempts: Int, now: Long)
 
-    @Query("UPDATE ai_review_jobs SET state = 'SUPERSEDED', updated_at = :updatedAt WHERE date = :date AND input_digest != :digest AND state IN ('PENDING', 'RETRY')")
+    @Query("UPDATE ai_review_jobs SET state = 'SUPERSEDED', updated_at = :updatedAt WHERE date = :date AND input_digest != :digest AND state IN ('PENDING', 'RETRY', 'RUNNING', 'AWAITING_SERVER')")
     suspend fun supersedeOtherInputs(date: String, digest: String, updatedAt: Long)
+
+    @Query("SELECT * FROM ai_review_jobs WHERE job_id = :jobId")
+    suspend fun get(jobId: String): AiReviewJobEntity?
 }
 
 @Database(

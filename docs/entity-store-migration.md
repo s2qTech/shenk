@@ -44,6 +44,16 @@ for every save.
 Deleted records remain tombstones in the store so another device cannot restore
 them accidentally.
 
+The 2026-09-20 correction commits changed record rows, their outbox operations,
+and the endpoint-scoped `committed-pull-v2` cursor in one IndexedDB transaction.
+Ordinary saves reuse the loaded baseline and read only changed record keys;
+they do not scan the entire record store or build a legacy snapshot first.
+Concurrent stale-tab edits abort visibly instead of replacing a newer record.
+Outbox retry metadata updates only the requested keys in its own transaction.
+A transaction failure is reported as a failed save, not a successful fallback
+whose data would be hidden by the entity store on restart. The legacy fallback
+still works when IndexedDB is unavailable. Existing stores/schema are unchanged.
+
 Outbound sync reads persisted outbox entries first. The in-memory dirty-record
 scan remains only as a compatibility fallback while the dual-write window is open.
 Accepted and conflicted records leave the outbox on the next local save; failed

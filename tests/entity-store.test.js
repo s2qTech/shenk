@@ -14,60 +14,7 @@ function createLocalStorage() {
   };
 }
 
-function createIndexedDb() {
-  const stores = new Map();
-  const database = {
-    objectStoreNames: { contains(name) { return stores.has(name); } },
-    createObjectStore(name) {
-      stores.set(name, new Map());
-      return null;
-    },
-    transaction(name) {
-      const rows = stores.get(name);
-      const tx = { oncomplete: null, onerror: null, error: null };
-      const finish = () => setTimeout(() => tx.oncomplete?.(), 0);
-      tx.objectStore = () => {
-          return {
-            getAll() {
-              const request = { onsuccess: null, onerror: null, result: null };
-              setTimeout(() => {
-                request.result = [...rows.values()];
-                request.onsuccess?.();
-              }, 0);
-              return request;
-            },
-            get(key) {
-              const request = { onsuccess: null, onerror: null, result: null };
-              setTimeout(() => {
-                request.result = rows.get(key) || null;
-                request.onsuccess?.();
-              }, 0);
-              return request;
-            },
-            put(value) {
-              rows.set(value.key, value);
-              finish();
-            },
-            delete(key) {
-              rows.delete(key);
-              finish();
-            }
-          };
-      };
-      return tx;
-    }
-  };
-  return {
-    open() {
-      const request = { result: database, onupgradeneeded: null, onsuccess: null, onerror: null };
-      setTimeout(() => {
-        request.onupgradeneeded?.();
-        request.onsuccess?.();
-      }, 0);
-      return request;
-    }
-  };
-}
+const { createIndexedDb } = require("./helpers/indexed-db");
 
 function loadStore(browser) {
   const source = fs.readFileSync(path.join(__dirname, "..", "src", "entity-store.js"), "utf8");
@@ -143,6 +90,25 @@ async function run() {
   const finalRecords = await store.loadRecords();
   assert.equal(finalRecords[0].revision, 2);
   assert.deepEqual(JSON.parse(JSON.stringify(await store.loadOutbox())), []);
+
+  const scansBeforeSave = indexedDB.stats.recordScans;
+  const changed = { ...cleanRecord, syncState: "dirty", data: { ...cleanRecord.data, notes: "synthetic change" } };
+  indexedDB.failNextWrite();
+  await assert.rejects(store.persist([changed], [{ ...outbox[0], envelope: changed }], { "pull-fixture": "2099-01-02" }));
+  assert.equal((await reopened.loadRecords())[0].revision, 2);
+  assert.equal((await reopened.loadRecords())[0].data.notes, undefined);
+  assert.equal((await reopened.loadOutbox()).length, 0);
+  assert.equal(await reopened.getMetaValue("pull-fixture"), null);
+  const scansAfterVerification = indexedDB.stats.recordScans;
+  await store.persist([changed], [{ ...outbox[0], envelope: changed }], { "pull-fixture": "2099-01-02" });
+  assert.equal(indexedDB.stats.recordScans, scansAfterVerification, "ordinary save must not rescan the record store");
+  assert.equal(await reopened.getMetaValue("pull-fixture"), "2099-01-02");
+  assert.equal((await reopened.loadOutbox()).length, 1);
+  const staleChange = { ...cleanRecord, data: { ...cleanRecord.data, notes: "stale tab" } };
+  await assert.rejects(reopened.persist([staleChange], []), /entity_store_changed_in_another_tab/);
+  assert.equal((await store.loadRecords())[0].data.notes, "synthetic change");
+  assert.equal((await store.loadOutbox()).length, 1);
+  assert(scansBeforeSave > 0);
 
   console.log("entity-store.test.js passed");
 }

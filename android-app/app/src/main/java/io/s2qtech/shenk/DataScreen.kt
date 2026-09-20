@@ -55,8 +55,8 @@ fun DataScreen(
     repository: CalendarRecordRepository,
     modifier: Modifier = Modifier,
 ) {
-    val today = remember { LocalDate.now() }
-    val trends by repository.observeBodyTrends(today).collectAsState(initial = null)
+    val today = rememberCurrentDate()
+    val trends by remember(repository, today) { repository.observeBodyTrends(today) }.collectAsState(initial = null)
     val kinds = MetricKind.entries
     val pagerState = rememberPagerState(pageCount = { kinds.size })
     val scope = rememberCoroutineScope()

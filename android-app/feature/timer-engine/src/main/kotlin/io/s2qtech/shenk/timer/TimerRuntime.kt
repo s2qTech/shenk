@@ -50,6 +50,7 @@ data class TimerSnapshot(
     val endedAtEpochMillis: Long? = null,
     val lastUpdatedEpochMillis: Long? = null,
     val interruptionReason: String? = null,
+    val lastUpdatedMonotonicMillis: Long? = null,
 ) {
     val currentStep: RuntimeStep? get() = steps.getOrNull(currentStepIndex)
     val nextStep: RuntimeStep? get() = steps.getOrNull(currentStepIndex + 1)
@@ -136,8 +137,11 @@ fun restoreTimerSnapshot(
 
 class NativeTimerEngine(
     initial: TimerSnapshot = TimerSnapshot(),
+    private val monotonicMillis: (() -> Long)? = null,
 ) : TimerEnginePort {
-    override var snapshot: TimerSnapshot = initial
+    override var snapshot: TimerSnapshot = initial.copy(
+        lastUpdatedMonotonicMillis = monotonicMillis?.invoke() ?: initial.lastUpdatedEpochMillis,
+    )
         private set
 
     override fun preview(request: TimerPreviewRequest): TimerSnapshot {
@@ -159,6 +163,7 @@ class NativeTimerEngine(
             state = TimerEngineState.RUNNING,
             startedAtEpochMillis = nowEpochMillis,
             lastUpdatedEpochMillis = nowEpochMillis,
+            lastUpdatedMonotonicMillis = monotonicMillis?.invoke() ?: nowEpochMillis,
         )
         return snapshot
     }
@@ -248,14 +253,16 @@ class NativeTimerEngine(
 
     private fun advance(value: TimerSnapshot, now: Long): TimerSnapshot {
         if (value.state !in setOf(TimerEngineState.RUNNING, TimerEngineState.PAUSED)) return value
-        val last = value.lastUpdatedEpochMillis ?: now
-        val delta = max(0L, now - last)
-        val elapsed = value.startedAtEpochMillis?.let { max(0L, now - it) } ?: value.elapsedMillis
+        val monotonicNow = monotonicMillis?.invoke() ?: now
+        val last = value.lastUpdatedMonotonicMillis ?: monotonicNow
+        val delta = max(0L, monotonicNow - last)
+        val elapsed = value.elapsedMillis + delta
         if (value.state == TimerEngineState.PAUSED) {
             return value.copy(
                 elapsedMillis = elapsed,
                 pausedMillis = value.pausedMillis + delta,
                 lastUpdatedEpochMillis = now,
+                lastUpdatedMonotonicMillis = monotonicNow,
             )
         }
 
@@ -283,6 +290,7 @@ class NativeTimerEngine(
                 pausedMillis = max(value.pausedMillis, elapsed - (value.activeMillis + consumed)),
                 endedAtEpochMillis = now,
                 lastUpdatedEpochMillis = now,
+                lastUpdatedMonotonicMillis = monotonicNow,
             )
         } else {
             value.copy(
@@ -292,6 +300,7 @@ class NativeTimerEngine(
                 elapsedMillis = elapsed,
                 pausedMillis = max(value.pausedMillis, elapsed - (value.activeMillis + consumed)),
                 lastUpdatedEpochMillis = now,
+                lastUpdatedMonotonicMillis = monotonicNow,
             )
         }
     }

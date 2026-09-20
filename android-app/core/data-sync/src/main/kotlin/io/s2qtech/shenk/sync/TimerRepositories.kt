@@ -11,6 +11,8 @@ import java.time.Instant
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
@@ -46,7 +48,7 @@ class RoutineLibraryRepository(
             },
             rejectedCount = decoded.count { it.routine == null },
         )
-    }
+    }.flowOn(Dispatchers.Default)
 
     suspend fun deleteRoutine(id: String): Boolean {
         val current = records.get("routine_templates", id) ?: return false
@@ -108,7 +110,7 @@ class NativeTimerSessionRepository(
                     routineTitle = session.routineSnapshot.string("title") ?: "训练流程",
                 )
             }
-    }
+    }.flowOn(Dispatchers.Default)
 
     suspend fun ignoreCompletion(session: TimerSessionFact): SyncFoundationState {
         val now = Instant.now().toString()

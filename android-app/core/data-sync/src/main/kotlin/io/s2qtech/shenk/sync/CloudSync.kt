@@ -211,7 +211,7 @@ class SyncEngine(
     }
 
     companion object {
-        const val META_LAST_PULL_AT = "last_pull_at"
+        const val META_LAST_PULL_AT = "committed_pull_v2"
         const val OUTBOX_BATCH_SIZE = 100
         const val PULL_PAGE_SIZE = 200
         const val MAX_PUSH_BATCHES_PER_RUN = 10
@@ -231,17 +231,18 @@ private data class PushBatchResult(
 }
 
 class SyncScheduler(private val context: Context) {
-    fun enqueue() {
+    fun enqueue(delayMillis: Long = 0L) {
         val constraints = Constraints.Builder()
             .setRequiredNetworkType(NetworkType.CONNECTED)
             .build()
         val request = OneTimeWorkRequestBuilder<CloudSyncWorker>()
+            .setInitialDelay(delayMillis.coerceAtLeast(0L), TimeUnit.MILLISECONDS)
             .setConstraints(constraints)
             .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 30, TimeUnit.SECONDS)
             .build()
         WorkManager.getInstance(context).enqueueUniqueWork(
             WORK_NAME,
-            ExistingWorkPolicy.KEEP,
+            ExistingWorkPolicy.APPEND_OR_REPLACE,
             request,
         )
     }
@@ -276,6 +277,9 @@ class CloudSyncWorker(
         )
         return try {
             engine.synchronize()
+            database.outbox().nextScheduledAt()?.let { next ->
+                SyncScheduler(applicationContext).enqueue((next - System.currentTimeMillis()).coerceAtLeast(1_000L))
+            }
             Result.success()
         } catch (_: Exception) {
             Result.retry()

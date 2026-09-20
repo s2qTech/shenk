@@ -119,9 +119,9 @@ fun TodayRoute(
     onPlanning: () -> Unit = {},
     onTraining: (TodayGuidance?) -> Unit = {},
 ) {
-    val date = remember { LocalDate.now() }
-    val records by repository.observe(date).collectAsState(initial = null)
-    var sheet by remember { mutableStateOf<TodaySheet?>(null) }
+    val date = rememberCurrentDate()
+    val records by remember(repository, date) { repository.observe(date) }.collectAsState(initial = null)
+    var sheet by remember(date) { mutableStateOf<TodaySheet?>(null) }
     val snackbar = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
@@ -129,7 +129,7 @@ fun TodayRoute(
     val dailyReviewRepository = remember(context) {
         application.dailyReviewRepository
     }
-    val dailyReviewState by dailyReviewRepository.observe(date).collectAsState(
+    val dailyReviewState by remember(dailyReviewRepository, date) { dailyReviewRepository.observe(date) }.collectAsState(
         initial = io.s2qtech.shenk.sync.DailyReviewState(),
     )
     var reminders by remember { mutableStateOf(ReminderSettings()) }
@@ -137,7 +137,7 @@ fun TodayRoute(
     var connectionBusy by remember { mutableStateOf(false) }
     var connectionError by remember { mutableStateOf<String?>(null) }
     var backupBusy by remember { mutableStateOf(false) }
-    val conflicts by application.localFirstRepository.observeConflicts().collectAsState(initial = emptyList())
+    val conflicts by remember(application) { application.localFirstRepository.observeConflicts() }.collectAsState(initial = emptyList())
     var resolvingConflictKey by remember { mutableStateOf<String?>(null) }
     var reminderSystemRefresh by remember { mutableIntStateOf(0) }
     val businessBackup = remember(context) {

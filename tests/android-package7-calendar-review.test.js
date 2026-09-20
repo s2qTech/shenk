@@ -90,10 +90,10 @@ test('package 7 contract documents historical review behavior', () => {
 test('daily review snapshots version retrospective review policy', () => {
   const repository = read('android-app/core/data-sync/src/main/kotlin/io/s2qtech/shenk/sync/DailyReviewRepository.kt');
 
-  assert.match(repository, /put\("reviewPolicyVersion", JsonPrimitive\(2\)\)/);
+  assert.match(repository, /put\("reviewPolicyVersion", JsonPrimitive\(3\)\)/);
 });
 
-test('daily review generation is long-running, idempotent, and exposes retry only after terminal failure', () => {
+test('daily review generation is long-running, idempotent, and bounds transport and retries the same job after uncertain failure', () => {
   const repository = read('android-app/core/data-sync/src/main/kotlin/io/s2qtech/shenk/sync/DailyReviewRepository.kt');
   const androidWorker = read('android-app/app/src/main/java/io/s2qtech/shenk/DailyReviewWork.kt');
   const application = read('android-app/app/src/main/java/io/s2qtech/shenk/ShenkApplication.kt');
@@ -102,7 +102,7 @@ test('daily review generation is long-running, idempotent, and exposes retry onl
   const sheet = read('android-app/app/src/main/java/io/s2qtech/shenk/DailyReviewSheet.kt');
   const today = read('android-app/app/src/main/java/io/s2qtech/shenk/TodayScreen.kt');
 
-  assert.match(repository, /\.readTimeout\(0, TimeUnit\.SECONDS\)/);
+  assert.match(repository, /\.readTimeout\(30, TimeUnit\.SECONDS\)/);
   assert.match(repository, /"AWAITING_SERVER"/);
   assert.match(androidWorker, /ExistingWorkPolicy\.APPEND_OR_REPLACE/);
   assert.match(application, /policy = ExistingWorkPolicy\.KEEP/);

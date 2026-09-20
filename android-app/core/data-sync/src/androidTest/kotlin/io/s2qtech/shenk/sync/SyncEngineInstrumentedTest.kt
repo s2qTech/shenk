@@ -83,6 +83,19 @@ class SyncEngineInstrumentedTest {
             assertEquals(1, pending?.attempts)
             assertEquals("unacknowledged_response", pending?.lastError)
             assertTrue((pending?.nextAttemptAt ?: 0L) > clock.epochMillis())
+            assertEquals(pending?.nextAttemptAt, database.outbox().nextScheduledAt())
+        }
+    }
+
+    @Test
+    fun oldResponseTimeWatermarkIsReconciledOnceThenUsesCommittedCursor() {
+        runBlocking {
+            database.metadata().put(SyncMetadataEntity("last_pull_at", "2100-01-02T00:00:00Z"))
+            val api = FakeWorkerApi()
+            engine(api).synchronize()
+            assertEquals("null", api.lastQuery?.get("since").toString())
+            engine(api).synchronize()
+            assertEquals("\"2100-01-01T00:10:00Z\"", api.lastQuery?.get("since").toString())
         }
     }
 
@@ -173,10 +186,14 @@ class SyncEngineInstrumentedTest {
         },
     ) : WorkerRecordApi {
         var lastUpsert: JsonObject? = null
+        var lastQuery: JsonObject? = null
 
-        override suspend fun query(request: JsonObject): JsonObject = buildJsonObject {
-            put("serverTime", JsonPrimitive("2100-01-01T00:10:00Z"))
-            put("records", JsonArray(emptyList()))
+        override suspend fun query(request: JsonObject): JsonObject {
+            lastQuery = request
+            return buildJsonObject {
+                put("serverTime", JsonPrimitive("2100-01-01T00:10:00Z"))
+                put("records", JsonArray(emptyList()))
+            }
         }
 
         override suspend fun upsert(request: JsonObject): JsonObject {

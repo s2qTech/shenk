@@ -204,6 +204,8 @@ Android device
 5. Android polls authoritative server state until `SUCCEEDED` or explicit `FAILED`; it cannot cancel or duplicate provider execution.
 6. Correction creates a new version; only the latest is prominent.
 
+The 2026-09-20 reliability correction bounds each submission/status HTTP call and the online status-wait window. An uncertain transport failure may expose a retry, but retry resumes the same job ID and cannot create a second provider execution. Only an explicit server failure permits the existing server retry behavior. Accepting a result rechecks the current normalized input in the same local transaction as review persistence and job completion; superseded input cannot replace the current review. Effective goals and strategies are selected by their effective ranges rather than daily `date` fields. High reasoning and the existing output budgets are unchanged.
+
 Generation requires a confirmed training/rest/skip record for the selected date, including when the user accepts incomplete status inputs. Explicit regeneration of a completed review uses a new execution id with the same normalized input digest. The local queue transaction reuses active jobs and replaces only a completed entry for that digest; existing review versions remain visible until the replacement succeeds. This requires no Room or shared Contract migration.
 
 Daily AI cannot write formal plans, plan adjustments, or routines.

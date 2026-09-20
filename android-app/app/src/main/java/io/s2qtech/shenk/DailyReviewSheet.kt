@@ -349,6 +349,7 @@ internal fun dailyReviewFailureMessage(error: String?, retrying: Boolean): Strin
         "上一次生成连接意外中断，服务端已确认任务不再运行，可以重新尝试。"
     "generation_timeout", "ai_provider_timeout" ->
         "DeepSeek 在 5 分钟内未完成本次简评，请重新生成。"
+    "ai_status_timeout" -> "暂时无法确认简评结果，请重试。会继续查询原任务，不会重复创建简评。"
     "ai_provider_unreachable" -> "云端暂时无法连接 DeepSeek，稍后会自动重试。"
     else -> if (retrying) "网络或 AI 服务暂时不可用，稍后会自动重试。" else "生成失败，请检查 AI 服务后重试。"
 }

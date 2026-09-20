@@ -15,6 +15,9 @@ import java.util.UUID
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
@@ -121,8 +124,8 @@ object WorkerAiApiFactory {
         require(token.isNotBlank()) { "cloud token is required" }
         val client = OkHttpClient.Builder()
             .connectTimeout(DAILY_REVIEW_CONNECT_TIMEOUT_SECONDS, TimeUnit.SECONDS)
-            .readTimeout(0, TimeUnit.SECONDS)
-            .callTimeout(0, TimeUnit.SECONDS)
+            .readTimeout(30, TimeUnit.SECONDS)
+            .callTimeout(30, TimeUnit.SECONDS)
             .addInterceptor { chain ->
                 val request = chain.request().newBuilder()
                         .header("Authorization", "Bearer $token")
@@ -130,7 +133,7 @@ object WorkerAiApiFactory {
                 val readTimeout = if (request.url.encodedPath.endsWith("/ai/connection-test")) {
                     AI_CONNECTION_TEST_READ_TIMEOUT_SECONDS
                 } else {
-                    0L
+                    30L
                 }
                 chain.withReadTimeout(readTimeout.toInt(), TimeUnit.SECONDS).proceed(request)
             }
@@ -154,6 +157,15 @@ class DailyReviewRepository(
     private val nowInstant: () -> String = { Instant.now().toString() },
     private val apiFactory: (String, String, Json) -> WorkerAiApi = WorkerAiApiFactory::create,
 ) {
+    private var cachedApi: Triple<String, String, WorkerAiApi>? = null
+
+    @Synchronized
+    private fun apiFor(base: String, token: String): WorkerAiApi {
+        val cached = cachedApi
+        if (cached != null && cached.first == base && cached.second == token) return cached.third
+        return apiFactory(base, token, json).also { cachedApi = Triple(base, token, it) }
+    }
+
     suspend fun providerSettings(): AiProviderSettings = preferences.aiProviderSettings()
 
     suspend fun hasProviderKey(): Boolean = !secrets.get(SecretName.AI_PROVIDER_KEY).isNullOrBlank()
@@ -170,7 +182,7 @@ class DailyReviewRepository(
         val currentKey = secrets.get(SecretName.AI_PROVIDER_KEY)
         val candidate = candidateApiKey?.trim()?.takeIf { it.isNotEmpty() } ?: currentKey
             ?: error("ai_key_missing")
-        val api = apiFactory(endpoint.apiBase, token, json)
+        val api = apiFor(endpoint.apiBase, token)
         val response = try {
             api.connectionTest(providerRequest(settings, candidate))
         } catch (error: HttpException) {
@@ -207,7 +219,7 @@ class DailyReviewRepository(
             jobAttempts = job?.attempts ?: 0,
             jobNextAttemptAt = job?.nextAttemptAt,
         )
-    }
+    }.flowOn(Dispatchers.Default)
 
     suspend fun recoverInterruptedJobs(): Int {
         val now = nowMillis()
@@ -217,11 +229,20 @@ class DailyReviewRepository(
     suspend fun prepare(date: LocalDate): DailyReviewPreparation {
         val all = records.allRecords().filter { it.deletedAt == null }
         val start = date.minusDays(13)
-        val relevant = all.filter { record ->
-            record.entity in REVIEW_INPUT_ENTITIES && record.data.dateOrNull()?.let { value ->
+        val policies = all.filter { record ->
+            record.entity in setOf("goal_sets", "coach_strategies") &&
+                record.data.string("lifecycle") == "published" &&
+                record.data.string("effectiveFrom")?.let { it <= date.toString() } == true &&
+                record.data.string("effectiveTo")?.let { it >= date.toString() } != false
+        }.groupBy { it.entity }.values.mapNotNull { versions ->
+            versions.maxWithOrNull(compareBy<SharedRecord>({ it.data.string("effectiveFrom") }, { it.envelope.string("updatedAt") }, { it.id }))
+        }
+        val relevant = (all.filter { record ->
+            record.entity in REVIEW_INPUT_ENTITIES && record.entity !in setOf("goal_sets", "coach_strategies") && record.data.dateOrNull()?.let { value ->
                 runCatching { LocalDate.parse(value) }.getOrNull()?.let { it in start..date }
             } == true
-        }.sortedWith(compareBy<SharedRecord>({ it.entity }, { it.data.dateOrNull() }, { it.id }))
+        } + policies).distinctBy { it.entity to it.id }
+            .sortedWith(compareBy<SharedRecord>({ it.entity }, { it.data.dateOrNull() }, { it.id }))
         val todayCheckin = relevant.asSequence()
             .filter { it.entity == "status_checkins" && it.data.dateOrNull() == date.toString() }
             .filter { it.data.string("kind") == "morning" }
@@ -238,7 +259,7 @@ class DailyReviewRepository(
         }
         val snapshot = buildJsonObject {
             put("schema", JsonPrimitive("daily_review_snapshot"))
-            put("reviewPolicyVersion", JsonPrimitive(2))
+            put("reviewPolicyVersion", JsonPrimitive(3))
             put("contractVersion", JsonPrimitive(ContractVersion.PLANNED))
             put("date", JsonPrimitive(date.toString()))
             put("missingCriticalFields", buildJsonArray { missing.forEach { add(JsonPrimitive(it)) } })
@@ -291,6 +312,7 @@ class DailyReviewRepository(
                 "COMPLETED" -> if (!regenerate) return@withTransaction DailyReviewEnqueueResult(false, preparation.missingCriticalFields)
                 "PENDING", "RUNNING", "AWAITING_SERVER" -> return@withTransaction DailyReviewEnqueueResult(true, preparation.missingCriticalFields)
                 "RETRY", "FAILED" -> {
+                    database.metadata().delete(deadlineKey(existing.jobId))
                     database.aiReviewJobs().activate(
                         jobId = existing.jobId,
                         attempts = if (existing.state == "FAILED") 0 else existing.attempts,
@@ -335,9 +357,16 @@ class DailyReviewRepository(
     }
 
     suspend fun processNext(): DailyReviewProcessResult {
-        val job = database.aiReviewJobs().nextDue(nowMillis()) ?: return DailyReviewProcessResult.NONE
-        updateJob(job, "RUNNING", job.attempts, nowMillis(), null)
+        val job = database.withTransaction {
+            val due = database.aiReviewJobs().nextDue(nowMillis()) ?: return@withTransaction null
+            updateJob(due, "RUNNING", due.attempts, nowMillis(), null)
+            due
+        } ?: return DailyReviewProcessResult.NONE
         return try {
+            val deadline = database.metadata().get(deadlineKey(job.jobId))?.toLongOrNull()
+                ?: (nowMillis() + STATUS_WAIT_MILLIS).also {
+                    database.metadata().put(SyncMetadataEntity(deadlineKey(job.jobId), it.toString()))
+                }
             val client = configuredClient()
             val response = if (job.state == "AWAITING_SERVER") {
                 client.api.dailyReviewJob(job.jobId)
@@ -355,6 +384,12 @@ class DailyReviewRepository(
             }
             when (response["state"]?.jsonPrimitive?.contentOrNull) {
                 "RUNNING" -> {
+                    // After reconnecting, accept an already completed result
+                    // before deciding the online wait has expired.
+                    if (nowMillis() >= deadline) {
+                        updateJob(job, "FAILED", job.attempts, Long.MAX_VALUE, "ai_status_timeout")
+                        return DailyReviewProcessResult.FAILED
+                    }
                     updateJob(job, "AWAITING_SERVER", job.attempts, nowMillis() + SERVER_POLL_MILLIS, null)
                     DailyReviewProcessResult.WAITING
                 }
@@ -366,15 +401,37 @@ class DailyReviewRepository(
                 "SUCCEEDED" -> {
                     val review = response["review"]?.jsonObject
                         ?: throw IllegalStateException("provider_response_invalid")
-                    persistGenerated(job, client.settings, review)
-                    updateJob(job, "COMPLETED", job.attempts, Long.MAX_VALUE, null)
-                    DailyReviewProcessResult.COMPLETED
+                    val saved = database.withTransaction {
+                        val current = database.aiReviewJobs().get(job.jobId)
+                        val input = prepare(LocalDate.parse(job.date))
+                        if (current == null || current.state == "SUPERSEDED" ||
+                            !input.hasConfirmedDayRecord || input.inputDigest != job.inputDigest
+                        ) {
+                            updateJob(job, "SUPERSEDED", job.attempts, Long.MAX_VALUE, null)
+                            false
+                        } else {
+                            persistGenerated(job, client.settings, review)
+                            updateJob(job, "COMPLETED", job.attempts, Long.MAX_VALUE, null)
+                            true
+                        }
+                    }
+                    database.metadata().delete(deadlineKey(job.jobId))
+                    if (saved) DailyReviewProcessResult.COMPLETED else DailyReviewProcessResult.NONE
                 }
                 else -> throw IllegalStateException("provider_response_invalid")
             }
         } catch (error: Throwable) {
+            if (error is CancellationException) throw error
             if (error is IOException) {
-                updateJob(job, "AWAITING_SERVER", job.attempts, nowMillis() + SERVER_POLL_MILLIS, null)
+                val attempts = job.attempts + 1
+                val deadline = database.metadata().get(deadlineKey(job.jobId))?.toLongOrNull()
+                if (attempts >= MAX_REVIEW_ATTEMPTS || deadline?.let { nowMillis() >= it } == true) {
+                    updateJob(job, "FAILED", attempts, Long.MAX_VALUE, "ai_status_timeout")
+                    return DailyReviewProcessResult.FAILED
+                }
+                // Re-submit the same id after an uncertain POST; polling alone
+                // cannot recover a request that never reached the Worker.
+                updateJob(job, if (job.state == "AWAITING_SERVER") "AWAITING_SERVER" else "PENDING", attempts, nowMillis() + SERVER_POLL_MILLIS, null)
                 return DailyReviewProcessResult.WAITING
             }
             val attempts = job.attempts + 1
@@ -439,7 +496,7 @@ class DailyReviewRepository(
         val key = secrets.get(SecretName.AI_PROVIDER_KEY) ?: error("ai_key_missing")
         val settings = preferences.aiProviderSettings()
         require(settings.configured) { "ai_provider_missing" }
-        return ConfiguredClient(apiFactory(endpoint.apiBase, token, json), settings, key)
+        return ConfiguredClient(apiFor(endpoint.apiBase, token), settings, key)
     }
 
     private suspend fun updateJob(job: AiReviewJobEntity, state: String, attempts: Int, next: Long, error: String?) {
@@ -477,6 +534,8 @@ class DailyReviewRepository(
 }
 
 private const val MAX_REVIEW_ATTEMPTS = 6
+private const val STATUS_WAIT_MILLIS = 5 * 60 * 1000L
+private fun deadlineKey(jobId: String): String = "ai-status-deadline:$jobId"
 private const val STALE_RUNNING_MILLIS = 2 * 60 * 1000L
 private val PERMANENT_REVIEW_ERRORS = setOf(
     "cloud_not_configured",

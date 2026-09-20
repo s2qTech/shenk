@@ -104,6 +104,17 @@ class LocalFirstRepositoryInstrumentedTest {
     }
 
     @Test
+    fun reconciliationCannotDowngradeAnAlreadySyncedRecord() {
+        runBlocking {
+            val repository = repository(database)
+            repository.applyRemote(trainingLog("synthetic-reconcile", "new").withSyncMetadata(revision = 4, baseRevision = 4))
+            repository.applyRemote(trainingLog("synthetic-reconcile", "old").withSyncMetadata(revision = 2, baseRevision = 2))
+            assertEquals(4, repository.get("training_logs", "synthetic-reconcile")?.revision)
+            assertEquals(0, database.outbox().count())
+        }
+    }
+
+    @Test
     fun dirtyLocalRecordIsNotOverwrittenByRemotePull() {
         runBlocking {
             val repository = repository(database)

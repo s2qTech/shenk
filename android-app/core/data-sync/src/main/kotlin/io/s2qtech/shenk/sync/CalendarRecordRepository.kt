@@ -18,6 +18,8 @@ import java.time.YearMonth
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
@@ -57,7 +59,7 @@ class CalendarRecordRepository(
                     bodyMetrics = metricsByDate[date].orEmpty(),
                 )
             }.toList()
-        }
+        }.flowOn(Dispatchers.Default)
     }
 
     fun observeMonth(month: YearMonth): Flow<CalendarMonth> = combine(
@@ -68,7 +70,7 @@ class CalendarRecordRepository(
         records.observeActive("daily_reviews"),
     ) { logs, plans, adjustments, metricRecords, reviews ->
         buildMonth(month, logs, plans, adjustments, metricRecords, reviews)
-    }
+    }.flowOn(Dispatchers.Default)
 
     fun observeDay(date: LocalDate): Flow<CalendarDayDetails> = combine(
         records.observeActive("training_logs"),
@@ -81,16 +83,16 @@ class CalendarRecordRepository(
         GuidanceResolution.resolve(date, logs, plans, adjustments, reviews).let {
             CalendarDayDetails(date, it.guidance, it.actualLogs, bodyMetrics)
         }
-    }
+    }.flowOn(Dispatchers.Default)
 
     fun observeTrainingLogs(): Flow<List<TrainingLog>> = records.observeActive("training_logs")
         .map { values ->
             values.mapNotNull(::decodeTrainingLog)
                 .sortedWith(compareByDescending<TrainingLog> { it.date }.thenByDescending { it.updatedAt })
-        }
+        }.flowOn(Dispatchers.Default)
 
     fun observeBodyTrends(today: LocalDate): Flow<BodyTrends> = records.observeActive("body_metrics")
-        .map { values -> MetricTrendResolver.resolve(values.mapNotNull(::decodeBodyMetric), today) }
+        .map { values -> MetricTrendResolver.resolve(values.mapNotNull(::decodeBodyMetric), today) }.flowOn(Dispatchers.Default)
 
     suspend fun saveTrainingLog(log: TrainingLog): SyncFoundationState {
         val existing = records.get("training_logs", log.id)

@@ -85,8 +85,8 @@ fun PlanningRoute(
     val clipboard = LocalClipboardManager.current
     val scope = rememberCoroutineScope()
     val snackbar = remember { SnackbarHostState() }
-    val importStatus by repository.observeImportStatus().collectAsState(PlanImportStatus(null, false, null))
-    val latestFeedback by repository.observeLatestFeedback().collectAsState(null)
+    val importStatus by remember(repository) { repository.observeImportStatus() }.collectAsState(PlanImportStatus(null, false, null))
+    val latestFeedback by remember(repository) { repository.observeLatestFeedback() }.collectAsState(null)
     var action by remember {
         mutableStateOf<PlanningAction?>(if (initialFeedback) PlanningAction.FEEDBACK else null)
     }

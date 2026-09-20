@@ -14,6 +14,8 @@ import io.s2qtech.shenk.model.TodayGuidance
 import java.time.LocalDate
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
@@ -72,7 +74,7 @@ class TodayRecordRepository(
             effectiveStatus = EffectiveStatusResolver.resolve(morning, preWorkout),
             guidance = GuidanceResolution.resolve(date, logs, plans, adjustments, reviews).guidance,
         )
-    }
+    }.flowOn(Dispatchers.Default)
 
     suspend fun saveMorning(
         checkin: StatusCheckin,

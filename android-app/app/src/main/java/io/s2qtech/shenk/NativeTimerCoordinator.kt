@@ -3,6 +3,7 @@ package io.s2qtech.shenk
 import android.app.Application
 import android.content.Context
 import android.content.Intent
+import android.os.SystemClock
 import io.s2qtech.shenk.model.RoutineTemplate
 import io.s2qtech.shenk.model.TimerSessionFact
 import io.s2qtech.shenk.sync.NativeTimerSessionRepository
@@ -34,7 +35,7 @@ class NativeTimerCoordinator(
     private val sessions: NativeTimerSessionRepository,
     private val scope: CoroutineScope,
 ) {
-    private var engine = NativeTimerEngine()
+    private var engine = NativeTimerEngine(monotonicMillis = SystemClock::elapsedRealtime)
     private val preferences = application.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
     private val mutableSnapshot = MutableStateFlow(engine.snapshot)
     private val mutableCues = MutableSharedFlow<String>(extraBufferCapacity = 8)
@@ -50,6 +51,7 @@ class NativeTimerCoordinator(
     val snapshot: StateFlow<TimerSnapshot> = mutableSnapshot.asStateFlow()
     val cues: SharedFlow<String> = mutableCues.asSharedFlow()
 
+    @Synchronized
     fun select(
         routine: RoutineTemplate,
         date: LocalDate = LocalDate.now(),
@@ -71,34 +73,42 @@ class NativeTimerCoordinator(
         )
     }
 
+    @Synchronized
     fun restoreIfPossible(routines: List<RoutineTemplate>) {
         if (mutableSnapshot.value.state != TimerEngineState.IDLE) return
         val checkpoint = readCheckpoint() ?: return
         val routine = routines.firstOrNull { it.id == checkpoint.routineId } ?: return
         val restored = restoreTimerSnapshot(routine, checkpoint, System.currentTimeMillis())
-        engine = NativeTimerEngine(restored)
+        engine = NativeTimerEngine(restored, SystemClock::elapsedRealtime)
         publish(restored, announce = false)
         if (restored.state in ACTIVE_STATES) ensureTicker()
     }
 
+    @Synchronized
     fun start() {
         publish(engine.start(System.currentTimeMillis()))
         ensureTicker()
     }
 
+    @Synchronized
     fun pause(reason: String? = null) = publish(engine.pause(System.currentTimeMillis(), reason))
 
+    @Synchronized
     fun resume() {
         publish(engine.resume(System.currentTimeMillis()))
         ensureTicker()
     }
 
+    @Synchronized
     fun next() = publish(engine.next(System.currentTimeMillis()))
 
+    @Synchronized
     fun previous() = publish(engine.previous(System.currentTimeMillis()))
 
+    @Synchronized
     fun stop(reason: String = "user_stopped") = publish(engine.stop(System.currentTimeMillis(), reason))
 
+    @Synchronized
     fun reset() {
         val current = mutableSnapshot.value
         ticker?.cancel()
@@ -115,6 +125,7 @@ class NativeTimerCoordinator(
         publish(engine.reset(), announce = false)
     }
 
+    @Synchronized
     fun pauseForPhoneCall() {
         if (mutableSnapshot.value.state == TimerEngineState.RUNNING) pause("phone_call")
     }
@@ -127,7 +138,9 @@ class NativeTimerCoordinator(
         if (ticker?.isActive == true) return
         ticker = scope.launch {
             while (mutableSnapshot.value.state in setOf(TimerEngineState.RUNNING, TimerEngineState.PAUSED)) {
-                publish(engine.tick(System.currentTimeMillis()))
+                synchronized(this@NativeTimerCoordinator) {
+                    publish(engine.tick(System.currentTimeMillis()))
+                }
                 delay(250)
             }
         }
@@ -137,7 +150,7 @@ class NativeTimerCoordinator(
         val previous = mutableSnapshot.value
         mutableSnapshot.value = value
         if (value.state in ACTIVE_STATES) {
-            val now = System.currentTimeMillis()
+            val now = SystemClock.elapsedRealtime()
             val importantChange = previous.state != value.state ||
                 previous.currentStepIndex != value.currentStepIndex ||
                 previous.request?.sessionId != value.request?.sessionId
@@ -187,8 +200,10 @@ class NativeTimerCoordinator(
         scope.launch {
             runCatching { sessions.persistIfAbsent(fact) }
                 .onSuccess {
-                    successfullyPersistedSessions.add(fact.id)
-                    preferences.edit().clear().apply()
+                    synchronized(this@NativeTimerCoordinator) {
+                        successfullyPersistedSessions.add(fact.id)
+                        if (preferences.getString("sessionId", null) == fact.id) preferences.edit().clear().apply()
+                    }
                     SyncScheduler(application).enqueue()
                 }
                 .onFailure { persistedSessions.remove(fact.id) }

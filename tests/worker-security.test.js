@@ -602,7 +602,8 @@ async function run() {
         return { bind() { return { first: async () => existing }; } };
       }
       return { bind(...args) { writes.push({ sql, args }); return { run: async () => ({}) }; } };
-    }
+    },
+    async batch() { return [{ results: [{ revision: 2, updated_at: "2099-01-02T00:00:00.000Z" }] }, { results: [] }]; }
   };
   const response = await worker.fetch(
     request("https://worker.example/api/records/upsert", {
@@ -650,7 +651,8 @@ async function run() {
         return { bind() { return { first: async () => existing }; } };
       }
       return { bind(...args) { writes.push({ sql, args }); return { run: async () => ({}) }; } };
-    }
+    },
+    async batch() { return [{ results: [{ revision: 2, updated_at: "2099-01-02T00:00:00.000Z" }] }, { results: [] }]; }
   };
   const response = await worker.fetch(
     request("https://worker.example/api/records/upsert", {
@@ -845,7 +847,8 @@ async function run() {
     prepare(sql) {
       if (sql.startsWith("SELECT entity, id, revision")) return { bind() { return { first: async () => null }; } };
       return { bind(...args) { writes.push({ sql, args }); return { run: async () => ({}) }; } };
-    }
+    },
+    async batch() { return [{ results: [{ revision: 2, updated_at: "2099-01-02T00:00:00.000Z" }] }, { results: [] }]; }
   };
   const response = await worker.fetch(
     request("https://worker.example/api/records/upsert", {

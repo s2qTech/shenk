@@ -528,17 +528,17 @@
     };
   }
 
-  async function saveSnapshot(message) {
-    const snapshot = buildSnapshot();
-    const entityResult = await persistEntityStore(snapshot.records);
+  async function saveSnapshot(message, metadata = {}) {
+    const entityResult = await persistEntityStore(state.records, metadata);
     if (entityResult.available) {
       state.storageMode = "IndexedDB v2";
     } else {
-      const result = await SnapshotStorage.save(snapshot);
+      const result = await SnapshotStorage.save(buildSnapshot());
       state.storageMode = result.mode;
     }
     if (message) state.message = message;
     else if (!entityResult.available) state.message = "\u5df2\u4fdd\u5b58\u5230 localStorage";
+    return entityResult.available;
   }
 
   async function initializeEntityStore(snapshot) {
@@ -554,19 +554,23 @@
     }
   }
 
-  async function persistEntityStore(records) {
+  async function persistEntityStore(records, metadata = {}) {
     try {
       const result = await EntityStore.persist(
         getAllSharedRecordEnvelopes(records),
-        buildOutboxEntries(records)
+        buildOutboxEntries(records),
+        metadata
       );
       if (Array.isArray(result.outbox)) state.outbox = result.outbox;
       state.entityStoreAvailable = Boolean(result.available);
       return result;
     } catch (error) {
-      // The legacy snapshot remains the fallback when IndexedDB is unavailable.
-      state.entityStoreAvailable = false;
-      return { available: false, outbox: null };
+      // A failed transaction must not masquerade as a successful legacy save:
+      // the next launch still reads the authoritative entity store.
+      if (error.message === "entity_store_changed_in_another_tab") {
+        throw new Error("另一窗口已更新记录，请刷新后再保存。");
+      }
+      throw error;
     }
   }
 
@@ -5610,6 +5614,9 @@
   }
 
   async function doPullCloudRecords() {
+    const watermarkKey = `committed-pull-v2:${state.syncConfig.apiBase}`;
+    // A new key safely reconciles records skipped by the old response-time cursor.
+    const since = state.entityStoreAvailable ? await EntityStore.getMetaValue(watermarkKey) : null;
     const records = [];
     let cursor = null;
     let result = null;
@@ -5619,7 +5626,7 @@
         body: {
           contractVersion: SHARED_CONTRACT_VERSION,
           deviceId: getDeviceId(),
-          since: state.syncConfig.lastPullAt || null,
+          since,
           entities: SHARED_ENTITIES,
           limit: 200,
           cursor
@@ -5635,11 +5642,11 @@
       refreshLegacyCachesFromSharedRecords();
     }
     const now = result?.serverTime || new Date().toISOString();
-    saveSyncConfig({ lastPullAt: now, lastSyncAt: now });
     const draftableTimers = countDraftableTimerSessions();
     state.syncStatus.lastResult = `已读取 ${records.length} 条云端记录${draftableTimers ? `，${draftableTimers} 条计时器记录可补训练` : ""}`;
     state.syncStatus.lastError = "";
-    await saveSnapshot();
+    await saveSnapshot(null, { [watermarkKey]: now });
+    saveSyncConfig({ lastPullAt: now, lastSyncAt: now });
   }
 
   async function doPushDirtyRecords() {

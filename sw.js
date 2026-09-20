@@ -1,12 +1,15 @@
 "use strict";
 
-const CACHE_NAME = "shenke-static-2026-07-11-1";
+const CACHE_NAME = "shenke-static-2026-09-20-1";
 const STATIC_PATHS = [
   "./",
   "./index.html",
   "./src/styles.css",
-  "./src/recommendation-engine.js",
-  "./src/app.js",
+  "./src/recommendation-engine.js?v=20260711-1",
+  "./src/entity-store.js?v=20260920-1",
+  "./src/snapshot-storage.js?v=20260713-1",
+  "./src/sync-profile-core.js?v=20260713-1",
+  "./src/app.js?v=20260920-1",
   "./brand-assets/shinke-logo-horizontal-dark.png",
   "./brand-assets/shinke-symbol-dark.png",
   "./assets/app/calendar.png",

@@ -108,10 +108,10 @@ fun CalendarScreen(
     repository: CalendarRecordRepository,
     onReady: () -> Unit = {},
 ) {
-    val today = remember { LocalDate.now() }
+    val today = rememberCurrentDate()
     val rangeStart = remember(today) { today.minusMonths(6).withDayOfMonth(1) }
     val rangeEnd = remember(today) { today.plusMonths(6).withDayOfMonth(1).plusMonths(1).minusDays(1) }
-    val days by repository.observeRange(rangeStart, rangeEnd).collectAsState(initial = emptyList())
+    val days by remember(repository, rangeStart, rangeEnd) { repository.observeRange(rangeStart, rangeEnd) }.collectAsState(initial = emptyList())
     var selectedDate by remember { mutableStateOf<LocalDate?>(null) }
     var editing by remember { mutableStateOf<TrainingLog?>(null) }
     var creating by remember { mutableStateOf(false) }
@@ -239,8 +239,8 @@ fun CalendarScreen(
     }
 
     selectedDate?.let { date ->
-        val details by repository.observeDay(date).collectAsState(initial = null)
-        val reviewState by dailyReviewRepository.observe(date).collectAsState(initial = DailyReviewState())
+        val details by remember(repository, date) { repository.observeDay(date) }.collectAsState(initial = null)
+        val reviewState by remember(dailyReviewRepository, date) { dailyReviewRepository.observe(date) }.collectAsState(initial = DailyReviewState())
         ShenkModalBottomSheet(
             onDismissRequest = {
                 selectedDate = null
