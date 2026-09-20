@@ -1,6 +1,6 @@
 # Project State
 
-Updated: 2026-08-31
+Updated: 2026-09-20
 
 ## Android Platform Baseline
 
@@ -228,3 +228,5 @@ The 2026-09-11 Today completion-state correction closes body-status editing as s
 The 2026-09-11 daily-review latency correction moves the canonical provider model to DeepSeek V4.1 Flash via `deepseek-flash` while retaining high reasoning and the 42,066-token primary output ceiling. One generation shares a five-minute provider deadline across the primary and optional structure-repair calls; timeout becomes a server-confirmed `FAILED` job with explicit manual retry instead of indefinite polling. The review prompt now asks for a warmer evidence-based coach voice and a fuller 350–550-character assessment. Historical reviews and provider keys remain unchanged.
 
 The 2026-09-11 daily-review entry correction requires a confirmed formal workout, rest, or skip before Today or Calendar exposes generation or retry. Morning status, pre-workout status, measurements, plans, and timer facts alone keep the review entry in a waiting state. The repository repeats the same prerequisite before queue creation, so stale UI state cannot submit an empty-day review.
+
+The 2026-09-20 reliability correction closes Worker revision races and pull-watermark gaps, makes Web records/outbox/cursors transactional, preserves Android synchronization triggers, bounds AI status waiting and rejects stale conclusions, refreshes dates after foreground return, stabilizes UI query flows, and makes active timer durations monotonic. High AI reasoning and output ceilings remain unchanged. Node 67/67, Android JVM 90/90, isolated Xiaomi 14 data 40/40 and Compose 4/4 passed; the signed release gate passed from committed source `524a760`. The existing production Worker was deployed with explicit user approval and passed its health check. Xiaomi 14 accepted the signed data-preserving update with its original first-install identity. Phase-1 progress remains `9 / 9`; no business-data migration or ownership change was introduced. See [release evidence and rollback](docs/reliability-correction-2026-09.md).
